@@ -1,0 +1,5 @@
+- we are working in golang 1.24 struct pointers or an error
+- our New(Something) constructors always take context and a config as input params and always return the concrete or an error
+- our config is always a struct
+- our config struct is always named Config
+- we prefer pointers over values
