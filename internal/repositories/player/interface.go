@@ -1,5 +1,7 @@
 package player
 
+//go:generate mockgen -package=mocks -destination=mocks/mock_repository.go github.com/KirkDiggler/ronnied/internal/repositories/player Repository
+
 import (
 	"context"
 

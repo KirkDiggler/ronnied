@@ -3,3 +3,4 @@
 - our config is always a struct
 - our config struct is always named Config
 - we prefer pointers over values
+- this is a discrod bot for friends and want to keep the design flexible

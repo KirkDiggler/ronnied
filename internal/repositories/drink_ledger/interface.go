@@ -1,5 +1,7 @@
 package drink_ledger
 
+//go:generate mockgen -package=mocks -destination=mocks/mock_repository.go github.com/KirkDiggler/ronnied/internal/repositories/drink_ledger Repository
+
 import (
 	"context"
 )

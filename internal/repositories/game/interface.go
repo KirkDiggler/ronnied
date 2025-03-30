@@ -1,5 +1,7 @@
 package game
 
+//go:generate mockgen -package=mocks -destination=mocks/mock_repository.go github.com/KirkDiggler/ronnied/internal/repositories/game Repository
+
 import (
 	"context"
 
