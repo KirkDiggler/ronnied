@@ -21,6 +21,7 @@ const (
 	GameStatusCompleted GameStatus = "completed"
 )
 
+
 // Game represents a dice rolling game session
 type Game struct {
 	// ID is the unique identifier for the game
@@ -28,6 +29,9 @@ type Game struct {
 	
 	// ChannelID is the Discord channel where the game is being played
 	ChannelID string
+
+	// CreatorID is the ID of the user who initiated the game
+	CreatorID string
 	
 	// Status is the current state of the game
 	Status GameStatus
@@ -35,8 +39,9 @@ type Game struct {
 	// ParentGameID is the ID of the parent game (for roll-offs)
 	ParentGameID string
 	
-	// PlayerIDs contains the IDs of players in the game
-	PlayerIDs []string
+	
+	// Participants contains information about players participating in the game
+	Participants []*Participant
 	
 	// CreatedAt is when the game was created
 	CreatedAt time.Time

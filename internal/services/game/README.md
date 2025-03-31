@@ -2,6 +2,36 @@
 
 The Game Service manages the core game logic for the Ronnied dice drinking game.
 
+## Game Flow
+
+1. **Game Initiation**
+   - A user initiates a new game in a Discord channel
+   - Multiple games can exist in a channel, with each game represented by a message
+   - Games start in "waiting" status
+
+2. **Joining Phase**
+   - Players can join the game while it's in "waiting" status
+   - The game remains in this state until the initiator starts it
+
+3. **Active Game Phase**
+   - Game status changes to "active"
+   - Each player rolls the dice once
+   - Critical hits (6) allow assigning drinks to others
+   - Critical fails (1) result in taking a drink
+
+4. **Roll-off Phase** (if needed)
+   - If there are ties for highest/lowest rolls, a roll-off occurs
+   - Roll-offs are treated as sub-games with their own state
+   - Players in the roll-off roll again to determine the winner/loser
+   - Multiple roll-offs might be needed until ties are resolved
+
+5. **Game Completion**
+   - When all rolls and roll-offs are completed, the game ends
+   - Drinks are calculated and added to the ledger
+   - Leaderboard is displayed
+   - Game status changes to "completed"
+   - New games can be started in the channel
+
 ## File Structure
 
 - `types.go` - Contains all data structures and request/response types
@@ -13,12 +43,12 @@ The Game Service manages the core game logic for the Ronnied dice drinking game.
 1. **Game Session Management**
    - Create and track game sessions by Discord channel
    - Handle player joining and leaving
-   - Maintain game state (waiting, active, completed)
+   - Maintain game state (waiting, active, roll-off, completed)
 
 2. **Game Mechanics**
    - Process player dice rolls
    - Apply game rules (critical hits/fails)
-   - Track turn order if applicable
+   - Track which players have rolled
    - Handle roll-offs for ties (both highest and lowest rolls)
 
 3. **Drink Assignment**
@@ -52,6 +82,16 @@ type Config struct {
     
     // Maximum number of concurrent games
     MaxConcurrentGames int
+    
+    // Repository dependencies
+    GameRepo            gameRepo.Repository
+    PlayerRepo          playerRepo.Repository
+    DrinkLedgerRepo     ledgerRepo.Repository
+    
+    // Service dependencies
+    DiceRoller          *dice.Roller
+    Clock               clock.Clock
+    UUID                uuid.UUID
 }
 ```
 
@@ -60,7 +100,10 @@ type Config struct {
 The Game Service depends on:
 - Player Repository - For storing player information and drink tallies
 - Game Repository - For persisting game state
+- Drink Ledger Repository - For tracking drink assignments
 - Dice functionality - For generating random dice rolls
+- Clock - For consistent time tracking
+- UUID - For generating unique identifiers
 
 ## Interface
 
@@ -75,6 +118,9 @@ type Service interface {
     
     // LeaveGame removes a player from a game
     LeaveGame(ctx context.Context, input *LeaveGameInput) (*LeaveGameOutput, error)
+    
+    // StartGame transitions a game from waiting to active state
+    StartGame(ctx context.Context, input *StartGameInput) (*StartGameOutput, error)
     
     // RollDice performs a dice roll for a player
     RollDice(ctx context.Context, input *RollDiceInput) (*RollDiceOutput, error)
@@ -104,8 +150,10 @@ The service will work with these primary data structures:
    - ID
    - Channel ID
    - Players
+   - Creator ID (the user who initiated the game)
    - Status (waiting, active, roll-off, completed)
    - Parent Game ID (for roll-offs)
+   - Players who have rolled
    - Creation time
    - Last activity time
 
@@ -114,8 +162,10 @@ The service will work with these primary data structures:
    - Name
    - Current game ID
    - Last roll
+   - Last roll time
 
 3. **Roll** - Represents a dice roll
+   - ID
    - Value
    - Player ID
    - Game ID
@@ -130,6 +180,7 @@ The service will work with these primary data structures:
    - Game ID
    - Reason (critical hit, critical fail, lowest roll)
    - Timestamp
+   - Paid status
 
 5. **Leaderboard** - Game standings
    - Player rankings
@@ -138,8 +189,8 @@ The service will work with these primary data structures:
 
 ## Implementation Notes
 
-- Games are identified by Discord channel ID
-- Only one active game per channel
+- Multiple games can exist in a channel simultaneously
+- Each game is represented by a message in the Discord channel
 - Players can only be in one game at a time
 - Critical hit (6) allows assigning a drink
 - Critical fail (1) results in taking a drink
@@ -147,6 +198,7 @@ The service will work with these primary data structures:
 - After all players roll, check for ties:
   - Tied highest rolls trigger a winner roll-off
   - Tied lowest rolls trigger a loser roll-off
+- Roll-offs are treated as sub-games with their own state
 - Roll-offs can be nested if ties persist
 - Drink ledger provides detailed history of all drink assignments
 - Consider timeout for inactive games

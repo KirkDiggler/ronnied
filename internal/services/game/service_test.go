@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	clockMocks "github.com/KirkDiggler/ronnied/internal/common/clock/mocks"
+	uuidMocks "github.com/KirkDiggler/ronnied/internal/common/uuid/mocks"
 	"github.com/KirkDiggler/ronnied/internal/dice"
 	"github.com/KirkDiggler/ronnied/internal/models"
 	ledgerRepo "github.com/KirkDiggler/ronnied/internal/repositories/drink_ledger"
@@ -28,6 +30,8 @@ type GameServiceTestSuite struct {
 	mockPlayerRepo *playerMocks.MockRepository
 	mockLedgerRepo *ledgerMocks.MockRepository
 	mockDiceRoller *dice.Roller
+	mockClock      *clockMocks.MockClock
+	mockUUID       *uuidMocks.MockUUID
 
 	// Service under test
 	service *service
@@ -46,22 +50,30 @@ func (s *GameServiceTestSuite) SetupTest() {
 	s.mockPlayerRepo = playerMocks.NewMockRepository(s.mockCtrl)
 	s.mockLedgerRepo = ledgerMocks.NewMockRepository(s.mockCtrl)
 
+	s.mockClock = clockMocks.NewMockClock(s.mockCtrl)
+	s.mockUUID = uuidMocks.NewMockUUID(s.mockCtrl)
+
 	// Create a deterministic dice roller for testing
 	s.mockDiceRoller = dice.New(&dice.Config{Seed: 42})
 
 	// Setup the service directly by setting fields
 	s.service = &service{
-		config: &Config{
-			MaxPlayers:         10,
-			DiceSides:          6,
-			CriticalHitValue:   6,
-			CriticalFailValue:  1,
-			MaxConcurrentGames: 100,
-		},
+		// Configuration parameters
+		maxPlayers:         10,
+		diceSides:          6,
+		criticalHitValue:   6,
+		criticalFailValue:  1,
+		maxConcurrentGames: 100,
+
+		// Repository dependencies
 		gameRepo:        s.mockGameRepo,
 		playerRepo:      s.mockPlayerRepo,
 		drinkLedgerRepo: s.mockLedgerRepo,
-		diceRoller:      s.mockDiceRoller,
+
+		// Service dependencies
+		diceRoller: s.mockDiceRoller,
+		clock:      s.mockClock,
+		uuid:       s.mockUUID,
 	}
 
 	// Common test data
@@ -70,6 +82,10 @@ func (s *GameServiceTestSuite) SetupTest() {
 	s.testPlayerID = "test-player-id"
 	s.testPlayerName = "Test Player"
 	s.testTime = time.Date(2025, 3, 29, 12, 0, 0, 0, time.UTC)
+
+	// Setup common mock behaviors
+	s.mockClock.EXPECT().Now().Return(s.testTime).AnyTimes()
+	s.mockUUID.EXPECT().NewUUID().Return(s.testGameID).AnyTimes()
 }
 
 func (s *GameServiceTestSuite) TearDownTest() {
@@ -281,7 +297,7 @@ func (s *GameServiceTestSuite) TestJoinGameInvalidState() {
 // TestJoinGameFull tests the case where the game is full
 func (s *GameServiceTestSuite) TestJoinGameFull() {
 	ctx := context.Background()
-	
+
 	// Create a game with max players
 	playerIDs := make([]string, 10)
 	for i := 0; i < 10; i++ {
@@ -318,7 +334,7 @@ func (s *GameServiceTestSuite) TestJoinGameFull() {
 // TestLeaveGameSuccess tests the successful removal of a player from a game
 func (s *GameServiceTestSuite) TestLeaveGameSuccess() {
 	ctx := context.Background()
-	
+
 	// Create a game with the test player in it
 	game := &models.Game{
 		ID:        s.testGameID,
@@ -327,27 +343,27 @@ func (s *GameServiceTestSuite) TestLeaveGameSuccess() {
 		PlayerIDs: []string{s.testPlayerID, "other-player-id"},
 		UpdatedAt: time.Now().Add(-1 * time.Hour), // Set to past time to verify it gets updated
 	}
-	
+
 	// Create a player currently in the game
 	player := &models.Player{
 		ID:            s.testPlayerID,
 		Name:          s.testPlayerName,
 		CurrentGameID: s.testGameID,
 	}
-	
+
 	// Setup expectations
 	s.mockGameRepo.EXPECT().
 		GetGame(gomock.Any(), &gameRepo.GetGameInput{
 			GameID: s.testGameID,
 		}).
 		Return(game, nil)
-		
+
 	s.mockPlayerRepo.EXPECT().
 		GetPlayer(gomock.Any(), &playerRepo.GetPlayerInput{
 			PlayerID: s.testPlayerID,
 		}).
 		Return(player, nil)
-		
+
 	s.mockPlayerRepo.EXPECT().
 		SavePlayer(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, input *playerRepo.SavePlayerInput) error {
@@ -356,7 +372,7 @@ func (s *GameServiceTestSuite) TestLeaveGameSuccess() {
 			s.Equal("", input.Player.CurrentGameID)
 			return nil
 		})
-		
+
 	s.mockGameRepo.EXPECT().
 		SaveGame(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, input *gameRepo.SaveGameInput) error {
@@ -369,13 +385,13 @@ func (s *GameServiceTestSuite) TestLeaveGameSuccess() {
 			s.NotZero(input.Game.UpdatedAt)
 			return nil
 		})
-		
+
 	// Call the method
 	output, err := s.service.LeaveGame(ctx, &LeaveGameInput{
 		GameID:   s.testGameID,
 		PlayerID: s.testPlayerID,
 	})
-	
+
 	// Verify the results
 	s.NoError(err)
 	s.NotNil(output)
@@ -385,20 +401,20 @@ func (s *GameServiceTestSuite) TestLeaveGameSuccess() {
 // TestLeaveGameNotFound tests the case where the game is not found
 func (s *GameServiceTestSuite) TestLeaveGameNotFound() {
 	ctx := context.Background()
-	
+
 	// Setup expectations
 	s.mockGameRepo.EXPECT().
 		GetGame(gomock.Any(), &gameRepo.GetGameInput{
 			GameID: s.testGameID,
 		}).
 		Return(nil, errors.New("game not found"))
-		
+
 	// Call the method
 	output, err := s.service.LeaveGame(ctx, &LeaveGameInput{
 		GameID:   s.testGameID,
 		PlayerID: s.testPlayerID,
 	})
-	
+
 	// Verify the results
 	s.Error(err)
 	s.Equal(ErrGameNotFound, err)
@@ -408,7 +424,7 @@ func (s *GameServiceTestSuite) TestLeaveGameNotFound() {
 // TestLeaveGamePlayerNotFound tests the case where the player is not found
 func (s *GameServiceTestSuite) TestLeaveGamePlayerNotFound() {
 	ctx := context.Background()
-	
+
 	// Create a game
 	game := &models.Game{
 		ID:        s.testGameID,
@@ -416,26 +432,26 @@ func (s *GameServiceTestSuite) TestLeaveGamePlayerNotFound() {
 		Status:    models.GameStatusActive,
 		PlayerIDs: []string{s.testPlayerID},
 	}
-	
+
 	// Setup expectations
 	s.mockGameRepo.EXPECT().
 		GetGame(gomock.Any(), &gameRepo.GetGameInput{
 			GameID: s.testGameID,
 		}).
 		Return(game, nil)
-		
+
 	s.mockPlayerRepo.EXPECT().
 		GetPlayer(gomock.Any(), &playerRepo.GetPlayerInput{
 			PlayerID: s.testPlayerID,
 		}).
 		Return(nil, errors.New("player not found"))
-		
+
 	// Call the method
 	output, err := s.service.LeaveGame(ctx, &LeaveGameInput{
 		GameID:   s.testGameID,
 		PlayerID: s.testPlayerID,
 	})
-	
+
 	// Verify the results
 	s.Error(err)
 	s.Equal(ErrPlayerNotFound, err)
@@ -445,7 +461,7 @@ func (s *GameServiceTestSuite) TestLeaveGamePlayerNotFound() {
 // TestLeaveGamePlayerNotInGame tests the case where the player is not in the specified game
 func (s *GameServiceTestSuite) TestLeaveGamePlayerNotInGame() {
 	ctx := context.Background()
-	
+
 	// Create a game
 	game := &models.Game{
 		ID:        s.testGameID,
@@ -453,33 +469,33 @@ func (s *GameServiceTestSuite) TestLeaveGamePlayerNotInGame() {
 		Status:    models.GameStatusActive,
 		PlayerIDs: []string{"other-player-id"}, // Player not in game
 	}
-	
+
 	// Create a player in a different game
 	player := &models.Player{
 		ID:            s.testPlayerID,
 		Name:          s.testPlayerName,
 		CurrentGameID: "different-game-id",
 	}
-	
+
 	// Setup expectations
 	s.mockGameRepo.EXPECT().
 		GetGame(gomock.Any(), &gameRepo.GetGameInput{
 			GameID: s.testGameID,
 		}).
 		Return(game, nil)
-		
+
 	s.mockPlayerRepo.EXPECT().
 		GetPlayer(gomock.Any(), &playerRepo.GetPlayerInput{
 			PlayerID: s.testPlayerID,
 		}).
 		Return(player, nil)
-		
+
 	// Call the method
 	output, err := s.service.LeaveGame(ctx, &LeaveGameInput{
 		GameID:   s.testGameID,
 		PlayerID: s.testPlayerID,
 	})
-	
+
 	// Verify the results
 	s.Error(err)
 	s.Equal(ErrPlayerNotInGame, err)
@@ -490,7 +506,7 @@ func (s *GameServiceTestSuite) TestLeaveGamePlayerNotInGame() {
 func (s *GameServiceTestSuite) TestLeaveGameSavePlayerError() {
 	ctx := context.Background()
 	saveErr := errors.New("failed to save player")
-	
+
 	// Create a game with the test player in it
 	game := &models.Game{
 		ID:        s.testGameID,
@@ -498,37 +514,37 @@ func (s *GameServiceTestSuite) TestLeaveGameSavePlayerError() {
 		Status:    models.GameStatusActive,
 		PlayerIDs: []string{s.testPlayerID},
 	}
-	
+
 	// Create a player currently in the game
 	player := &models.Player{
 		ID:            s.testPlayerID,
 		Name:          s.testPlayerName,
 		CurrentGameID: s.testGameID,
 	}
-	
+
 	// Setup expectations
 	s.mockGameRepo.EXPECT().
 		GetGame(gomock.Any(), &gameRepo.GetGameInput{
 			GameID: s.testGameID,
 		}).
 		Return(game, nil)
-		
+
 	s.mockPlayerRepo.EXPECT().
 		GetPlayer(gomock.Any(), &playerRepo.GetPlayerInput{
 			PlayerID: s.testPlayerID,
 		}).
 		Return(player, nil)
-		
+
 	s.mockPlayerRepo.EXPECT().
 		SavePlayer(gomock.Any(), gomock.Any()).
 		Return(saveErr)
-		
+
 	// Call the method
 	output, err := s.service.LeaveGame(ctx, &LeaveGameInput{
 		GameID:   s.testGameID,
 		PlayerID: s.testPlayerID,
 	})
-	
+
 	// Verify the results
 	s.Error(err)
 	s.Equal(saveErr, err)
@@ -538,7 +554,7 @@ func (s *GameServiceTestSuite) TestLeaveGameSavePlayerError() {
 // TestRollDiceSuccess tests a successful normal dice roll
 func (s *GameServiceTestSuite) TestRollDiceSuccess() {
 	ctx := context.Background()
-	
+
 	// Create a game in active state
 	game := &models.Game{
 		ID:        s.testGameID,
@@ -547,7 +563,7 @@ func (s *GameServiceTestSuite) TestRollDiceSuccess() {
 		PlayerIDs: []string{s.testPlayerID},
 		UpdatedAt: time.Now().Add(-1 * time.Hour), // Set to past time to verify it gets updated
 	}
-	
+
 	// Create a player in the game
 	player := &models.Player{
 		ID:            s.testPlayerID,
@@ -556,20 +572,20 @@ func (s *GameServiceTestSuite) TestRollDiceSuccess() {
 		LastRoll:      0,
 		LastRollTime:  time.Now().Add(-1 * time.Hour), // Set to past time to verify it gets updated
 	}
-	
+
 	// Setup expectations
 	s.mockGameRepo.EXPECT().
 		GetGame(gomock.Any(), &gameRepo.GetGameInput{
 			GameID: s.testGameID,
 		}).
 		Return(game, nil)
-		
+
 	s.mockPlayerRepo.EXPECT().
 		GetPlayer(gomock.Any(), &playerRepo.GetPlayerInput{
 			PlayerID: s.testPlayerID,
 		}).
 		Return(player, nil)
-		
+
 	s.mockPlayerRepo.EXPECT().
 		SavePlayer(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, input *playerRepo.SavePlayerInput) error {
@@ -580,7 +596,7 @@ func (s *GameServiceTestSuite) TestRollDiceSuccess() {
 			s.NotZero(input.Player.LastRollTime)
 			return nil
 		})
-		
+
 	s.mockGameRepo.EXPECT().
 		SaveGame(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, input *gameRepo.SaveGameInput) error {
@@ -591,24 +607,24 @@ func (s *GameServiceTestSuite) TestRollDiceSuccess() {
 			s.NotZero(input.Game.UpdatedAt)
 			return nil
 		})
-		
+
 	// Call the method
 	output, err := s.service.RollDice(ctx, &RollDiceInput{
 		GameID:   s.testGameID,
 		PlayerID: s.testPlayerID,
 	})
-	
+
 	// Verify the results
 	s.NoError(err)
 	s.NotNil(output)
 	s.GreaterOrEqual(output.Value, 1)
-	s.LessOrEqual(output.Value, s.service.config.DiceSides)
+	s.LessOrEqual(output.Value, s.service.diceSides)
 }
 
 // TestRollDiceActivateGame tests that rolling dice in a waiting game activates it
 func (s *GameServiceTestSuite) TestRollDiceActivateGame() {
 	ctx := context.Background()
-	
+
 	// Create a game in waiting state
 	game := &models.Game{
 		ID:        s.testGameID,
@@ -616,31 +632,31 @@ func (s *GameServiceTestSuite) TestRollDiceActivateGame() {
 		Status:    models.GameStatusWaiting,
 		PlayerIDs: []string{s.testPlayerID},
 	}
-	
+
 	// Create a player in the game
 	player := &models.Player{
 		ID:            s.testPlayerID,
 		Name:          s.testPlayerName,
 		CurrentGameID: s.testGameID,
 	}
-	
+
 	// Setup expectations
 	s.mockGameRepo.EXPECT().
 		GetGame(gomock.Any(), &gameRepo.GetGameInput{
 			GameID: s.testGameID,
 		}).
 		Return(game, nil)
-		
+
 	s.mockPlayerRepo.EXPECT().
 		GetPlayer(gomock.Any(), &playerRepo.GetPlayerInput{
 			PlayerID: s.testPlayerID,
 		}).
 		Return(player, nil)
-		
+
 	s.mockPlayerRepo.EXPECT().
 		SavePlayer(gomock.Any(), gomock.Any()).
 		Return(nil)
-		
+
 	s.mockGameRepo.EXPECT().
 		SaveGame(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, input *gameRepo.SaveGameInput) error {
@@ -649,13 +665,13 @@ func (s *GameServiceTestSuite) TestRollDiceActivateGame() {
 			s.Equal(models.GameStatusActive, input.Game.Status)
 			return nil
 		})
-		
+
 	// Call the method
 	output, err := s.service.RollDice(ctx, &RollDiceInput{
 		GameID:   s.testGameID,
 		PlayerID: s.testPlayerID,
 	})
-	
+
 	// Verify the results
 	s.NoError(err)
 	s.NotNil(output)
@@ -664,7 +680,7 @@ func (s *GameServiceTestSuite) TestRollDiceActivateGame() {
 // TestRollDiceCriticalFail tests the behavior when a critical fail occurs
 func (s *GameServiceTestSuite) TestRollDiceCriticalFail() {
 	ctx := context.Background()
-	
+
 	// Create a game in active state
 	game := &models.Game{
 		ID:        s.testGameID,
@@ -672,30 +688,30 @@ func (s *GameServiceTestSuite) TestRollDiceCriticalFail() {
 		Status:    models.GameStatusActive,
 		PlayerIDs: []string{s.testPlayerID},
 	}
-	
+
 	// Create a player in the game
 	player := &models.Player{
 		ID:            s.testPlayerID,
 		Name:          s.testPlayerName,
 		CurrentGameID: s.testGameID,
 	}
-	
+
 	// Setup expectations
 	s.mockGameRepo.EXPECT().
 		GetGame(gomock.Any(), &gameRepo.GetGameInput{
 			GameID: s.testGameID,
 		}).
 		Return(game, nil)
-		
+
 	s.mockPlayerRepo.EXPECT().
 		GetPlayer(gomock.Any(), &playerRepo.GetPlayerInput{
 			PlayerID: s.testPlayerID,
 		}).
 		Return(player, nil)
-		
+
 	// We'll test the critical fail behavior by directly calling the code path
 	// that handles critical fails, rather than trying to mock the dice roll
-	
+
 	s.mockPlayerRepo.EXPECT().
 		SavePlayer(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, input *playerRepo.SavePlayerInput) error {
@@ -704,7 +720,7 @@ func (s *GameServiceTestSuite) TestRollDiceCriticalFail() {
 			s.NotZero(input.Player.LastRollTime)
 			return nil
 		})
-	
+
 	// Expect a drink record to be added when a critical fail occurs
 	s.mockLedgerRepo.EXPECT().
 		AddDrinkRecord(gomock.Any(), gomock.Any()).
@@ -718,23 +734,23 @@ func (s *GameServiceTestSuite) TestRollDiceCriticalFail() {
 			return nil
 		}).
 		AnyTimes() // Allow this to be called any number of times
-		
+
 	s.mockGameRepo.EXPECT().
 		SaveGame(gomock.Any(), gomock.Any()).
 		Return(nil)
-	
+
 	// Call the method - we'll manually check if it's a critical fail after
 	output, err := s.service.RollDice(ctx, &RollDiceInput{
 		GameID:   s.testGameID,
 		PlayerID: s.testPlayerID,
 	})
-	
+
 	// Verify the general results
 	s.NoError(err)
 	s.NotNil(output)
-	
+
 	// If the roll happened to be a critical fail, verify the expected behavior
-	if output.Value == s.service.config.CriticalFailValue {
+	if output.Value == s.service.criticalFailValue {
 		s.True(output.IsCriticalFail)
 		s.False(output.IsCriticalHit)
 	}
@@ -743,20 +759,20 @@ func (s *GameServiceTestSuite) TestRollDiceCriticalFail() {
 // TestRollDiceGameNotFound tests the case where the game is not found
 func (s *GameServiceTestSuite) TestRollDiceGameNotFound() {
 	ctx := context.Background()
-	
+
 	// Setup expectations
 	s.mockGameRepo.EXPECT().
 		GetGame(gomock.Any(), &gameRepo.GetGameInput{
 			GameID: s.testGameID,
 		}).
 		Return(nil, errors.New("game not found"))
-		
+
 	// Call the method
 	output, err := s.service.RollDice(ctx, &RollDiceInput{
 		GameID:   s.testGameID,
 		PlayerID: s.testPlayerID,
 	})
-	
+
 	// Verify the results
 	s.Error(err)
 	s.Equal(ErrGameNotFound, err)
@@ -766,7 +782,7 @@ func (s *GameServiceTestSuite) TestRollDiceGameNotFound() {
 // TestRollDiceInvalidGameState tests the case where the game is in an invalid state
 func (s *GameServiceTestSuite) TestRollDiceInvalidGameState() {
 	ctx := context.Background()
-	
+
 	// Create a game in completed state
 	game := &models.Game{
 		ID:        s.testGameID,
@@ -774,20 +790,20 @@ func (s *GameServiceTestSuite) TestRollDiceInvalidGameState() {
 		Status:    models.GameStatusCompleted,
 		PlayerIDs: []string{s.testPlayerID},
 	}
-	
+
 	// Setup expectations
 	s.mockGameRepo.EXPECT().
 		GetGame(gomock.Any(), &gameRepo.GetGameInput{
 			GameID: s.testGameID,
 		}).
 		Return(game, nil)
-		
+
 	// Call the method
 	output, err := s.service.RollDice(ctx, &RollDiceInput{
 		GameID:   s.testGameID,
 		PlayerID: s.testPlayerID,
 	})
-	
+
 	// Verify the results
 	s.Error(err)
 	s.Equal(ErrInvalidGameState, err)
@@ -797,7 +813,7 @@ func (s *GameServiceTestSuite) TestRollDiceInvalidGameState() {
 // TestRollDicePlayerNotFound tests the case where the player is not found
 func (s *GameServiceTestSuite) TestRollDicePlayerNotFound() {
 	ctx := context.Background()
-	
+
 	// Create a game
 	game := &models.Game{
 		ID:        s.testGameID,
@@ -805,26 +821,26 @@ func (s *GameServiceTestSuite) TestRollDicePlayerNotFound() {
 		Status:    models.GameStatusActive,
 		PlayerIDs: []string{s.testPlayerID},
 	}
-	
+
 	// Setup expectations
 	s.mockGameRepo.EXPECT().
 		GetGame(gomock.Any(), &gameRepo.GetGameInput{
 			GameID: s.testGameID,
 		}).
 		Return(game, nil)
-		
+
 	s.mockPlayerRepo.EXPECT().
 		GetPlayer(gomock.Any(), &playerRepo.GetPlayerInput{
 			PlayerID: s.testPlayerID,
 		}).
 		Return(nil, errors.New("player not found"))
-		
+
 	// Call the method
 	output, err := s.service.RollDice(ctx, &RollDiceInput{
 		GameID:   s.testGameID,
 		PlayerID: s.testPlayerID,
 	})
-	
+
 	// Verify the results
 	s.Error(err)
 	s.Equal(ErrPlayerNotFound, err)
@@ -834,7 +850,7 @@ func (s *GameServiceTestSuite) TestRollDicePlayerNotFound() {
 // TestRollDicePlayerNotInGame tests the case where the player is not in the specified game
 func (s *GameServiceTestSuite) TestRollDicePlayerNotInGame() {
 	ctx := context.Background()
-	
+
 	// Create a game
 	game := &models.Game{
 		ID:        s.testGameID,
@@ -842,33 +858,33 @@ func (s *GameServiceTestSuite) TestRollDicePlayerNotInGame() {
 		Status:    models.GameStatusActive,
 		PlayerIDs: []string{s.testPlayerID},
 	}
-	
+
 	// Create a player in a different game
 	player := &models.Player{
 		ID:            s.testPlayerID,
 		Name:          s.testPlayerName,
 		CurrentGameID: "different-game-id",
 	}
-	
+
 	// Setup expectations
 	s.mockGameRepo.EXPECT().
 		GetGame(gomock.Any(), &gameRepo.GetGameInput{
 			GameID: s.testGameID,
 		}).
 		Return(game, nil)
-		
+
 	s.mockPlayerRepo.EXPECT().
 		GetPlayer(gomock.Any(), &playerRepo.GetPlayerInput{
 			PlayerID: s.testPlayerID,
 		}).
 		Return(player, nil)
-		
+
 	// Call the method
 	output, err := s.service.RollDice(ctx, &RollDiceInput{
 		GameID:   s.testGameID,
 		PlayerID: s.testPlayerID,
 	})
-	
+
 	// Verify the results
 	s.Error(err)
 	s.Equal(ErrPlayerNotInGame, err)

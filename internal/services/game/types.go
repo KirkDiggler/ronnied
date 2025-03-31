@@ -2,6 +2,13 @@ package game
 
 import (
 	"time"
+
+	"github.com/KirkDiggler/ronnied/internal/common/clock"
+	"github.com/KirkDiggler/ronnied/internal/common/uuid"
+	"github.com/KirkDiggler/ronnied/internal/dice"
+	gameRepo "github.com/KirkDiggler/ronnied/internal/repositories/game"
+	ledgerRepo "github.com/KirkDiggler/ronnied/internal/repositories/drink_ledger"
+	playerRepo "github.com/KirkDiggler/ronnied/internal/repositories/player"
 )
 
 // GameStatus represents the current state of a game
@@ -62,12 +69,25 @@ type Config struct {
 	
 	// Maximum number of concurrent games
 	MaxConcurrentGames int
+
+	// Repository dependencies
+	GameRepo            gameRepo.Repository
+	PlayerRepo          playerRepo.Repository
+	DrinkLedgerRepo     ledgerRepo.Repository
+	
+	// Service dependencies
+	DiceRoller          *dice.Roller
+	Clock               clock.Clock
+	UUID                uuid.UUID
 }
 
 // CreateGameInput contains parameters for creating a new game
 type CreateGameInput struct {
 	// ChannelID is the Discord channel ID where the game is being played
 	ChannelID string
+	
+	// CreatorID is the Discord user ID of the player creating the game
+	CreatorID string
 }
 
 // CreateGameOutput contains the result of creating a new game
@@ -141,6 +161,9 @@ type RollDiceOutput struct {
 	
 	// RollOffGameID is the ID of the roll-off game (if created)
 	RollOffGameID string
+	
+	// AllPlayersRolled indicates if all players in the game have rolled
+	AllPlayersRolled bool
 }
 
 // AssignDrinkInput contains parameters for assigning a drink
@@ -164,21 +187,6 @@ type AssignDrinkOutput struct {
 	Success bool
 }
 
-// GetLeaderboardInput contains parameters for retrieving a leaderboard
-type GetLeaderboardInput struct {
-	// GameID is the unique identifier for the game
-	GameID string
-}
-
-// GetLeaderboardOutput contains the result of retrieving a leaderboard
-type GetLeaderboardOutput struct {
-	// PlayerStats contains statistics for each player
-	PlayerStats []*PlayerStats
-	
-	// GameID is the unique identifier for the game
-	GameID string
-}
-
 // PlayerStats represents a player's statistics in a game
 type PlayerStats struct {
 	// PlayerID is the Discord user ID of the player
@@ -200,18 +208,6 @@ type PlayerStats struct {
 	LastRollTime time.Time
 }
 
-// ResetGameInput contains parameters for resetting a game
-type ResetGameInput struct {
-	// GameID is the unique identifier for the game
-	GameID string
-}
-
-// ResetGameOutput contains the result of resetting a game
-type ResetGameOutput struct {
-	// Success indicates if the game was successfully reset
-	Success bool
-}
-
 // EndGameInput contains parameters for ending a game
 type EndGameInput struct {
 	// GameID is the unique identifier for the game
@@ -223,8 +219,24 @@ type EndGameOutput struct {
 	// Success indicates if the game was successfully ended
 	Success bool
 	
-	// FinalLeaderboard contains the final game statistics
-	FinalLeaderboard *GetLeaderboardOutput
+	// FinalLeaderboard contains the final standings for the game
+	FinalLeaderboard []*PlayerStats
+}
+
+// StartGameInput contains parameters for starting a game
+type StartGameInput struct {
+	// GameID is the unique identifier for the game
+	GameID string
+	
+	// PlayerID is the Discord user ID of the player starting the game
+	// This should match the game's creator ID
+	PlayerID string
+}
+
+// StartGameOutput contains the result of starting a game
+type StartGameOutput struct {
+	// Success indicates if the game was successfully started
+	Success bool
 }
 
 // HandleRollOffInput contains parameters for handling a roll-off
