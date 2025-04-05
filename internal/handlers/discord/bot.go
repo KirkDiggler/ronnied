@@ -370,6 +370,74 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to roll dice: %v", err))
 	}
 
+	// If this is a critical hit, show the player selection dropdown
+	if rollOutput.IsCriticalHit {
+		// Get players for dropdown
+		var playerOptions []discordgo.SelectMenuOption
+
+		// Check if there are other players
+		hasOtherPlayers := false
+		for _, participant := range existingGame.Game.Participants {
+			// Skip the current player initially
+			if participant.PlayerID == userID {
+				continue
+			}
+
+			hasOtherPlayers = true
+
+			// Add player to options
+			playerOptions = append(playerOptions, discordgo.SelectMenuOption{
+				Label:       participant.PlayerName,
+				Value:       participant.PlayerID,
+				Description: "Assign a drink to this player",
+				Emoji: &discordgo.ComponentEmoji{
+					Name: "🍺",
+				},
+			})
+		}
+
+		// If there are no other players, include the current player
+		if !hasOtherPlayers {
+			// Find the current player
+			for _, participant := range existingGame.Game.Participants {
+				if participant.PlayerID == userID {
+					playerOptions = append(playerOptions, discordgo.SelectMenuOption{
+						Label:       participant.PlayerName + " (You)",
+						Value:       participant.PlayerID,
+						Description: "Assign a drink to yourself (no choice!)",
+						Emoji: &discordgo.ComponentEmoji{
+							Name: "🍺",
+						},
+					})
+					break
+				}
+			}
+		}
+
+		// Create dropdown for player selection
+		if len(playerOptions) > 0 {
+			playerSelect := discordgo.SelectMenu{
+				CustomID:    SelectAssignDrink,
+				Placeholder: "Select a player to drink",
+				Options:     playerOptions,
+			}
+
+			// Return the dropdown to the user
+			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "You rolled a critical hit! Select a player to assign a drink:",
+					Components: []discordgo.MessageComponent{
+						discordgo.ActionsRow{
+							Components: []discordgo.MessageComponent{playerSelect},
+						},
+					},
+					Flags: discordgo.MessageFlagsEphemeral, // Make this message private
+				},
+			})
+		}
+	}
+
 	// Update the game message in the channel
 	b.updateGameMessage(s, channelID, existingGame.Game.ID)
 
@@ -893,21 +961,8 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 			},
 		})
 	} else if gameOutput.Game.Status == models.GameStatusActive {
-		// Add roll dice button
-		rollButton := discordgo.Button{
-			Label:    "Roll Dice",
-			Style:    discordgo.PrimaryButton,
-			CustomID: ButtonRollDice,
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "🎲",
-			},
-		}
-
-		components = append(components, discordgo.ActionsRow{
-			Components: []discordgo.MessageComponent{
-				rollButton,
-			},
-		})
+		// No buttons for active games in the main channel message
+		// Players already have their roll buttons from when they joined/started the game
 	} else if gameOutput.Game.Status == models.GameStatusRollOff {
 		// No buttons for roll-off games in the main channel message
 	} else if gameOutput.Game.Status == models.GameStatusCompleted {
