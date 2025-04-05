@@ -39,16 +39,18 @@ type Game struct {
 	// ParentGameID is the ID of the parent game (for roll-offs)
 	ParentGameID string
 	
+	// RollOffGameID is the ID of a roll-off game created from this game
+	RollOffGameID string
 	
 	// Participants contains information about players participating in the game
 	Participants []*Participant
+	
+	// MessageID is the Discord message ID for the game
+	MessageID string
 	
 	// CreatedAt is when the game was created
 	CreatedAt time.Time
 	
 	// UpdatedAt is when the game was last updated
 	UpdatedAt time.Time
-	
-	// MessageID is the ID of the main game message in Discord
-	MessageID string
 }

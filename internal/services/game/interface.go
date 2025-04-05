@@ -39,4 +39,7 @@ type Service interface {
 	
 	// UpdateGameMessage updates the Discord message ID associated with a game
 	UpdateGameMessage(ctx context.Context, input *UpdateGameMessageInput) (*UpdateGameMessageOutput, error)
+	
+	// GetDrinkRecords retrieves all drink records for a game
+	GetDrinkRecords(ctx context.Context, input *GetDrinkRecordsInput) (*GetDrinkRecordsOutput, error)
 }

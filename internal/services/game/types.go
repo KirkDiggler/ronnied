@@ -225,6 +225,18 @@ type EndGameOutput struct {
 
 	// FinalLeaderboard contains the final standings for the game
 	FinalLeaderboard []*PlayerStats
+
+	// NeedsRollOff indicates if a roll-off is needed
+	NeedsRollOff bool
+
+	// RollOffGameID is the ID of the roll-off game
+	RollOffGameID string
+
+	// RollOffType indicates the type of roll-off (highest or lowest)
+	RollOffType RollOffType
+
+	// RollOffPlayerIDs contains the IDs of players in the roll-off
+	RollOffPlayerIDs []string
 }
 
 // StartGameInput contains parameters for starting a game
@@ -334,8 +346,29 @@ type GetGameInput struct {
 	GameID string
 }
 
-// GetGameOutput defines the output for retrieving a game by ID
+// GetGameOutput contains the result of retrieving a game by ID
 type GetGameOutput struct {
 	// Game is the retrieved game
 	Game *models.Game
+}
+
+// GetDrinkRecordsInput contains parameters for retrieving drink records for a game
+type GetDrinkRecordsInput struct {
+	GameID string
+}
+
+// GetDrinkRecordsOutput contains the result of retrieving drink records for a game
+type GetDrinkRecordsOutput struct {
+	Records []*models.DrinkLedger
+}
+
+// GetGameLeaderboardInput defines the input for retrieving the leaderboard for a game
+type GetGameLeaderboardInput struct {
+	GameID string
+}
+
+// GetGameLeaderboardOutput defines the output for retrieving the leaderboard for a game
+type GetGameLeaderboardOutput struct {
+	GameID  string
+	Entries []LeaderboardEntry
 }
