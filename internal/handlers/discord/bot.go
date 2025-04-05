@@ -370,96 +370,6 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to roll dice: %v", err))
 	}
 
-	// Build the response message based on the roll result
-	var title string
-	var description string
-	var fields []*discordgo.MessageEmbedField
-	var components []discordgo.MessageComponent
-
-	// Add roll value field
-	fields = append(fields, &discordgo.MessageEmbedField{
-		Name:   "Roll Value",
-		Value:  fmt.Sprintf("%d", rollOutput.Value),
-		Inline: true,
-	})
-
-	// Handle critical hit (assign a drink)
-	if rollOutput.IsCriticalHit {
-		title = "Critical Hit! 🎯"
-		description = "You rolled a critical hit! Select a player below to assign them a drink."
-
-		// Get players for dropdown
-		var playerOptions []discordgo.SelectMenuOption
-
-		// Check if there are other players
-		hasOtherPlayers := false
-		for _, participant := range existingGame.Game.Participants {
-			// Skip the current player initially
-			if participant.PlayerID == userID {
-				continue
-			}
-
-			hasOtherPlayers = true
-
-			// Add player to options
-			playerOptions = append(playerOptions, discordgo.SelectMenuOption{
-				Label:       participant.PlayerName,
-				Value:       participant.PlayerID,
-				Description: "Assign a drink to this player",
-				Emoji: &discordgo.ComponentEmoji{
-					Name: "🍺",
-				},
-			})
-		}
-
-		// If there are no other players, include the current player
-		if !hasOtherPlayers {
-			// Find the current player
-			for _, participant := range existingGame.Game.Participants {
-				if participant.PlayerID == userID {
-					playerOptions = append(playerOptions, discordgo.SelectMenuOption{
-						Label:       participant.PlayerName + " (You)",
-						Value:       participant.PlayerID,
-						Description: "Assign a drink to yourself (no choice!)",
-						Emoji: &discordgo.ComponentEmoji{
-							Name: "🍺",
-						},
-					})
-					break
-				}
-			}
-
-			description += "\n\nYou're the only player, so you'll have to drink yourself!"
-		}
-
-		// Create dropdown for player selection
-		if len(playerOptions) > 0 {
-			playerSelect := discordgo.SelectMenu{
-				CustomID:    SelectAssignDrink,
-				Placeholder: "Select a player to drink",
-				Options:     playerOptions,
-			}
-
-			components = append(components, discordgo.SelectMenu(playerSelect))
-		}
-	} else if rollOutput.IsCriticalFail {
-		// Handle critical fail (take a drink)
-		title = "Critical Fail! 🍻"
-		description = "You rolled a critical fail! Take a drink."
-	} else {
-		// Regular roll
-		title = "Dice Roll"
-		description = fmt.Sprintf("You rolled a %d.", rollOutput.Value)
-	}
-
-	// Create action row for components if we have any
-	var messageComponents []discordgo.MessageComponent
-	if len(components) > 0 {
-		messageComponents = append(messageComponents, discordgo.ActionsRow{
-			Components: components,
-		})
-	}
-
 	// Update the game message in the channel
 	b.updateGameMessage(s, channelID, existingGame.Game.ID)
 
@@ -498,31 +408,11 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		}
 	}
 
-	// Respond with the roll result
-	if existingGame.Game.Status == models.GameStatusRollOff {
-		// For roll-offs, just acknowledge the interaction without sending a whispered message
-		// The main game message will be updated with the roll information
-		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseDeferredMessageUpdate,
-		})
-	} else {
-		// For regular rolls, send the ephemeral message with roll details
-		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Embeds: []*discordgo.MessageEmbed{
-					{
-						Title:       title,
-						Description: description,
-						Color:       0x00ff00, // Green color
-						Fields:      fields,
-					},
-				},
-				Components: messageComponents,
-				Flags:      discordgo.MessageFlagsEphemeral, // Make the message ephemeral
-			},
-		})
-	}
+	// Respond to the interaction without sending a whispered message
+	// The main game message will be updated with the roll information
+	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredMessageUpdate,
+	})
 }
 
 // handleAssignDrinkSelect handles the assign drink dropdown selection
@@ -974,13 +864,9 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 	}
 
 	// Create the embed
-	var title, description string
 	var components []discordgo.MessageComponent
 
 	if gameOutput.Game.Status == models.GameStatusWaiting {
-		title = "Game Waiting for Players"
-		description = "Click the Join button to join the game. Once everyone has joined, the creator can click Begin to start the game."
-
 		// Add join and begin buttons
 		joinButton := discordgo.Button{
 			Label:    "Join Game",
@@ -1007,9 +893,6 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 			},
 		})
 	} else if gameOutput.Game.Status == models.GameStatusActive {
-		title = "Game in Progress"
-		description = "Roll the dice when it's your turn!"
-
 		// Add roll dice button
 		rollButton := discordgo.Button{
 			Label:    "Roll Dice",
@@ -1026,14 +909,8 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 			},
 		})
 	} else if gameOutput.Game.Status == models.GameStatusRollOff {
-		title = "Roll-Off in Progress"
-		description = "Players in the roll-off need to roll again to determine the outcome!"
-
 		// No buttons for roll-off games in the main channel message
 	} else if gameOutput.Game.Status == models.GameStatusCompleted {
-		title = "Game Completed"
-		description = "The game has ended. Check the final results below!"
-
 		// Add new game button
 		newGameButton := discordgo.Button{
 			Label:    "Start New Game",
@@ -1051,25 +928,19 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 		})
 	}
 
-	// Create message components if we have any
-	var messageComponents []discordgo.MessageComponent
-	if len(components) > 0 {
-		messageComponents = components
-	}
-
 	// Edit the message
 	_, err = s.ChannelMessageEditComplex(&discordgo.MessageEdit{
-		Channel: channelID,
+		Channel: gameOutput.Game.ChannelID,
 		ID:      gameOutput.Game.MessageID,
 		Embeds: &[]*discordgo.MessageEmbed{
 			{
-				Title:       title,
-				Description: description,
+				Title:       "Game Status",
+				Description: "Game is in progress.",
 				Color:       0x00ff00, // Green color
 				Fields:      fields,
 			},
 		},
-		Components: &messageComponents,
+		Components: &components,
 	})
 
 	if err != nil {
