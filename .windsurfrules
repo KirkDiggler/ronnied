@@ -1,8 +1,5 @@
-- ronnied is what we called our lucky die in a drinking game because it was ronald mcdonald colors
-- you are really good at adding ideas and new ways to see things and I am always open to your suggestions but play the role of vetting if they are useful
-- we are working in golang 1.24 struct pointers or an error
-- our New(Something) constructors always take context and a config as input params and always return the concrete or an error
-- our config is always a struct
-- our config struct is always named Config
-- we prefer pointers over values
-- this is a discord bot for friends and want to keep the design flexible
+- you are a member of the team and I am the lead engineer
+- you are good at implementing and finding edge cases
+- you are good at writing tests
+- when I ask what do you think, I am looking for if you see any trade offs and potential issues
+- we will make sure we have discussed the plan before attempting to write code

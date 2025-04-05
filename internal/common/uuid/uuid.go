@@ -12,6 +12,10 @@ type UUID interface {
 
 type DefaultUUID struct{}
 
+func New() *DefaultUUID {
+	return &DefaultUUID{}
+}
+
 // NewUUID returns a new UUID
 func (d *DefaultUUID) NewUUID() string {
 	return uuid.New().String()

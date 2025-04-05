@@ -24,4 +24,19 @@ type Service interface {
 
 	// HandleRollOff manages roll-offs for tied players
 	HandleRollOff(ctx context.Context, input *HandleRollOffInput) (*HandleRollOffOutput, error)
+	
+	// GetGameByChannel retrieves a game by its Discord channel ID
+	GetGameByChannel(ctx context.Context, input *GetGameByChannelInput) (*GetGameByChannelOutput, error)
+	
+	// GetGame retrieves a game by its ID
+	GetGame(ctx context.Context, input *GetGameInput) (*GetGameOutput, error)
+	
+	// GetLeaderboard retrieves the leaderboard for a game
+	GetLeaderboard(ctx context.Context, input *GetLeaderboardInput) (*GetLeaderboardOutput, error)
+	
+	// AbandonGame forcefully abandons a game regardless of its state
+	AbandonGame(ctx context.Context, input *AbandonGameInput) (*AbandonGameOutput, error)
+	
+	// UpdateGameMessage updates the Discord message ID associated with a game
+	UpdateGameMessage(ctx context.Context, input *UpdateGameMessageInput) (*UpdateGameMessageOutput, error)
 }

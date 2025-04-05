@@ -28,6 +28,9 @@ type Participant struct {
 
 	// PlayerID is the ID of the player
 	PlayerID string
+	
+	// PlayerName is the display name of the player
+	PlayerName string
 
 	// Status is the current state of the participant
 	Status ParticipantStatus

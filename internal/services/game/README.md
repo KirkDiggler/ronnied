@@ -140,7 +140,57 @@ type Service interface {
     // HandleRollOff manages roll-offs for tied players
     HandleRollOff(ctx context.Context, input *HandleRollOffInput) (*HandleRollOffOutput, error)
 }
-```
+
+## Roll-Off Implementation
+
+Roll-offs occur when multiple players tie for either the highest roll (critical hit) or the lowest roll (critical fail). The roll-off process determines which player(s) will assign or receive drinks.
+
+### Roll-Off Design
+
+1. **Data Structure**
+   - Roll-offs are implemented as separate Game objects with their own state
+   - Each roll-off has a ParentGameID linking it to the main game
+   - Roll-offs have GameStatusRollOff status
+   - Only the tied players participate in a roll-off
+
+2. **Roll-Off Flow**
+   - When all players have rolled in the main game, check for ties
+   - If ties exist, create a roll-off game with the tied players
+   - Players roll again in the roll-off
+   - If another tie occurs, create another roll-off (recursive)
+   - Once a winner/loser is determined, update the main game
+
+3. **Roll-Off Types**
+   - Highest Roll-Off: For critical hits (6), determines who gets to assign a drink
+   - Lowest Roll-Off: For critical fails (1) or lowest rolls, determines who takes a drink
+
+4. **User Experience**
+   - From the user's perspective, roll-offs appear as part of the main game flow
+   - Players don't need to explicitly join roll-offs - they're automatically included if they were tied
+   - The Discord message updates to show roll-off status and participants
+
+### Implementation Details
+
+1. **Creating Roll-Offs**
+   - When ties are detected, the RollDice method creates a roll-off game
+   - The roll-off game inherits channel and creator from the parent game
+   - Only tied players are added as participants to the roll-off
+
+2. **Handling Roll-Offs**
+   - The HandleRollOff method processes the results of a roll-off
+   - It determines if a clear winner/loser exists or if another roll-off is needed
+   - For highest roll-offs, it returns the winner(s) who can assign drinks
+   - For lowest roll-offs, it assigns drinks to the loser(s)
+
+3. **Resolving Roll-Offs**
+   - When a roll-off is resolved, the roll-off game status changes to completed
+   - The main game continues its flow based on roll-off results
+   - Drink assignments are recorded in the drink ledger
+
+4. **Edge Cases**
+   - Players leaving during roll-offs
+   - Multiple simultaneous roll-offs (both highest and lowest ties)
+   - Nested roll-offs (ties within roll-offs)
 
 ## Data Models
 

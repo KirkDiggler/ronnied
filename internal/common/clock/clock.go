@@ -10,6 +10,11 @@ type Clock interface {
 // DefaultClock implements the Clock interface using the system clock
 type DefaultClock struct{}
 
+// New returns a new DefaultClock
+func New() *DefaultClock {
+	return &DefaultClock{}
+}
+
 // Now returns the current time
 func (c *DefaultClock) Now() time.Time {
 	return time.Now()
