@@ -340,8 +340,24 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 	}
 
 	// Check if the game is in a state where players can roll
-	if existingGame.Game.Status != models.GameStatusActive {
+	if existingGame.Game.Status != models.GameStatusActive && existingGame.Game.Status != models.GameStatusRollOff {
 		return RespondWithEphemeralMessage(s, i, "Cannot roll dice. Game is not active.")
+	}
+
+	// For roll-offs, check if this player is eligible to roll
+	if existingGame.Game.Status == models.GameStatusRollOff {
+		// Check if this player is part of the roll-off
+		isInRollOff := false
+		for _, participant := range existingGame.Game.Participants {
+			if participant.PlayerID == userID {
+				isInRollOff = true
+				break
+			}
+		}
+		
+		if !isInRollOff {
+			return RespondWithEphemeralMessage(s, i, "You are not part of the current roll-off.")
+		}
 	}
 
 	// Roll the dice
@@ -483,21 +499,30 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 	}
 
 	// Respond with the roll result
-	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Embeds: []*discordgo.MessageEmbed{
-				{
-					Title:       title,
-					Description: description,
-					Color:       0x00ff00, // Green color
-					Fields:      fields,
+	if existingGame.Game.Status == models.GameStatusRollOff {
+		// For roll-offs, just acknowledge the interaction without sending a whispered message
+		// The main game message will be updated with the roll information
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseDeferredMessageUpdate,
+		})
+	} else {
+		// For regular rolls, send the ephemeral message with roll details
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Embeds: []*discordgo.MessageEmbed{
+					{
+						Title:       title,
+						Description: description,
+						Color:       0x00ff00, // Green color
+						Fields:      fields,
+					},
 				},
+				Components: messageComponents,
+				Flags:      discordgo.MessageFlagsEphemeral, // Make the message ephemeral
 			},
-			Components: messageComponents,
-			Flags:      discordgo.MessageFlagsEphemeral, // Make the message ephemeral
-		},
-	})
+		})
+	}
 }
 
 // handleAssignDrinkSelect handles the assign drink dropdown selection
