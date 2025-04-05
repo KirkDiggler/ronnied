@@ -15,24 +15,24 @@ import (
 
 // Bot represents the Discord bot instance
 type Bot struct {
-	session      *discordgo.Session
-	commands     map[string]CommandHandler
-	commandIDs   map[string]string // Maps command name to command ID
-	gameService  game.Service
-	config       *Config
+	session     *discordgo.Session
+	commands    map[string]CommandHandler
+	commandIDs  map[string]string // Maps command name to command ID
+	gameService game.Service
+	config      *Config
 }
 
 // Config holds the configuration for the bot
 type Config struct {
 	// Discord bot token
 	Token string
-	
+
 	// Application ID for the bot
 	ApplicationID string
-	
+
 	// Optional guild ID for development (server-specific commands)
 	GuildID string
-	
+
 	// Game service
 	GameService game.Service
 }
@@ -95,12 +95,12 @@ func (b *Bot) Stop() error {
 	if appID == "" {
 		appID = b.session.State.User.ID
 	}
-	
+
 	guildID := ""
 	if b.config.GuildID != "" {
 		guildID = b.config.GuildID
 	}
-	
+
 	for cmdName, cmdID := range b.commandIDs {
 		if err := b.session.ApplicationCommandDelete(appID, guildID, cmdID); err != nil {
 			log.Printf("Failed to delete command %s (ID: %s): %v", cmdName, cmdID, err)
@@ -120,7 +120,7 @@ func (b *Bot) RegisterCommand(cmd CommandHandler) error {
 		// Fall back to session user ID if application ID is not provided
 		appID = b.session.State.User.ID
 	}
-	
+
 	// If guild ID is provided, register command for that specific guild
 	// Otherwise, register it globally
 	guildID := ""
@@ -130,7 +130,7 @@ func (b *Bot) RegisterCommand(cmd CommandHandler) error {
 	} else {
 		log.Printf("Registering command %s globally", cmd.GetName())
 	}
-	
+
 	createdCmd, err := b.session.ApplicationCommandCreate(appID, guildID, cmd.GetCommand())
 	if err != nil {
 		return fmt.Errorf("failed to create command %s: %w", cmd.GetName(), err)
@@ -140,7 +140,7 @@ func (b *Bot) RegisterCommand(cmd CommandHandler) error {
 	b.commands[cmd.GetName()] = cmd
 	b.commandIDs[cmd.GetName()] = createdCmd.ID
 	log.Printf("Registered command: %s with ID: %s", cmd.GetName(), createdCmd.ID)
-	
+
 	return nil
 }
 
@@ -149,11 +149,11 @@ type ButtonHandler func(s *discordgo.Session, i *discordgo.InteractionCreate) er
 
 // Button IDs
 const (
-	ButtonJoinGame    = "join_game"
-	ButtonBeginGame   = "begin_game"
-	ButtonRollDice    = "roll_dice"
+	ButtonJoinGame     = "join_game"
+	ButtonBeginGame    = "begin_game"
+	ButtonRollDice     = "roll_dice"
 	ButtonStartNewGame = "start_new_game"
-	
+
 	// Select menu custom IDs
 	SelectAssignDrink = "assign_drink"
 )
@@ -181,7 +181,7 @@ func (b *Bot) handleInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 func (b *Bot) handleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCreate) error {
 	// Get the custom ID of the component
 	customID := i.MessageComponentData().CustomID
-	
+
 	// Get channel and user info
 	channelID := i.ChannelID
 	userID := i.Member.User.ID
@@ -189,7 +189,7 @@ func (b *Bot) handleComponentInteraction(s *discordgo.Session, i *discordgo.Inte
 	if i.Member.Nick != "" {
 		username = i.Member.Nick
 	}
-	
+
 	// Handle different button actions
 	switch customID {
 	case ButtonJoinGame:
@@ -215,17 +215,17 @@ func (b *Bot) handleComponentInteraction(s *discordgo.Session, i *discordgo.Inte
 // handleJoinGameButton handles the join game button click
 func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID, username string) error {
 	ctx := context.Background()
-	
+
 	// Get the game in this channel
 	existingGame, err := b.gameService.GetGameByChannel(ctx, &game.GetGameByChannelInput{
 		ChannelID: channelID,
 	})
-	
+
 	if err != nil {
 		log.Printf("Error getting game: %v", err)
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Error: %v", err))
 	}
-	
+
 	// Join the game
 	_, err = b.gameService.JoinGame(ctx, &game.JoinGameInput{
 		GameID:     existingGame.Game.ID,
@@ -236,10 +236,10 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 		log.Printf("Error joining game: %v", err)
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to join game: %v", err))
 	}
-	
+
 	// Update the game message
 	b.updateGameMessage(s, channelID, existingGame.Game.ID)
-	
+
 	// Create roll button for when the game starts
 	rollButton := discordgo.Button{
 		Label:    "Roll Dice",
@@ -249,13 +249,13 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 			Name: "🎲",
 		},
 	}
-	
+
 	// Respond with success message
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: "You've joined the game! Wait for the creator to start the game.",
-			Flags: discordgo.MessageFlagsEphemeral,
+			Flags:   discordgo.MessageFlagsEphemeral,
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
 					Components: []discordgo.MessageComponent{rollButton},
@@ -268,17 +268,17 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 // handleBeginGameButton handles the begin game button click
 func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID string) error {
 	ctx := context.Background()
-	
+
 	// Get the game in this channel
 	existingGame, err := b.gameService.GetGameByChannel(ctx, &game.GetGameByChannelInput{
 		ChannelID: channelID,
 	})
-	
+
 	if err != nil {
 		log.Printf("Error getting game: %v", err)
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Error: %v", err))
 	}
-	
+
 	// Start the game
 	startOutput, err := b.gameService.StartGame(ctx, &game.StartGameInput{
 		GameID:   existingGame.Game.ID,
@@ -288,14 +288,14 @@ func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.Interacti
 		log.Printf("Error starting game: %v", err)
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to start game: %v", err))
 	}
-	
+
 	if !startOutput.Success {
 		return RespondWithEphemeralMessage(s, i, "Failed to start the game. Make sure you are the creator of the game.")
 	}
-	
+
 	// Update the game message
 	b.updateGameMessage(s, channelID, existingGame.Game.ID)
-	
+
 	// Create roll button
 	rollButton := discordgo.Button{
 		Label:    "Roll Dice",
@@ -305,13 +305,13 @@ func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.Interacti
 			Name: "🎲",
 		},
 	}
-	
+
 	// Send an ephemeral message to the user who started the game
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: "Game Started! Click the button below to roll your dice.",
-			Flags: discordgo.MessageFlagsEphemeral,
+			Flags:   discordgo.MessageFlagsEphemeral,
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
 					Components: []discordgo.MessageComponent{rollButton},
@@ -324,12 +324,12 @@ func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.Interacti
 // handleRollDiceButton handles the roll dice button click
 func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID string) error {
 	ctx := context.Background()
-	
+
 	// Get the game in this channel
 	existingGame, err := b.gameService.GetGameByChannel(ctx, &game.GetGameByChannelInput{
 		ChannelID: channelID,
 	})
-	
+
 	// Handle errors or missing game
 	if err != nil {
 		if err == game.ErrGameNotFound {
@@ -338,12 +338,12 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		log.Printf("Error getting game: %v", err)
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Error getting game: %v", err))
 	}
-	
+
 	// Check if the game is in a state where players can roll
 	if existingGame.Game.Status != models.GameStatusActive {
 		return RespondWithEphemeralMessage(s, i, "Cannot roll dice. Game is not active.")
 	}
-	
+
 	// Roll the dice
 	rollOutput, err := b.gameService.RollDice(ctx, &game.RollDiceInput{
 		GameID:   existingGame.Game.ID,
@@ -353,28 +353,28 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		log.Printf("Error rolling dice: %v", err)
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to roll dice: %v", err))
 	}
-	
+
 	// Build the response message based on the roll result
 	var title string
 	var description string
 	var fields []*discordgo.MessageEmbedField
 	var components []discordgo.MessageComponent
-	
+
 	// Add roll value field
 	fields = append(fields, &discordgo.MessageEmbedField{
 		Name:   "Roll Value",
 		Value:  fmt.Sprintf("%d", rollOutput.Value),
 		Inline: true,
 	})
-	
+
 	// Handle critical hit (assign a drink)
 	if rollOutput.IsCriticalHit {
 		title = "Critical Hit! 🎯"
 		description = "You rolled a critical hit! Select a player below to assign them a drink."
-		
+
 		// Get players for dropdown
 		var playerOptions []discordgo.SelectMenuOption
-		
+
 		// Check if there are other players
 		hasOtherPlayers := false
 		for _, participant := range existingGame.Game.Participants {
@@ -382,9 +382,9 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 			if participant.PlayerID == userID {
 				continue
 			}
-			
+
 			hasOtherPlayers = true
-			
+
 			// Add player to options
 			playerOptions = append(playerOptions, discordgo.SelectMenuOption{
 				Label:       participant.PlayerName,
@@ -395,7 +395,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 				},
 			})
 		}
-		
+
 		// If there are no other players, include the current player
 		if !hasOtherPlayers {
 			// Find the current player
@@ -412,10 +412,10 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 					break
 				}
 			}
-			
+
 			description += "\n\nYou're the only player, so you'll have to drink yourself!"
 		}
-		
+
 		// Create dropdown for player selection
 		if len(playerOptions) > 0 {
 			playerSelect := discordgo.SelectMenu{
@@ -423,7 +423,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 				Placeholder: "Select a player to drink",
 				Options:     playerOptions,
 			}
-			
+
 			components = append(components, discordgo.SelectMenu(playerSelect))
 		}
 	} else if rollOutput.IsCriticalFail {
@@ -435,7 +435,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		title = "Dice Roll"
 		description = fmt.Sprintf("You rolled a %d.", rollOutput.Value)
 	}
-	
+
 	// Create action row for components if we have any
 	var messageComponents []discordgo.MessageComponent
 	if len(components) > 0 {
@@ -443,10 +443,10 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 			Components: components,
 		})
 	}
-	
+
 	// Update the game message in the channel
 	b.updateGameMessage(s, channelID, existingGame.Game.ID)
-	
+
 	// Check if all players have rolled and we need to end the game
 	if rollOutput.AllPlayersRolled {
 		// End the game
@@ -468,50 +468,20 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 						}
 					}
 				}
-				
+
 				// Send a message to the channel about the roll-off
 				rollOffMessage := fmt.Sprintf("We have a tie! The following players need to roll again: %s", strings.Join(rollOffPlayerNames, ", "))
 				s.ChannelMessageSend(channelID, rollOffMessage)
-				
-				// Send private messages to the players who need to roll again
-				for _, playerID := range endGameOutput.RollOffPlayerIDs {
-					// Create a DM channel with the player
-					dmChannel, err := s.UserChannelCreate(playerID)
-					if err != nil {
-						log.Printf("Error creating DM channel with player %s: %v", playerID, err)
-						continue
-					}
-					
-					// Create roll button for the roll-off
-					rollButton := discordgo.Button{
-						Label:    "Roll Again",
-						Style:    discordgo.PrimaryButton,
-						CustomID: ButtonRollDice,
-						Emoji: &discordgo.ComponentEmoji{
-							Name: "🎲",
-						},
-					}
-					
-					// Send the roll-off message
-					_, err = s.ChannelMessageSendComplex(dmChannel.ID, &discordgo.MessageSend{
-						Content: "You're in a roll-off! Click the button below to roll again.",
-						Components: []discordgo.MessageComponent{
-							discordgo.ActionsRow{
-								Components: []discordgo.MessageComponent{rollButton},
-							},
-						},
-					})
-					if err != nil {
-						log.Printf("Error sending roll-off message to player %s: %v", playerID, err)
-					}
-				}
+
+				// Game is still active with a roll-off, update the game message
+				b.updateGameMessage(s, channelID, existingGame.Game.ID)
 			} else {
 				// Game is completed, update the game message one more time
 				b.updateGameMessage(s, channelID, existingGame.Game.ID)
 			}
 		}
 	}
-	
+
 	// Respond with the roll result
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -533,22 +503,22 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 // handleAssignDrinkSelect handles the assign drink dropdown selection
 func (b *Bot) handleAssignDrinkSelect(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID string) error {
 	ctx := context.Background()
-	
+
 	// Get the selected player ID from the interaction data
 	var targetPlayerID string
 	if i.MessageComponentData().Values != nil && len(i.MessageComponentData().Values) > 0 {
 		targetPlayerID = i.MessageComponentData().Values[0]
 	}
-	
+
 	if targetPlayerID == "" {
 		return RespondWithEphemeralMessage(s, i, "No player selected")
 	}
-	
+
 	// Get the game in this channel
 	existingGame, err := b.gameService.GetGameByChannel(ctx, &game.GetGameByChannelInput{
 		ChannelID: channelID,
 	})
-	
+
 	// Handle errors or missing game
 	if err != nil {
 		if errors.Is(err, game.ErrGameNotFound) {
@@ -557,7 +527,7 @@ func (b *Bot) handleAssignDrinkSelect(s *discordgo.Session, i *discordgo.Interac
 		log.Printf("Error getting game: %v", err)
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Error getting game: %v", err))
 	}
-	
+
 	// Get target player name before assigning the drink
 	targetPlayerName := ""
 	for _, participant := range existingGame.Game.Participants {
@@ -566,7 +536,7 @@ func (b *Bot) handleAssignDrinkSelect(s *discordgo.Session, i *discordgo.Interac
 			break
 		}
 	}
-	
+
 	// Assign the drink
 	_, err = b.gameService.AssignDrink(ctx, &game.AssignDrinkInput{
 		GameID:       existingGame.Game.ID,
@@ -578,7 +548,7 @@ func (b *Bot) handleAssignDrinkSelect(s *discordgo.Session, i *discordgo.Interac
 		log.Printf("Error assigning drink: %v", err)
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to assign drink: %v", err))
 	}
-	
+
 	// Get the updated game to check if all players have rolled and all critical hits have assigned drinks
 	updatedGame, err := b.gameService.GetGame(ctx, &game.GetGameInput{
 		GameID: existingGame.Game.ID,
@@ -588,19 +558,19 @@ func (b *Bot) handleAssignDrinkSelect(s *discordgo.Session, i *discordgo.Interac
 	} else {
 		allPlayersRolled := true
 		allDrinksAssigned := true
-		
+
 		for _, participant := range updatedGame.Game.Participants {
 			if participant.RollTime == nil {
 				allPlayersRolled = false
 				break
 			}
-			
+
 			if participant.Status == models.ParticipantStatusNeedsToAssign {
 				allDrinksAssigned = false
 				break
 			}
 		}
-		
+
 		// If all players have rolled and all drinks are assigned, end the game
 		if allPlayersRolled && allDrinksAssigned {
 			_, err := b.gameService.EndGame(ctx, &game.EndGameInput{
@@ -611,10 +581,10 @@ func (b *Bot) handleAssignDrinkSelect(s *discordgo.Session, i *discordgo.Interac
 			}
 		}
 	}
-	
+
 	// Update the game message in the channel to show the drink assignment
 	b.updateGameMessage(s, channelID, existingGame.Game.ID)
-	
+
 	// Update the current message with a confirmation (no button)
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseUpdateMessage,
@@ -627,19 +597,19 @@ func (b *Bot) handleAssignDrinkSelect(s *discordgo.Session, i *discordgo.Interac
 // handleStartNewGameButton handles the start new game button click
 func (b *Bot) handleStartNewGameButton(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID, username string) error {
 	ctx := context.Background()
-	
+
 	// Check if there's an existing game in this channel
 	existingGame, err := b.gameService.GetGameByChannel(ctx, &game.GetGameByChannelInput{
 		ChannelID: channelID,
 	})
-	
+
 	// Only allow creating a new game if no game exists or the existing game is completed
 	if err == nil && existingGame != nil && existingGame.Game != nil {
 		if existingGame.Game.Status != models.GameStatusCompleted {
 			return RespondWithEphemeralMessage(s, i, "There's already an active game in this channel. Use `/ronnied abandon` if you want to abandon the current game.")
 		}
 	}
-	
+
 	// Create a new game
 	createOutput, err := b.gameService.CreateGame(ctx, &game.CreateGameInput{
 		ChannelID:   channelID,
@@ -650,7 +620,7 @@ func (b *Bot) handleStartNewGameButton(s *discordgo.Session, i *discordgo.Intera
 		log.Printf("Error creating game: %v", err)
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to create game: %v", err))
 	}
-	
+
 	// Join the creator to the game
 	_, err = b.gameService.JoinGame(ctx, &game.JoinGameInput{
 		GameID:     createOutput.GameID,
@@ -661,7 +631,7 @@ func (b *Bot) handleStartNewGameButton(s *discordgo.Session, i *discordgo.Intera
 		log.Printf("Error joining game: %v", err)
 		// Not critical, continue
 	}
-	
+
 	// Create join button
 	joinButton := discordgo.Button{
 		Label:    "Join Game",
@@ -671,7 +641,7 @@ func (b *Bot) handleStartNewGameButton(s *discordgo.Session, i *discordgo.Intera
 			Name: "🎲",
 		},
 	}
-	
+
 	// Create begin button
 	beginButton := discordgo.Button{
 		Label:    "Begin Game",
@@ -681,7 +651,7 @@ func (b *Bot) handleStartNewGameButton(s *discordgo.Session, i *discordgo.Intera
 			Name: "🎮",
 		},
 	}
-	
+
 	// Create the embed
 	embeds := []*discordgo.MessageEmbed{
 		{
@@ -707,7 +677,7 @@ func (b *Bot) handleStartNewGameButton(s *discordgo.Session, i *discordgo.Intera
 			},
 		},
 	}
-	
+
 	// Send the message to the channel
 	msg, err := s.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
 		Embeds: embeds,
@@ -721,7 +691,7 @@ func (b *Bot) handleStartNewGameButton(s *discordgo.Session, i *discordgo.Intera
 		log.Printf("Error sending message: %v", err)
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to send game message: %v", err))
 	}
-	
+
 	// Update the game with the message ID
 	_, err = b.gameService.UpdateGameMessage(ctx, &game.UpdateGameMessageInput{
 		GameID:    createOutput.GameID,
@@ -731,7 +701,7 @@ func (b *Bot) handleStartNewGameButton(s *discordgo.Session, i *discordgo.Intera
 		log.Printf("Error updating game message: %v", err)
 		// Not critical, continue
 	}
-	
+
 	// Acknowledge the interaction without sending a message
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseDeferredMessageUpdate,
@@ -741,7 +711,7 @@ func (b *Bot) handleStartNewGameButton(s *discordgo.Session, i *discordgo.Intera
 // updateGameMessage updates the main game message in the channel
 func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID string) {
 	ctx := context.Background()
-	
+
 	// Get the game
 	gameOutput, err := b.gameService.GetGame(ctx, &game.GetGameInput{
 		GameID: gameID,
@@ -750,12 +720,12 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 		log.Printf("Error getting game for message update: %v", err)
 		return
 	}
-	
+
 	if gameOutput.Game.MessageID == "" {
 		log.Printf("Game has no message ID, cannot update")
 		return
 	}
-	
+
 	// Create fields for the message
 	fields := []*discordgo.MessageEmbedField{
 		{
@@ -769,10 +739,10 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 			Inline: true,
 		},
 	}
-	
+
 	// Check if this is a roll-off game
 	isRollOff := gameOutput.Game.Status == models.GameStatusRollOff
-	
+
 	// Check if this game has a roll-off in progress
 	hasRollOffInProgress := false
 	if gameOutput.Game.RollOffGameID != "" {
@@ -784,19 +754,19 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 			hasRollOffInProgress = true
 		}
 	}
-	
+
 	// Add player names and their rolls if the game is active or completed
-	if gameOutput.Game.Status == models.GameStatusActive || 
-	   gameOutput.Game.Status == models.GameStatusRollOff || 
-	   gameOutput.Game.Status == models.GameStatusCompleted {
-		
+	if gameOutput.Game.Status == models.GameStatusActive ||
+		gameOutput.Game.Status == models.GameStatusRollOff ||
+		gameOutput.Game.Status == models.GameStatusCompleted {
+
 		// Create a field for player rolls
 		playerRolls := ""
 		for _, participant := range gameOutput.Game.Participants {
 			rollInfo := "Not rolled yet"
 			if participant.RollValue > 0 {
 				rollInfo = fmt.Sprintf("%d", participant.RollValue)
-				
+
 				// Add emoji indicators for critical hits and fails
 				if participant.RollValue == 6 { // Assuming 6 is critical hit
 					rollInfo += " 🎯"
@@ -806,7 +776,7 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 			}
 			playerRolls += fmt.Sprintf("**%s**: %s\n", participant.PlayerName, rollInfo)
 		}
-		
+
 		if playerRolls != "" {
 			fields = append(fields, &discordgo.MessageEmbedField{
 				Name:   "Player Rolls",
@@ -814,7 +784,7 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 				Inline: false,
 			})
 		}
-		
+
 		// If this is a roll-off game, add information about the roll-off
 		if isRollOff {
 			// Get the parent game to show what this roll-off is for
@@ -839,15 +809,15 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 							}
 						}
 					}
-					
+
 					// Add roll-off information field
 					rollOffInfo := fmt.Sprintf("This is a roll-off for **%s**\n", rollOffType)
 					rollOffInfo += "Players in the roll-off:\n"
-					
+
 					for _, participant := range gameOutput.Game.Participants {
 						rollOffInfo += fmt.Sprintf("- **%s**\n", participant.PlayerName)
 					}
-					
+
 					fields = append(fields, &discordgo.MessageEmbedField{
 						Name:   "Roll-Off Information",
 						Value:  rollOffInfo,
@@ -866,13 +836,13 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 				for _, participant := range rollOffGameOutput.Game.Participants {
 					rollOffPlayerNames = append(rollOffPlayerNames, participant.PlayerName)
 				}
-				
+
 				// Add roll-off information field
 				rollOffInfo := "A roll-off is in progress with the following players:\n"
 				for _, name := range rollOffPlayerNames {
 					rollOffInfo += fmt.Sprintf("- **%s**\n", name)
 				}
-				
+
 				fields = append(fields, &discordgo.MessageEmbedField{
 					Name:   "Roll-Off In Progress",
 					Value:  rollOffInfo,
@@ -880,31 +850,31 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 				})
 			}
 		}
-		
+
 		// Get the drink records for the game to show detailed assignments
 		drinkRecords, err := b.gameService.GetDrinkRecords(ctx, &game.GetDrinkRecordsInput{
 			GameID: gameID,
 		})
-		
+
 		if err == nil && len(drinkRecords.Records) > 0 {
 			// Create a field for detailed drink assignments
 			drinkAssignments := ""
-			
+
 			// Create a map to track player names
 			playerNames := make(map[string]string)
 			for _, participant := range gameOutput.Game.Participants {
 				playerNames[participant.PlayerID] = participant.PlayerName
 			}
-			
+
 			// Group drink records by reason
 			criticalHitAssignments := ""
 			criticalFailAssignments := ""
 			lowestRollAssignments := ""
-			
+
 			for _, record := range drinkRecords.Records {
 				fromName := playerNames[record.FromPlayerID]
 				toName := playerNames[record.ToPlayerID]
-				
+
 				switch record.Reason {
 				case models.DrinkReasonCriticalHit:
 					criticalHitAssignments += fmt.Sprintf("**%s** assigned a drink to **%s** 🎯\n", fromName, toName)
@@ -914,20 +884,20 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 					lowestRollAssignments += fmt.Sprintf("**%s** had the lowest roll 🍻\n", toName)
 				}
 			}
-			
+
 			// Combine all assignments
 			if criticalHitAssignments != "" {
 				drinkAssignments += "**Critical Hit Assignments:**\n" + criticalHitAssignments + "\n"
 			}
-			
+
 			if criticalFailAssignments != "" {
 				drinkAssignments += "**Critical Fails:**\n" + criticalFailAssignments + "\n"
 			}
-			
+
 			if lowestRollAssignments != "" {
 				drinkAssignments += "**Lowest Rolls:**\n" + lowestRollAssignments + "\n"
 			}
-			
+
 			if drinkAssignments != "" {
 				fields = append(fields, &discordgo.MessageEmbedField{
 					Name:   "Drink Assignments",
@@ -936,14 +906,14 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 				})
 			}
 		}
-		
+
 		// Only show the leaderboard for completed games with no roll-offs in progress
 		if gameOutput.Game.Status == models.GameStatusCompleted && !hasRollOffInProgress {
 			// Get the leaderboard to show total drinks per player
 			leaderboardOutput, err := b.gameService.GetLeaderboard(ctx, &game.GetLeaderboardInput{
 				GameID: gameID,
 			})
-			
+
 			if err == nil && len(leaderboardOutput.Entries) > 0 {
 				// Create a field for drink totals
 				drinkTotals := ""
@@ -952,7 +922,7 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 						drinkTotals += fmt.Sprintf("**%s**: %d drink(s)\n", entry.PlayerName, entry.DrinkCount)
 					}
 				}
-				
+
 				if drinkTotals != "" {
 					fields = append(fields, &discordgo.MessageEmbedField{
 						Name:   "Final Drink Tally",
@@ -968,7 +938,7 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 		for _, participant := range gameOutput.Game.Participants {
 			playerNames += participant.PlayerName + "\n"
 		}
-		
+
 		if playerNames != "" {
 			fields = append(fields, &discordgo.MessageEmbedField{
 				Name:   "Participants",
@@ -977,15 +947,15 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 			})
 		}
 	}
-	
+
 	// Create the embed
 	var title, description string
 	var components []discordgo.MessageComponent
-	
+
 	if gameOutput.Game.Status == models.GameStatusWaiting {
 		title = "Game Waiting for Players"
 		description = "Click the Join button to join the game. Once everyone has joined, the creator can click Begin to start the game."
-		
+
 		// Add join and begin buttons
 		joinButton := discordgo.Button{
 			Label:    "Join Game",
@@ -995,7 +965,7 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 				Name: "🎲",
 			},
 		}
-		
+
 		beginButton := discordgo.Button{
 			Label:    "Begin Game",
 			Style:    discordgo.PrimaryButton,
@@ -1004,7 +974,7 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 				Name: "▶️",
 			},
 		}
-		
+
 		components = append(components, discordgo.ActionsRow{
 			Components: []discordgo.MessageComponent{
 				joinButton,
@@ -1014,7 +984,7 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 	} else if gameOutput.Game.Status == models.GameStatusActive {
 		title = "Game in Progress"
 		description = "Roll the dice when it's your turn!"
-		
+
 		// Add roll dice button
 		rollButton := discordgo.Button{
 			Label:    "Roll Dice",
@@ -1024,7 +994,7 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 				Name: "🎲",
 			},
 		}
-		
+
 		components = append(components, discordgo.ActionsRow{
 			Components: []discordgo.MessageComponent{
 				rollButton,
@@ -1033,12 +1003,12 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 	} else if gameOutput.Game.Status == models.GameStatusRollOff {
 		title = "Roll-Off in Progress"
 		description = "Players in the roll-off need to roll again to determine the outcome!"
-		
+
 		// No buttons for roll-off games in the main channel message
 	} else if gameOutput.Game.Status == models.GameStatusCompleted {
 		title = "Game Completed"
 		description = "The game has ended. Check the final results below!"
-		
+
 		// Add new game button
 		newGameButton := discordgo.Button{
 			Label:    "Start New Game",
@@ -1048,20 +1018,20 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 				Name: "🎮",
 			},
 		}
-		
+
 		components = append(components, discordgo.ActionsRow{
 			Components: []discordgo.MessageComponent{
 				newGameButton,
 			},
 		})
 	}
-	
+
 	// Create message components if we have any
 	var messageComponents []discordgo.MessageComponent
 	if len(components) > 0 {
 		messageComponents = components
 	}
-	
+
 	// Edit the message
 	_, err = s.ChannelMessageEditComplex(&discordgo.MessageEdit{
 		Channel: channelID,
@@ -1076,7 +1046,7 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 		},
 		Components: &messageComponents,
 	})
-	
+
 	if err != nil {
 		log.Printf("Error updating game message: %v", err)
 	}
