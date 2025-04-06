@@ -425,8 +425,8 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 
 	// Handle critical hit (assign a drink)
 	if rollOutput.IsCriticalHit {
-		title = "Critical Hit! 🎯"
-		description = "Select a player below to assign them a drink."
+		title = "Assign a Drink"
+		description = "Select a player to assign a drink:"
 
 		// Get players for dropdown
 		var playerOptions []discordgo.SelectMenuOption
@@ -482,18 +482,10 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 
 			components = append(components, discordgo.SelectMenu(playerSelect))
 		}
-	} else if rollOutput.IsCriticalFail {
-		// For critical fails, just show a simple message
-		title = "Critical Fail! 🍺"
-		description = "You rolled a 1. Drink up!"
-	} else if existingGame.Game.Status == models.GameStatusRollOff {
-		// For roll-offs, just show a simple message
-		title = "Roll-Off"
-		description = "Your roll has been recorded. Check the main message for results."
 	} else {
-		// For normal rolls, just show a simple message with a roll button
+		// For all other rolls, just show a simple message with a roll button
 		title = "Roll Recorded"
-		description = "Your roll has been recorded. Check the main message for results."
+		description = "Your roll has been recorded."
 		
 		// Add roll dice button for next roll
 		rollButton := discordgo.Button{
@@ -971,6 +963,14 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 		}
 	}
 
+	// Get the game status description
+	description := getGameStatusDescription(gameOutput.Game.Status)
+	
+	// Add additional information for active games
+	if gameOutput.Game.Status == models.GameStatusActive || gameOutput.Game.Status == models.GameStatusRollOff {
+		description += "\n\n**Players:** Check your DMs for a roll button message."
+	}
+
 	// Create the embed
 	var components []discordgo.MessageComponent
 
@@ -1031,7 +1031,7 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 		Embeds: &[]*discordgo.MessageEmbed{
 			{
 				Title:       getGameStatusTitle(gameOutput.Game.Status),
-				Description: getGameStatusDescription(gameOutput.Game.Status),
+				Description: description,
 				Color:       0x00ff00, // Green color
 				Fields:      fields,
 			},
