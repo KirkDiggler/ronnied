@@ -306,6 +306,35 @@ func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.Interacti
 		},
 	}
 
+	// Send a direct message to each participant with a roll button
+	// We can't send multiple interaction responses, so we'll use direct messages instead
+	for _, participant := range existingGame.Game.Participants {
+		// Skip the user who started the game, they'll get the interaction response
+		if participant.PlayerID == userID {
+			continue
+		}
+
+		// Create a DM channel with the participant
+		dmChannel, err := s.UserChannelCreate(participant.PlayerID)
+		if err != nil {
+			log.Printf("Error creating DM channel with %s: %v", participant.PlayerName, err)
+			continue
+		}
+
+		// Send a message with the roll button
+		_, err = s.ChannelMessageSendComplex(dmChannel.ID, &discordgo.MessageSend{
+			Content: "A game has started! Click the button below to roll your dice.",
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{rollButton},
+				},
+			},
+		})
+		if err != nil {
+			log.Printf("Error sending DM to %s: %v", participant.PlayerName, err)
+		}
+	}
+
 	// Send an ephemeral message to the user who started the game
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -392,20 +421,12 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 	// Build the response message based on the roll result
 	var title string
 	var description string
-	var fields []*discordgo.MessageEmbedField
 	var components []discordgo.MessageComponent
-
-	// Add roll value field
-	fields = append(fields, &discordgo.MessageEmbedField{
-		Name:   "Roll Value",
-		Value:  fmt.Sprintf("%d", rollOutput.Value),
-		Inline: true,
-	})
 
 	// Handle critical hit (assign a drink)
 	if rollOutput.IsCriticalHit {
 		title = "Critical Hit! 🎯"
-		description = "Crit! Select a player below to assign them a drink."
+		description = "Select a player below to assign them a drink."
 
 		// Get players for dropdown
 		var playerOptions []discordgo.SelectMenuOption
@@ -461,6 +482,30 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 
 			components = append(components, discordgo.SelectMenu(playerSelect))
 		}
+	} else if rollOutput.IsCriticalFail {
+		// For critical fails, just show a simple message
+		title = "Critical Fail! 🍺"
+		description = "You rolled a 1. Drink up!"
+	} else if existingGame.Game.Status == models.GameStatusRollOff {
+		// For roll-offs, just show a simple message
+		title = "Roll-Off"
+		description = "Your roll has been recorded. Check the main message for results."
+	} else {
+		// For normal rolls, just show a simple message with a roll button
+		title = "Roll Recorded"
+		description = "Your roll has been recorded. Check the main message for results."
+		
+		// Add roll dice button for next roll
+		rollButton := discordgo.Button{
+			Label:    "Roll Again",
+			Style:    discordgo.PrimaryButton,
+			CustomID: ButtonRollDice,
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "🎲",
+			},
+		}
+		
+		components = append(components, rollButton)
 	}
 
 	// Create action row for components if we have any
@@ -484,7 +529,6 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 					Title:       title,
 					Description: description,
 					Color:       0x00ff00, // Green color
-					Fields:      fields,
 				},
 			},
 			Components: messageComponents,
@@ -957,37 +1001,11 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 			},
 		})
 	} else if gameOutput.Game.Status == models.GameStatusActive {
-		// Add roll dice button
-		rollButton := discordgo.Button{
-			Label:    "Roll Dice",
-			Style:    discordgo.PrimaryButton,
-			CustomID: ButtonRollDice,
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "🎲",
-			},
-		}
-
-		components = append(components, discordgo.ActionsRow{
-			Components: []discordgo.MessageComponent{
-				rollButton,
-			},
-		})
+		// No buttons for active games in the main channel message
+		// Players will use the whisper message buttons
 	} else if gameOutput.Game.Status == models.GameStatusRollOff {
-		// Add roll dice button for roll-off games
-		rollButton := discordgo.Button{
-			Label:    "Roll for Tie-Breaker",
-			Style:    discordgo.PrimaryButton,
-			CustomID: ButtonRollDice,
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "🎲",
-			},
-		}
-
-		components = append(components, discordgo.ActionsRow{
-			Components: []discordgo.MessageComponent{
-				rollButton,
-			},
-		})
+		// No buttons for roll-off games in the main channel message
+		// Players will use the whisper message buttons
 	} else if gameOutput.Game.Status == models.GameStatusCompleted {
 		// Add new game button
 		newGameButton := discordgo.Button{
