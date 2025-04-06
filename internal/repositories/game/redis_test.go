@@ -295,3 +295,137 @@ func (s *RedisRepositoryTestSuite) TestGameStatusTransition() {
 	s.Require().NoError(err)
 	s.Len(result.Games, 0)
 }
+
+func (s *RedisRepositoryTestSuite) TestGetGamesByParent() {
+	// Create a parent game
+	parentGame := &models.Game{
+		ID:          "parent-game-123",
+		ChannelID:   "channel-123",
+		CreatorID:   "creator-123",
+		Status:      models.GameStatusActive,
+		CreatedAt:   s.testNow,
+		UpdatedAt:   s.testNow,
+		Participants: []*models.Participant{
+			{
+				ID:         "participant-1",
+				GameID:     "parent-game-123",
+				PlayerID:   "player-1",
+				PlayerName: "Player 1",
+				Status:     models.ParticipantStatusActive,
+			},
+		},
+	}
+
+	// Create child games (roll-offs)
+	childGame1 := &models.Game{
+		ID:           "child-game-1",
+		ChannelID:    "channel-123",
+		CreatorID:    "creator-123",
+		Status:       models.GameStatusRollOff,
+		ParentGameID: "parent-game-123",
+		CreatedAt:    s.testNow.Add(time.Minute),
+		UpdatedAt:    s.testNow.Add(time.Minute),
+		Participants: []*models.Participant{
+			{
+				ID:         "participant-2",
+				GameID:     "child-game-1",
+				PlayerID:   "player-2",
+				PlayerName: "Player 2",
+				Status:     models.ParticipantStatusWaitingToRoll,
+			},
+		},
+	}
+
+	childGame2 := &models.Game{
+		ID:           "child-game-2",
+		ChannelID:    "channel-123",
+		CreatorID:    "creator-123",
+		Status:       models.GameStatusRollOff,
+		ParentGameID: "parent-game-123",
+		CreatedAt:    s.testNow.Add(2 * time.Minute),
+		UpdatedAt:    s.testNow.Add(2 * time.Minute),
+		Participants: []*models.Participant{
+			{
+				ID:         "participant-3",
+				GameID:     "child-game-2",
+				PlayerID:   "player-3",
+				PlayerName: "Player 3",
+				Status:     models.ParticipantStatusWaitingToRoll,
+			},
+		},
+	}
+
+	// Create a nested child game (roll-off of a roll-off)
+	nestedChildGame := &models.Game{
+		ID:           "nested-child-game",
+		ChannelID:    "channel-123",
+		CreatorID:    "creator-123",
+		Status:       models.GameStatusRollOff,
+		ParentGameID: "child-game-1",
+		CreatedAt:    s.testNow.Add(3 * time.Minute),
+		UpdatedAt:    s.testNow.Add(3 * time.Minute),
+		Participants: []*models.Participant{
+			{
+				ID:         "participant-4",
+				GameID:     "nested-child-game",
+				PlayerID:   "player-4",
+				PlayerName: "Player 4",
+				Status:     models.ParticipantStatusWaitingToRoll,
+			},
+		},
+	}
+
+	// Save all games
+	err := s.repo.SaveGame(context.Background(), &SaveGameInput{Game: parentGame})
+	s.Require().NoError(err)
+
+	err = s.repo.SaveGame(context.Background(), &SaveGameInput{Game: childGame1})
+	s.Require().NoError(err)
+
+	err = s.repo.SaveGame(context.Background(), &SaveGameInput{Game: childGame2})
+	s.Require().NoError(err)
+
+	err = s.repo.SaveGame(context.Background(), &SaveGameInput{Game: nestedChildGame})
+	s.Require().NoError(err)
+
+	// Test 1: Get games by parent ID
+	childGames, err := s.repo.GetGamesByParent(context.Background(), &GetGamesByParentInput{
+		ParentGameID: "parent-game-123",
+	})
+	s.Require().NoError(err)
+	s.Require().Len(childGames, 2)
+
+	// Verify the child games are returned
+	childIDs := []string{childGames[0].ID, childGames[1].ID}
+	s.Contains(childIDs, "child-game-1")
+	s.Contains(childIDs, "child-game-2")
+
+	// Test 2: Get nested child games
+	nestedGames, err := s.repo.GetGamesByParent(context.Background(), &GetGamesByParentInput{
+		ParentGameID: "child-game-1",
+	})
+	s.Require().NoError(err)
+	s.Require().Len(nestedGames, 1)
+	s.Equal("nested-child-game", nestedGames[0].ID)
+
+	// Test 3: Get games for a parent that has no children
+	emptyGames, err := s.repo.GetGamesByParent(context.Background(), &GetGamesByParentInput{
+		ParentGameID: "non-existent-parent",
+	})
+	s.Require().NoError(err)
+	s.Require().Empty(emptyGames)
+
+	// Test 4: Delete a child game and verify it's removed from the parent-child index
+	err = s.repo.DeleteGame(context.Background(), &DeleteGameInput{
+		GameID: "child-game-1",
+	})
+	s.Require().NoError(err)
+
+	// Check that the deleted game is no longer returned
+	updatedChildGames, err := s.repo.GetGamesByParent(context.Background(), &GetGamesByParentInput{
+		ParentGameID: "parent-game-123",
+	})
+	s.Require().NoError(err)
+	s.Require().Len(updatedChildGames, 1)
+	s.Equal("child-game-2", updatedChildGames[0].ID)
+}

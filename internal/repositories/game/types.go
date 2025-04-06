@@ -24,3 +24,7 @@ type GetActiveGamesInput struct {
 type GetActiveGamesOutput struct {
 	Games []*models.Game
 }
+
+type GetGamesByParentInput struct {
+	ParentGameID string
+}

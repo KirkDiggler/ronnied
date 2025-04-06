@@ -285,3 +285,105 @@ func (s *GameServiceTestSuite) TestHandleRollOffLowestSingleLoser() {
 	s.Equal([]string{s.testPlayerID2}, output.WinnerPlayerIDs) // player2 had the lowest roll
 	s.Empty(output.NextRollOffGameID)
 }
+
+// TestFindActiveRollOffGame tests finding active roll-off games for a player
+func (s *GameServiceTestSuite) TestFindActiveRollOffGame() {
+	// Setup test data
+	mainGameID := "main-game-123"
+	rollOffGameID := "roll-off-game-123"
+	nestedRollOffGameID := "nested-roll-off-game-123"
+	playerID := "player-123"
+	
+	// Create test games
+	rollOffGame := &models.Game{
+		ID:           rollOffGameID,
+		ParentGameID: mainGameID,
+		Status:       models.GameStatusRollOff,
+		Participants: []*models.Participant{
+			{
+				PlayerID: playerID,
+				Status:   models.ParticipantStatusWaitingToRoll,
+			},
+		},
+	}
+	
+	nestedRollOffGame := &models.Game{
+		ID:           nestedRollOffGameID,
+		ParentGameID: rollOffGameID,
+		Status:       models.GameStatusRollOff,
+		Participants: []*models.Participant{
+			{
+				PlayerID: playerID,
+				Status:   models.ParticipantStatusWaitingToRoll,
+			},
+		},
+	}
+	
+	// Test case 1: Player is in a direct roll-off game
+	s.mockGameRepo.EXPECT().
+		GetGamesByParent(gomock.Any(), &gameRepo.GetGamesByParentInput{
+			ParentGameID: mainGameID,
+		}).
+		Return([]*models.Game{rollOffGame}, nil)
+	
+	// We shouldn't need to check for nested roll-offs in this case
+	
+	result, err := s.service.FindActiveRollOffGame(context.Background(), playerID, mainGameID)
+	s.NoError(err)
+	s.NotNil(result)
+	s.Equal(rollOffGameID, result.ID)
+	
+	// Test case 2: Player is in a nested roll-off game
+	s.mockGameRepo.EXPECT().
+		GetGamesByParent(gomock.Any(), &gameRepo.GetGamesByParentInput{
+			ParentGameID: mainGameID,
+		}).
+		Return([]*models.Game{
+			{
+				ID:           rollOffGameID,
+				ParentGameID: mainGameID,
+				Status:       models.GameStatusRollOff,
+				Participants: []*models.Participant{}, // Player not in this roll-off
+			},
+		}, nil)
+	
+	s.mockGameRepo.EXPECT().
+		GetGamesByParent(gomock.Any(), &gameRepo.GetGamesByParentInput{
+			ParentGameID: rollOffGameID,
+		}).
+		Return([]*models.Game{nestedRollOffGame}, nil)
+	
+	result, err = s.service.FindActiveRollOffGame(context.Background(), playerID, mainGameID)
+	s.NoError(err)
+	s.NotNil(result)
+	s.Equal(nestedRollOffGameID, result.ID)
+	
+	// Test case 3: Player is not in any roll-off game
+	s.mockGameRepo.EXPECT().
+		GetGamesByParent(gomock.Any(), &gameRepo.GetGamesByParentInput{
+			ParentGameID: mainGameID,
+		}).
+		Return([]*models.Game{
+			{
+				ID:           "other-roll-off",
+				ParentGameID: mainGameID,
+				Status:       models.GameStatusRollOff,
+				Participants: []*models.Participant{
+					{
+						PlayerID: "other-player",
+						Status:   models.ParticipantStatusWaitingToRoll,
+					},
+				},
+			},
+		}, nil)
+	
+	s.mockGameRepo.EXPECT().
+		GetGamesByParent(gomock.Any(), &gameRepo.GetGamesByParentInput{
+			ParentGameID: "other-roll-off",
+		}).
+		Return([]*models.Game{}, nil)
+	
+	result, err = s.service.FindActiveRollOffGame(context.Background(), playerID, mainGameID)
+	s.NoError(err)
+	s.Nil(result) // No roll-off game found
+}

@@ -24,4 +24,7 @@ type Repository interface {
 	
 	// GetActiveGames retrieves all active games
 	GetActiveGames(ctx context.Context, input *GetActiveGamesInput) (*GetActiveGamesOutput, error)
+	
+	// GetGamesByParent retrieves all games with a specific parent game ID
+	GetGamesByParent(ctx context.Context, input *GetGamesByParentInput) ([]*models.Game, error)
 }

@@ -337,16 +337,24 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 	}
 
 	// Find the participant in the game
-	var participant *models.Participant
-	for _, p := range game.Participants {
-		if p.PlayerID == input.PlayerID {
-			participant = p
-			break
-		}
-	}
+	var participant = game.GetParticipant(input.PlayerID)
 
 	if participant == nil {
 		return nil, ErrPlayerNotInGame
+	}
+
+	// Check if the player should be in a roll-off game instead of the main game
+	if game.Status == models.GameStatusActive {
+		// Look for an active roll-off game for this player
+		rollOffGame, err := s.FindActiveRollOffGame(ctx, input.PlayerID, game.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		// If we found an active roll-off game, redirect the player there
+		if rollOffGame != nil {
+			return nil, fmt.Errorf("player should roll in roll-off game: %s", rollOffGame.ID)
+		}
 	}
 
 	// Check if the participant has already rolled
@@ -1115,6 +1123,48 @@ func (s *service) HandleRollOff(ctx context.Context, input *HandleRollOffInput) 
 		NeedsAnotherRollOff: needsAnotherRollOff,
 		NextRollOffGameID:   nextRollOffGameID,
 	}, nil
+}
+
+// FindActiveRollOffGame finds an active roll-off game for a player in a main game's chain
+// Returns the roll-off game if found, nil if not found, and an error if something went wrong
+func (s *service) FindActiveRollOffGame(ctx context.Context, playerID string, mainGameID string) (*models.Game, error) {
+	// First, get all roll-off games with the main game as parent
+	rollOffGames, err := s.gameRepo.GetGamesByParent(ctx, &gameRepo.GetGamesByParentInput{
+		ParentGameID: mainGameID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter for active roll-off games that include the player
+	for _, game := range rollOffGames {
+		// Only consider active roll-off games
+		if game.Status != models.GameStatusRollOff {
+			continue
+		}
+
+		// Check if the player is a participant in this roll-off
+		participant := game.GetParticipant(playerID)
+		if participant != nil {
+			// Found an active roll-off game for this player
+			return game, nil
+		}
+	}
+
+	// Check for nested roll-offs (roll-offs of roll-offs)
+	for _, game := range rollOffGames {
+		// Recursively check for nested roll-offs
+		nestedGame, err := s.FindActiveRollOffGame(ctx, playerID, game.ID)
+		if err != nil {
+			return nil, err
+		}
+		if nestedGame != nil {
+			return nestedGame, nil
+		}
+	}
+
+	// No active roll-off game found for this player
+	return nil, nil
 }
 
 // GetGameByChannel retrieves a game by its Discord channel ID

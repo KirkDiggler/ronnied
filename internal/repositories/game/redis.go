@@ -12,9 +12,10 @@ import (
 
 const (
 	// Key prefixes for Redis
-	gameKeyPrefix     = "game:"
-	channelKeyPrefix  = "channel:"
-	activeGamesKey    = "active_games"
+	gameKeyPrefix    = "game:"
+	channelKeyPrefix = "channel:"
+	activeGamesKey   = "active_games"
+	parentChildIndex = "parent:child:index:" // Index for parent-child relationships
 )
 
 // ErrGameNotFound is returned when a game is not found
@@ -83,6 +84,15 @@ func (r *redisRepository) SaveGame(ctx context.Context, input *SaveGameInput) er
 	} else {
 		// If the game is not active, remove it from the active games set
 		pipe.SRem(ctx, activeGamesKey, input.Game.ID)
+	}
+
+	// Add the game to the parent-child index
+	if input.Game.ParentGameID != "" {
+		parentChildIndexKey := fmt.Sprintf("%s%s", parentChildIndex, input.Game.ParentGameID)
+		pipe.ZAdd(ctx, parentChildIndexKey, redis.Z{
+			Score:  float64(input.Game.CreatedAt.UnixNano()),
+			Member: input.Game.ID,
+		})
 	}
 
 	// Execute the transaction
@@ -171,6 +181,12 @@ func (r *redisRepository) DeleteGame(ctx context.Context, input *DeleteGameInput
 	// Remove the game from the active games set
 	pipe.SRem(ctx, activeGamesKey, input.GameID)
 
+	// Remove the game from the parent-child index
+	if game.ParentGameID != "" {
+		parentChildIndexKey := fmt.Sprintf("%s%s", parentChildIndex, game.ParentGameID)
+		pipe.ZRem(ctx, parentChildIndexKey, input.GameID)
+	}
+
 	// Execute the transaction
 	_, err = pipe.Exec(ctx)
 	if err != nil {
@@ -233,4 +249,61 @@ func (r *redisRepository) GetActiveGames(ctx context.Context, input *GetActiveGa
 	return &GetActiveGamesOutput{
 		Games: games,
 	}, nil
+}
+
+// GetGamesByParent retrieves all games with a specific parent game ID from Redis
+func (r *redisRepository) GetGamesByParent(ctx context.Context, input *GetGamesByParentInput) ([]*models.Game, error) {
+	// Validate input
+	if input == nil || input.ParentGameID == "" {
+		return nil, errors.New("parent game ID cannot be empty")
+	}
+
+	// Get the games from the parent-child index
+	parentChildIndexKey := fmt.Sprintf("%s%s", parentChildIndex, input.ParentGameID)
+	gameIDs, err := r.client.ZRange(ctx, parentChildIndexKey, 0, -1).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get games by parent: %w", err)
+	}
+
+	// If there are no games, return an empty slice
+	if len(gameIDs) == 0 {
+		return []*models.Game{}, nil
+	}
+
+	// Get all games in parallel using a pipeline
+	pipe := r.client.Pipeline()
+	gameCommands := make(map[string]*redis.StringCmd)
+
+	for _, gameID := range gameIDs {
+		gameKey := fmt.Sprintf("%s%s", gameKeyPrefix, gameID)
+		gameCommands[gameID] = pipe.Get(ctx, gameKey)
+	}
+
+	// Execute the pipeline
+	_, err = pipe.Exec(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get games by parent: %w", err)
+	}
+
+	// Process the results
+	games := make([]*models.Game, 0, len(gameIDs))
+	for gameID, cmd := range gameCommands {
+		gameJSON, err := cmd.Result()
+		if err != nil {
+			if err == redis.Nil {
+				// Game was deleted between getting the IDs and fetching the game
+				continue
+			}
+			return nil, fmt.Errorf("failed to get game %s: %w", gameID, err)
+		}
+
+		var game models.Game
+		if err := json.Unmarshal([]byte(gameJSON), &game); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal game %s: %w", gameID, err)
+		}
+
+		games = append(games, &game)
+	}
+
+	return games, nil
 }
