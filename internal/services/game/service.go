@@ -635,14 +635,84 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 	lowestRoll := s.diceSides + 1 // Start with a value higher than possible
 	lowestRollPlayerIDs := []string{}
 
-	// First pass: find the lowest roll value
+	// Find players with the highest roll
+	highestRoll := 0
+	highestRollPlayerIDs := []string{}
+
+	// First pass: find the lowest and highest roll values
 	for _, participant := range game.Participants {
+		// Track lowest rolls
 		if participant.RollValue < lowestRoll {
 			lowestRoll = participant.RollValue
 			lowestRollPlayerIDs = []string{participant.PlayerID}
 		} else if participant.RollValue == lowestRoll {
 			lowestRollPlayerIDs = append(lowestRollPlayerIDs, participant.PlayerID)
 		}
+
+		// Track highest rolls
+		if participant.RollValue > highestRoll {
+			highestRoll = participant.RollValue
+			highestRollPlayerIDs = []string{participant.PlayerID}
+		} else if participant.RollValue == highestRoll {
+			highestRollPlayerIDs = append(highestRollPlayerIDs, participant.PlayerID)
+		}
+	}
+
+	// Check for ties with the highest roll (critical hits)
+	if len(highestRollPlayerIDs) > 1 && highestRoll == s.criticalHitValue {
+		// Multiple players tied for highest roll with critical hits, create a roll-off game
+
+		// Create a map of player IDs to names for the roll-off game
+		playerNames := make(map[string]string)
+		for _, participant := range game.Participants {
+			for _, playerID := range highestRollPlayerIDs {
+				if participant.PlayerID == playerID {
+					playerNames[playerID] = participant.PlayerName
+					break
+				}
+			}
+		}
+
+		// Create the roll-off game with the repository
+		rollOffGameOutput, err := s.gameRepo.CreateRollOffGame(ctx, &gameRepo.CreateRollOffGameInput{
+			ChannelID:    game.ChannelID,
+			CreatorID:    game.CreatorID,
+			ParentGameID: input.GameID,
+			PlayerIDs:    highestRollPlayerIDs,
+			PlayerNames:  playerNames,
+		})
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to create roll-off game for highest rollers: %w", err)
+		}
+
+		// Update the players' current game ID
+		for _, playerID := range highestRollPlayerIDs {
+			player, err := s.playerRepo.GetPlayer(ctx, &playerRepo.GetPlayerInput{
+				PlayerID: playerID,
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			player.CurrentGameID = rollOffGameOutput.Game.ID
+
+			err = s.playerRepo.SavePlayer(ctx, &playerRepo.SavePlayerInput{
+				Player: player,
+			})
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// Return early with roll-off information
+		return &EndGameOutput{
+			Success:          false,
+			NeedsRollOff:     true,
+			RollOffType:      RollOffTypeHighest,
+			RollOffGameID:    rollOffGameOutput.Game.ID,
+			RollOffPlayerIDs: highestRollPlayerIDs,
+		}, nil
 	}
 
 	// If there's only one player with the lowest roll, assign them a drink
