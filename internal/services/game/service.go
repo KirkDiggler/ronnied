@@ -813,6 +813,97 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 		}, nil
 	}
 
+	// Find players with the highest roll for critical hits
+	highestRollPlayers := []*models.Participant{}
+	highestRollValue := 0 // Start with a value lower than possible
+
+	for _, participant := range game.Participants {
+		if participant.RollValue > highestRollValue {
+			// Found a new highest roll, clear the list and add this player
+			highestRollValue = participant.RollValue
+			highestRollPlayers = []*models.Participant{participant}
+		} else if participant.RollValue == highestRollValue {
+			// Found a tie for highest roll, add this player to the list
+			highestRollPlayers = append(highestRollPlayers, participant)
+		}
+	}
+
+	// If we have multiple highest roll players, we need a roll-off
+	if len(highestRollPlayers) > 1 {
+		// Create a new roll-off game
+		rollOffGameID := s.uuid.NewUUID()
+		now := s.clock.Now()
+
+		rollOffGame := &models.Game{
+			ID:           rollOffGameID,
+			ChannelID:    game.ChannelID,
+			CreatorID:    game.CreatorID,
+			Status:       models.GameStatusRollOff,
+			ParentGameID: game.ID,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		}
+
+		// Add participants to the roll-off game
+		for _, participant := range highestRollPlayers {
+			rollOffGame.Participants = append(rollOffGame.Participants, &models.Participant{
+				PlayerID:   participant.PlayerID,
+				PlayerName: participant.PlayerName,
+				Status:     models.ParticipantStatusWaitingToRoll,
+			})
+
+			// Update the player's current game ID to the roll-off game
+			player, err := s.playerRepo.GetPlayer(ctx, &playerRepo.GetPlayerInput{
+				PlayerID: participant.PlayerID,
+			})
+			if err != nil {
+				log.Printf("Error getting player %s: %v", participant.PlayerID, err)
+				continue
+			}
+
+			player.CurrentGameID = rollOffGameID
+			err = s.playerRepo.SavePlayer(ctx, &playerRepo.SavePlayerInput{
+				Player: player,
+			})
+			if err != nil {
+				log.Printf("Error updating player %s: %v", participant.PlayerID, err)
+			}
+		}
+
+		// Save the roll-off game
+		err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
+			Game: rollOffGame,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		// Update the original game to reference the roll-off
+		game.RollOffGameID = rollOffGameID
+		game.UpdatedAt = now
+
+		err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
+			Game: game,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		return &EndGameOutput{
+			Success:       false,
+			NeedsRollOff:  true,
+			RollOffGameID: rollOffGameID,
+			RollOffType:   RollOffTypeHighest,
+			RollOffPlayerIDs: func() []string {
+				ids := make([]string, len(highestRollPlayers))
+				for i, p := range highestRollPlayers {
+					ids[i] = p.PlayerID
+				}
+				return ids
+			}(),
+		}, nil
+	}
+
 	// If we have a single lowest roll player, assign them a drink
 	if len(lowestRollPlayers) == 1 {
 		// Create a drink record for the lowest roll

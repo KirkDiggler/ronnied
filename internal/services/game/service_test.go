@@ -2,6 +2,7 @@ package game
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	ledgerMocks "github.com/KirkDiggler/ronnied/internal/repositories/drink_ledger/mocks"
 	gameRepo "github.com/KirkDiggler/ronnied/internal/repositories/game"
 	gameMocks "github.com/KirkDiggler/ronnied/internal/repositories/game/mocks"
+	playerRepo "github.com/KirkDiggler/ronnied/internal/repositories/player"
 	playerMocks "github.com/KirkDiggler/ronnied/internal/repositories/player/mocks"
 
 	"github.com/stretchr/testify/suite"
@@ -386,4 +388,130 @@ func (s *GameServiceTestSuite) TestFindActiveRollOffGame() {
 	result, err = s.service.FindActiveRollOffGame(context.Background(), playerID, mainGameID)
 	s.NoError(err)
 	s.Nil(result) // No roll-off game found
+}
+
+// TestEndGameWithHighestRollTie tests that EndGame correctly identifies and handles ties for highest roll
+func (s *GameServiceTestSuite) TestEndGameWithHighestRollTie() {
+	// Setup test data
+	gameID := "game-123"
+	channelID := "channel-123"
+	creatorID := "creator-123"
+	
+	// Create a game with participants who have tied for highest roll
+	testGame := &models.Game{
+		ID:        gameID,
+		ChannelID: channelID,
+		CreatorID: creatorID,
+		Status:    models.GameStatusActive,
+		Participants: []*models.Participant{
+			{
+				ID:         "p1",
+				GameID:     gameID,
+				PlayerID:   s.testPlayerID1,
+				PlayerName: "Player 1",
+				Status:     models.ParticipantStatusActive,
+				RollValue:  3, // Tied for highest
+				RollTime:   &s.testTime,
+			},
+			{
+				ID:         "p2",
+				GameID:     gameID,
+				PlayerID:   s.testPlayerID2,
+				PlayerName: "Player 2",
+				Status:     models.ParticipantStatusActive,
+				RollValue:  3, // Tied for highest
+				RollTime:   &s.testTime,
+			},
+			{
+				ID:         "p3",
+				GameID:     gameID,
+				PlayerID:   s.testPlayerID3,
+				PlayerName: "Player 3",
+				Status:     models.ParticipantStatusActive,
+				RollValue:  1, // Lowest roll
+				RollTime:   &s.testTime,
+			},
+		},
+		CreatedAt: s.testTime,
+		UpdatedAt: s.testTime,
+	}
+	
+	// Mock the game repository to return our test game
+	s.mockGameRepo.EXPECT().
+		GetGame(gomock.Any(), &gameRepo.GetGameInput{GameID: gameID}).
+		Return(testGame, nil)
+	
+	// Mock UUID generation for the roll-off game
+	rollOffGameID := "roll-off-game-123"
+	s.mockUUID.EXPECT().
+		NewUUID().
+		Return(rollOffGameID)
+	
+	// Mock the current time
+	rollOffTime := s.testTime.Add(time.Minute)
+	s.mockClock.EXPECT().
+		Now().
+		Return(rollOffTime).
+		AnyTimes()
+	
+	// Mock player repository for updating player game IDs
+	for _, playerID := range []string{s.testPlayerID1, s.testPlayerID2} {
+		player := &models.Player{
+			ID:            playerID,
+			Name:          fmt.Sprintf("Player %s", playerID),
+			CurrentGameID: gameID,
+		}
+		
+		s.mockPlayerRepo.EXPECT().
+			GetPlayer(gomock.Any(), &playerRepo.GetPlayerInput{PlayerID: playerID}).
+			Return(player, nil)
+		
+		updatedPlayer := &models.Player{
+			ID:            playerID,
+			Name:          fmt.Sprintf("Player %s", playerID),
+			CurrentGameID: rollOffGameID,
+		}
+		
+		s.mockPlayerRepo.EXPECT().
+			SavePlayer(gomock.Any(), &playerRepo.SavePlayerInput{Player: updatedPlayer}).
+			Return(nil)
+	}
+	
+	// Mock saving the roll-off game
+	s.mockGameRepo.EXPECT().
+		SaveGame(gomock.Any(), gomock.Any()).
+		Do(func(_ context.Context, input *gameRepo.SaveGameInput) {
+			if input.Game.ID == rollOffGameID {
+				// Verify roll-off game properties
+				s.Equal(models.GameStatusRollOff, input.Game.Status)
+				s.Equal(gameID, input.Game.ParentGameID)
+				s.Equal(2, len(input.Game.Participants))
+				
+				// Verify participants are the tied players
+				participantIDs := []string{
+					input.Game.Participants[0].PlayerID,
+					input.Game.Participants[1].PlayerID,
+				}
+				s.Contains(participantIDs, s.testPlayerID1)
+				s.Contains(participantIDs, s.testPlayerID2)
+			}
+		}).
+		Return(nil).
+		Times(2) // Once for roll-off game, once for parent game update
+	
+	// Call the service method
+	output, err := s.service.EndGame(context.Background(), &EndGameInput{
+		GameID: gameID,
+	})
+	
+	// Verify the output
+	s.NoError(err)
+	s.NotNil(output)
+	s.False(output.Success)
+	s.True(output.NeedsRollOff)
+	s.Equal(rollOffGameID, output.RollOffGameID)
+	s.Equal(RollOffTypeHighest, output.RollOffType)
+	s.Len(output.RollOffPlayerIDs, 2)
+	s.Contains(output.RollOffPlayerIDs, s.testPlayerID1)
+	s.Contains(output.RollOffPlayerIDs, s.testPlayerID2)
 }

@@ -354,7 +354,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 				break
 			}
 		}
-		
+
 		if !isInRollOff {
 			return RespondWithEphemeralMessage(s, i, "You are not part of the current roll-off.")
 		}
@@ -367,25 +367,25 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 	})
 	if err != nil {
 		log.Printf("Error rolling dice: %v", err)
-		
+
 		// Check if the error is about being in a roll-off game
 		if strings.Contains(err.Error(), "roll-off game") {
 			// Extract the roll-off game ID from the error message
 			parts := strings.Split(err.Error(), ":")
 			if len(parts) > 1 {
 				rollOffGameID := strings.TrimSpace(parts[1])
-				
+
 				// Get the roll-off game
 				rollOffGameOutput, err := b.gameService.GetGame(ctx, &game.GetGameInput{
 					GameID: rollOffGameID,
 				})
-				
+
 				if err == nil && rollOffGameOutput.Game != nil {
 					return RespondWithEphemeralMessage(s, i, fmt.Sprintf("You need to roll in the roll-off game. Check the game message for details."))
 				}
 			}
 		}
-		
+
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to roll dice: %v", err))
 	}
 
@@ -495,14 +495,14 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 						}
 					}
 				}
-				
+
 				rollOffMessage := fmt.Sprintf("We have a tie! The following players need to roll again: %s", strings.Join(rollOffPlayerNames, ", "))
 				s.ChannelMessageSend(channelID, rollOffMessage)
 
 				// Game is still active with a roll-off, update the game message
 				// This will show the roll-off status and players can use the same buttons
 				b.updateGameMessage(s, channelID, existingGame.Game.ID)
-				
+
 				// We don't need to send DMs - players will use the channel buttons
 			} else {
 				// Game is completed, update the game message one more time
@@ -907,9 +907,9 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 
 				switch record.Reason {
 				case models.DrinkReasonCriticalHit:
-					criticalHitAssignments += fmt.Sprintf("**%s** assigned a drink to **%s** 🎯\n", fromName, toName)
+					criticalHitAssignments += fmt.Sprintf("**%s** passed the drink to **%s** 🎯\n", fromName, toName)
 				case models.DrinkReasonCriticalFail:
-					criticalFailAssignments += fmt.Sprintf("**%s** rolled a critical fail 🍻\n", toName)
+					criticalFailAssignments += fmt.Sprintf("**%s** rolled a 1, that's a drink 🍻\n", toName)
 				case models.DrinkReasonLowestRoll:
 					lowestRollAssignments += fmt.Sprintf("**%s** had the lowest roll 🍻\n", toName)
 				}
