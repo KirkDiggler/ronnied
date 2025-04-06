@@ -308,7 +308,7 @@ func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.Interacti
 
 	// Send an ephemeral message to the user who started the game
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: "Game Started! Click the button below to roll your dice.",
 			Flags:   discordgo.MessageFlagsEphemeral,
@@ -474,43 +474,6 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 	// Update the game message in the channel
 	b.updateGameMessage(s, channelID, existingGame.Game.ID)
 
-	// Check if all players have rolled and we need to end the game
-	if rollOutput.AllPlayersRolled {
-		// End the game
-		endGameOutput, err := b.gameService.EndGame(ctx, &game.EndGameInput{
-			GameID: existingGame.Game.ID,
-		})
-		if err != nil {
-			log.Printf("Error ending game: %v", err)
-		} else {
-			// Check if we need a roll-off
-			if endGameOutput.NeedsRollOff {
-				// Announce the roll-off in the channel
-				rollOffPlayerNames := make([]string, 0, len(endGameOutput.RollOffPlayerIDs))
-				for _, playerID := range endGameOutput.RollOffPlayerIDs {
-					for _, participant := range existingGame.Game.Participants {
-						if participant.PlayerID == playerID {
-							rollOffPlayerNames = append(rollOffPlayerNames, participant.PlayerName)
-							break
-						}
-					}
-				}
-
-				rollOffMessage := fmt.Sprintf("We have a tie! The following players need to roll again: %s", strings.Join(rollOffPlayerNames, ", "))
-				s.ChannelMessageSend(channelID, rollOffMessage)
-
-				// Game is still active with a roll-off, update the game message
-				// This will show the roll-off status and players can use the same buttons
-				b.updateGameMessage(s, channelID, existingGame.Game.ID)
-
-				// We don't need to send DMs - players will use the channel buttons
-			} else {
-				// Game is completed, update the game message one more time
-				b.updateGameMessage(s, channelID, existingGame.Game.ID)
-			}
-		}
-	}
-
 	// Respond with the roll result
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
@@ -577,39 +540,6 @@ func (b *Bot) handleAssignDrinkSelect(s *discordgo.Session, i *discordgo.Interac
 	if err != nil {
 		log.Printf("Error assigning drink: %v", err)
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to assign drink: %v", err))
-	}
-
-	// Get the updated game to check if all players have rolled and all critical hits have assigned drinks
-	updatedGame, err := b.gameService.GetGame(ctx, &game.GetGameInput{
-		GameID: existingGame.Game.ID,
-	})
-	if err != nil {
-		log.Printf("Error getting updated game: %v", err)
-	} else {
-		allPlayersRolled := true
-		allDrinksAssigned := true
-
-		for _, participant := range updatedGame.Game.Participants {
-			if participant.RollTime == nil {
-				allPlayersRolled = false
-				break
-			}
-
-			if participant.Status == models.ParticipantStatusNeedsToAssign {
-				allDrinksAssigned = false
-				break
-			}
-		}
-
-		// If all players have rolled and all drinks are assigned, end the game
-		if allPlayersRolled && allDrinksAssigned {
-			_, err := b.gameService.EndGame(ctx, &game.EndGameInput{
-				GameID: existingGame.Game.ID,
-			})
-			if err != nil {
-				log.Printf("Error ending game: %v", err)
-			}
-		}
 	}
 
 	// Update the game message in the channel to show the drink assignment

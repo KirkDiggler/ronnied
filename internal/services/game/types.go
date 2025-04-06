@@ -189,6 +189,12 @@ type AssignDrinkInput struct {
 type AssignDrinkOutput struct {
 	// Success indicates if the drink was successfully assigned
 	Success bool
+
+	// GameEnded indicates if the game ended as a result of this drink assignment
+	GameEnded bool
+
+	// EndGameOutput contains the result of ending the game (if applicable)
+	EndGameOutput *EndGameOutput
 }
 
 // PlayerStats represents a player's statistics in a game

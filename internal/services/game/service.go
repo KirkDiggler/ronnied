@@ -25,6 +25,7 @@ var (
 	ErrInvalidGameState    = errors.New("invalid game state")
 	ErrPlayerNotInGame     = errors.New("player not in game")
 	ErrGameFull            = errors.New("game is at maximum capacity")
+	ErrRollOffGameNotFound = errors.New("no active roll-off game found")
 )
 
 // service implements the Service interface
@@ -308,6 +309,30 @@ func (s *service) JoinGame(ctx context.Context, input *JoinGameInput) (*JoinGame
 
 // RollDice performs a dice roll for a player
 func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDiceOutput, error) {
+	// Validate input
+	if input == nil {
+		return nil, errors.New("input cannot be nil")
+	}
+
+	if input.GameID == "" {
+		return nil, errors.New("game ID cannot be empty")
+	}
+
+	if input.PlayerID == "" {
+		return nil, errors.New("player ID cannot be empty")
+	}
+
+	// Check if the player should roll in a roll-off game instead
+	rollOffGame, err := s.FindActiveRollOffGame(ctx, input.PlayerID, input.GameID)
+	if err != nil && !errors.Is(err, ErrRollOffGameNotFound) {
+		return nil, err
+	}
+
+	// If a roll-off game was found, update the input to use that game instead
+	if rollOffGame != nil {
+		input.GameID = rollOffGame.ID
+	}
+
 	// Get the game
 	game, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
 		GameID: input.GameID,
@@ -316,45 +341,15 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		return nil, ErrGameNotFound
 	}
 
-	// Check if game is active, waiting, or in roll-off
-	if game.Status != models.GameStatusActive &&
-		game.Status != models.GameStatusWaiting &&
-		game.Status != models.GameStatusRollOff {
+	// Check if game is active or in roll-off
+	if game.Status != models.GameStatusActive && game.Status != models.GameStatusRollOff {
 		return nil, ErrInvalidGameState
 	}
 
-	// Get the player
-	player, err := s.playerRepo.GetPlayer(ctx, &playerRepo.GetPlayerInput{
-		PlayerID: input.PlayerID,
-	})
-	if err != nil {
-		return nil, ErrPlayerNotFound
-	}
-
-	// Check if player is in the game
-	if player.CurrentGameID != input.GameID {
-		return nil, ErrPlayerNotInGame
-	}
-
 	// Find the participant in the game
-	var participant = game.GetParticipant(input.PlayerID)
-
+	participant := game.GetParticipant(input.PlayerID)
 	if participant == nil {
 		return nil, ErrPlayerNotInGame
-	}
-
-	// Check if the player should be in a roll-off game instead of the main game
-	if game.Status == models.GameStatusActive {
-		// Look for an active roll-off game for this player
-		rollOffGame, err := s.FindActiveRollOffGame(ctx, input.PlayerID, game.ID)
-		if err != nil {
-			return nil, err
-		}
-
-		// If we found an active roll-off game, redirect the player there
-		if rollOffGame != nil {
-			return nil, fmt.Errorf("player should roll in roll-off game: %s", rollOffGame.ID)
-		}
 	}
 
 	// Check if the participant has already rolled
@@ -362,69 +357,26 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		return nil, errors.New("player has already rolled in this game")
 	}
 
-	// If game is in waiting state, set it to active
-	if game.Status == models.GameStatusWaiting {
-		game.Status = models.GameStatusActive
-		game.UpdatedAt = s.clock.Now()
-	}
-
 	// Roll the dice
 	rollValue := s.diceRoller.Roll(s.diceSides)
 	now := s.clock.Now()
 
-	// Determine if it's a critical hit or fail
-	isCriticalHit := rollValue == s.criticalHitValue
-	isCriticalFail := rollValue == s.criticalFailValue
-
-	// Update participant's roll information
+	// Update the participant's roll
 	participant.RollValue = rollValue
 	participant.RollTime = &now
 
+	// Check if the roll is a critical hit or fail
+	isCriticalHit := rollValue == s.criticalHitValue
+	isCriticalFail := rollValue == s.criticalFailValue
+
 	// Update participant status based on roll
-	if game.Status == models.GameStatusRollOff {
-		// In a roll-off, we don't assign drinks for critical hits/fails
-		participant.Status = models.ParticipantStatusActive
-	} else if isCriticalHit {
+	if isCriticalHit {
 		participant.Status = models.ParticipantStatusNeedsToAssign
 	} else {
 		participant.Status = models.ParticipantStatusActive
 	}
 
-	// Create a roll record - not saving it for now since we don't have a repository for it
-	// TODO: Add a roll repository or add SaveRoll method to game repository
-	_ = &models.Roll{
-		ID:             s.uuid.NewUUID(),
-		Value:          rollValue,
-		PlayerID:       input.PlayerID,
-		GameID:         input.GameID,
-		Timestamp:      now,
-		IsCriticalHit:  isCriticalHit,
-		IsCriticalFail: isCriticalFail,
-		IsLowestRoll:   false, // Will be determined later
-	}
-
-	// If it's a critical fail in a regular game (not roll-off), automatically assign a drink
-	if isCriticalFail && game.Status != models.GameStatusRollOff {
-		// Create a drink record for the player (they drink their own)
-		drinkRecord := &models.DrinkLedger{
-			ID:           s.uuid.NewUUID(),
-			GameID:       input.GameID,
-			FromPlayerID: input.PlayerID, // Self-assigned on critical fail
-			ToPlayerID:   input.PlayerID,
-			Reason:       models.DrinkReasonCriticalFail,
-			Timestamp:    now,
-			Paid:         false,
-		}
-
-		err = s.drinkLedgerRepo.AddDrinkRecord(ctx, &ledgerRepo.AddDrinkRecordInput{
-			Record: drinkRecord,
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Update the game's timestamp
+	// Update the game
 	game.UpdatedAt = now
 	err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
 		Game: game,
@@ -442,93 +394,75 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		}
 	}
 
-	// If this is a roll-off game and all players have rolled, handle the roll-off resolution
-	if game.Status == models.GameStatusRollOff && allPlayersRolled {
-		// Find the winner of the roll-off
-		var winnerParticipant *models.Participant
-		winnerRollValue := 0
-
-		// For critical fail roll-offs, the highest roll wins (to avoid another tie)
-		if game.ParentGameID != "" {
-			for _, p := range game.Participants {
-				if p.RollValue > winnerRollValue {
-					winnerRollValue = p.RollValue
-					winnerParticipant = p
-				}
+	// If all players have rolled and no players need to assign drinks, try to end the game
+	var endGameOutput *EndGameOutput
+	needsRollOff := false
+	rollOffType := ""
+	rollOffGameID := ""
+	
+	if allPlayersRolled {
+		// Check if any players need to assign drinks
+		allDrinksAssigned := true
+		for _, p := range game.Participants {
+			if p.Status == models.ParticipantStatusNeedsToAssign {
+				allDrinksAssigned = false
+				break
 			}
 		}
-
-		if winnerParticipant != nil {
-			// Get the parent game
-			parentGame, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
-				GameID: game.ParentGameID,
+		
+		// Only try to end the game if all drinks are assigned
+		if allDrinksAssigned {
+			endGameOutput, err = s.EndGame(ctx, &EndGameInput{
+				GameID: input.GameID,
 			})
-			if err != nil {
-				log.Printf("Error getting parent game: %v", err)
+			
+			if err == nil {
+				if endGameOutput.NeedsRollOff {
+					needsRollOff = true
+					rollOffType = string(endGameOutput.RollOffType)
+					rollOffGameID = endGameOutput.RollOffGameID
+				}
 			} else {
-				// Create a drink record for the roll-off loser
-				drinkRecord := &models.DrinkLedger{
-					ID:           s.uuid.NewUUID(),
-					GameID:       parentGame.ID,
-					FromPlayerID: winnerParticipant.PlayerID,
-					ToPlayerID:   winnerParticipant.PlayerID,
-					Reason:       models.DrinkReasonLowestRoll,
-					Timestamp:    now,
-					Paid:         false,
-				}
-
-				err = s.drinkLedgerRepo.AddDrinkRecord(ctx, &ledgerRepo.AddDrinkRecordInput{
-					Record: drinkRecord,
-				})
-				if err != nil {
-					log.Printf("Error adding drink record: %v", err)
-				}
-
-				// Update all players to point back to the parent game
-				for _, p := range game.Participants {
-					playerObj, err := s.playerRepo.GetPlayer(ctx, &playerRepo.GetPlayerInput{
-						PlayerID: p.PlayerID,
-					})
-					if err != nil {
-						log.Printf("Error getting player %s: %v", p.PlayerID, err)
-						continue
-					}
-
-					playerObj.CurrentGameID = parentGame.ID
-					err = s.playerRepo.SavePlayer(ctx, &playerRepo.SavePlayerInput{
-						Player: playerObj,
-					})
-					if err != nil {
-						log.Printf("Error updating player %s: %v", p.PlayerID, err)
-					}
-				}
-
-				// Mark the parent game as completed
-				parentGame.Status = models.GameStatusCompleted
-				parentGame.UpdatedAt = now
-
-				err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
-					Game: parentGame,
-				})
-				if err != nil {
-					log.Printf("Error updating parent game: %v", err)
-				}
+				// Log the error but don't return it to the caller
+				log.Printf("Error ending game after all players rolled: %v", err)
 			}
 		}
 	}
 
 	return &RollDiceOutput{
-		Value:            rollValue,
-		IsCriticalHit:    isCriticalHit,
-		IsCriticalFail:   isCriticalFail,
-		IsLowestRoll:     false, // Will be determined after all players roll
-		NeedsRollOff:     false, // Will be determined after all players roll
+		Value:           rollValue,
+		IsCriticalHit:   isCriticalHit,
+		IsCriticalFail:  isCriticalFail,
 		AllPlayersRolled: allPlayersRolled,
+		NeedsRollOff:    needsRollOff,
+		RollOffType:     RollOffType(rollOffType),
+		RollOffGameID:   rollOffGameID,
 	}, nil
 }
 
 // AssignDrink records that one player has assigned a drink to another
 func (s *service) AssignDrink(ctx context.Context, input *AssignDrinkInput) (*AssignDrinkOutput, error) {
+	// Validate input
+	if input == nil {
+		return nil, errors.New("input cannot be nil")
+	}
+
+	if input.GameID == "" {
+		return nil, errors.New("game ID cannot be empty")
+	}
+
+	if input.FromPlayerID == "" {
+		return nil, errors.New("from player ID cannot be empty")
+	}
+
+	if input.ToPlayerID == "" {
+		return nil, errors.New("to player ID cannot be empty")
+	}
+
+	if input.FromPlayerID == input.ToPlayerID {
+		return nil, errors.New("cannot assign a drink to yourself")
+	}
+
 	// Get the game
 	game, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
 		GameID: input.GameID,
@@ -538,19 +472,12 @@ func (s *service) AssignDrink(ctx context.Context, input *AssignDrinkInput) (*As
 	}
 
 	// Check if game is active
-	if game.Status != models.GameStatusActive {
+	if game.Status != models.GameStatusActive && game.Status != models.GameStatusRollOff {
 		return nil, ErrInvalidGameState
 	}
 
 	// Find the assigning participant in the game
-	var assigningParticipant *models.Participant
-	for _, p := range game.Participants {
-		if p.PlayerID == input.FromPlayerID {
-			assigningParticipant = p
-			break
-		}
-	}
-
+	assigningParticipant := game.GetParticipant(input.FromPlayerID)
 	if assigningParticipant == nil {
 		return nil, ErrPlayerNotInGame
 	}
@@ -561,14 +488,7 @@ func (s *service) AssignDrink(ctx context.Context, input *AssignDrinkInput) (*As
 	}
 
 	// Find the target participant in the game
-	var targetParticipant *models.Participant
-	for _, p := range game.Participants {
-		if p.PlayerID == input.ToPlayerID {
-			targetParticipant = p
-			break
-		}
-	}
-
+	targetParticipant := game.GetParticipant(input.ToPlayerID)
 	if targetParticipant == nil {
 		return nil, errors.New("target player is not in the game")
 	}
@@ -605,8 +525,38 @@ func (s *service) AssignDrink(ctx context.Context, input *AssignDrinkInput) (*As
 		return nil, err
 	}
 
+	// Check if all players have completed their actions and the game can be ended
+	allPlayersRolled := true
+	allDrinksAssigned := true
+	for _, participant := range game.Participants {
+		if participant.RollTime == nil {
+			allPlayersRolled = false
+			break
+		}
+		
+		if participant.Status == models.ParticipantStatusNeedsToAssign {
+			allDrinksAssigned = false
+			break
+		}
+	}
+	
+	// If all players have rolled and all drinks are assigned, attempt to end the game
+	var endGameOutput *EndGameOutput
+	if allPlayersRolled && allDrinksAssigned {
+		endGameOutput, err = s.EndGame(ctx, &EndGameInput{
+			GameID: input.GameID,
+		})
+		if err == nil {
+		} else {
+			// Log the error but don't return it to the caller
+			log.Printf("Error ending game after drink assignment: %v", err)
+		}
+	}
+
 	return &AssignDrinkOutput{
-		Success: true,
+		Success:   true,
+		GameEnded: allPlayersRolled && allDrinksAssigned,
+		EndGameOutput: endGameOutput,
 	}, nil
 }
 
@@ -638,295 +588,7 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 		}
 	}
 
-	// Check if we need a roll-off for critical fails
-	criticalFailPlayers := []*models.Participant{}
-	for _, participant := range game.Participants {
-		if participant.RollValue == s.criticalFailValue {
-			criticalFailPlayers = append(criticalFailPlayers, participant)
-		}
-	}
-
-	// If we have multiple critical fails, we need a roll-off
-	if len(criticalFailPlayers) > 1 {
-		// Create a new roll-off game
-		rollOffGameID := s.uuid.NewUUID()
-		now := s.clock.Now()
-
-		rollOffGame := &models.Game{
-			ID:           rollOffGameID,
-			ChannelID:    game.ChannelID,
-			CreatorID:    game.CreatorID,
-			Status:       models.GameStatusRollOff,
-			ParentGameID: game.ID,
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		}
-
-		// Add participants to the roll-off game
-		for _, participant := range criticalFailPlayers {
-			rollOffGame.Participants = append(rollOffGame.Participants, &models.Participant{
-				PlayerID:   participant.PlayerID,
-				PlayerName: participant.PlayerName,
-				Status:     models.ParticipantStatusWaitingToRoll,
-			})
-
-			// Update the player's current game ID to the roll-off game
-			player, err := s.playerRepo.GetPlayer(ctx, &playerRepo.GetPlayerInput{
-				PlayerID: participant.PlayerID,
-			})
-			if err != nil {
-				log.Printf("Error getting player %s: %v", participant.PlayerID, err)
-				continue
-			}
-
-			player.CurrentGameID = rollOffGameID
-			err = s.playerRepo.SavePlayer(ctx, &playerRepo.SavePlayerInput{
-				Player: player,
-			})
-			if err != nil {
-				log.Printf("Error updating player %s: %v", participant.PlayerID, err)
-			}
-		}
-
-		// Save the roll-off game
-		err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
-			Game: rollOffGame,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		// Update the original game to reference the roll-off
-		game.RollOffGameID = rollOffGameID
-		game.UpdatedAt = now
-
-		err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
-			Game: game,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		return &EndGameOutput{
-			Success:       false,
-			NeedsRollOff:  true,
-			RollOffGameID: rollOffGameID,
-			RollOffType:   RollOffTypeLowest,
-			RollOffPlayerIDs: func() []string {
-				ids := make([]string, len(criticalFailPlayers))
-				for i, p := range criticalFailPlayers {
-					ids[i] = p.PlayerID
-				}
-				return ids
-			}(),
-		}, nil
-	}
-
-	// Find the player with the lowest roll (excluding critical fails)
-	lowestRollPlayers := []*models.Participant{}
-	lowestRollValue := s.diceSides + 1 // Start with a value higher than possible
-
-	for _, participant := range game.Participants {
-		if participant.RollValue < lowestRollValue {
-			// Found a new lowest roll, clear the list and add this player
-			lowestRollValue = participant.RollValue
-			lowestRollPlayers = []*models.Participant{participant}
-		} else if participant.RollValue == lowestRollValue {
-			// Found a tie for lowest roll, add this player to the list
-			lowestRollPlayers = append(lowestRollPlayers, participant)
-		}
-	}
-
-	// If we have multiple lowest roll players, we need a roll-off
-	if len(lowestRollPlayers) > 1 {
-		// Create a new roll-off game
-		rollOffGameID := s.uuid.NewUUID()
-		now := s.clock.Now()
-
-		rollOffGame := &models.Game{
-			ID:           rollOffGameID,
-			ChannelID:    game.ChannelID,
-			CreatorID:    game.CreatorID,
-			Status:       models.GameStatusRollOff,
-			ParentGameID: game.ID,
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		}
-
-		// Add participants to the roll-off game
-		for _, participant := range lowestRollPlayers {
-			rollOffGame.Participants = append(rollOffGame.Participants, &models.Participant{
-				PlayerID:   participant.PlayerID,
-				PlayerName: participant.PlayerName,
-				Status:     models.ParticipantStatusWaitingToRoll,
-			})
-
-			// Update the player's current game ID to the roll-off game
-			player, err := s.playerRepo.GetPlayer(ctx, &playerRepo.GetPlayerInput{
-				PlayerID: participant.PlayerID,
-			})
-			if err != nil {
-				log.Printf("Error getting player %s: %v", participant.PlayerID, err)
-				continue
-			}
-
-			player.CurrentGameID = rollOffGameID
-			err = s.playerRepo.SavePlayer(ctx, &playerRepo.SavePlayerInput{
-				Player: player,
-			})
-			if err != nil {
-				log.Printf("Error updating player %s: %v", participant.PlayerID, err)
-			}
-		}
-
-		// Save the roll-off game
-		err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
-			Game: rollOffGame,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		// Update the original game to reference the roll-off
-		game.RollOffGameID = rollOffGameID
-		game.UpdatedAt = now
-
-		err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
-			Game: game,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		return &EndGameOutput{
-			Success:       false,
-			NeedsRollOff:  true,
-			RollOffGameID: rollOffGameID,
-			RollOffType:   RollOffTypeLowest,
-			RollOffPlayerIDs: func() []string {
-				ids := make([]string, len(lowestRollPlayers))
-				for i, p := range lowestRollPlayers {
-					ids[i] = p.PlayerID
-				}
-				return ids
-			}(),
-		}, nil
-	}
-
-	// Find players with the highest roll for critical hits
-	highestRollPlayers := []*models.Participant{}
-	highestRollValue := 0 // Start with a value lower than possible
-
-	for _, participant := range game.Participants {
-		if participant.RollValue > highestRollValue {
-			// Found a new highest roll, clear the list and add this player
-			highestRollValue = participant.RollValue
-			highestRollPlayers = []*models.Participant{participant}
-		} else if participant.RollValue == highestRollValue {
-			// Found a tie for highest roll, add this player to the list
-			highestRollPlayers = append(highestRollPlayers, participant)
-		}
-	}
-
-	// If we have multiple highest roll players, we need a roll-off
-	if len(highestRollPlayers) > 1 {
-		// Create a new roll-off game
-		rollOffGameID := s.uuid.NewUUID()
-		now := s.clock.Now()
-
-		rollOffGame := &models.Game{
-			ID:           rollOffGameID,
-			ChannelID:    game.ChannelID,
-			CreatorID:    game.CreatorID,
-			Status:       models.GameStatusRollOff,
-			ParentGameID: game.ID,
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		}
-
-		// Add participants to the roll-off game
-		for _, participant := range highestRollPlayers {
-			rollOffGame.Participants = append(rollOffGame.Participants, &models.Participant{
-				PlayerID:   participant.PlayerID,
-				PlayerName: participant.PlayerName,
-				Status:     models.ParticipantStatusWaitingToRoll,
-			})
-
-			// Update the player's current game ID to the roll-off game
-			player, err := s.playerRepo.GetPlayer(ctx, &playerRepo.GetPlayerInput{
-				PlayerID: participant.PlayerID,
-			})
-			if err != nil {
-				log.Printf("Error getting player %s: %v", participant.PlayerID, err)
-				continue
-			}
-
-			player.CurrentGameID = rollOffGameID
-			err = s.playerRepo.SavePlayer(ctx, &playerRepo.SavePlayerInput{
-				Player: player,
-			})
-			if err != nil {
-				log.Printf("Error updating player %s: %v", participant.PlayerID, err)
-			}
-		}
-
-		// Save the roll-off game
-		err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
-			Game: rollOffGame,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		// Update the original game to reference the roll-off
-		game.RollOffGameID = rollOffGameID
-		game.UpdatedAt = now
-
-		err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
-			Game: game,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		return &EndGameOutput{
-			Success:       false,
-			NeedsRollOff:  true,
-			RollOffGameID: rollOffGameID,
-			RollOffType:   RollOffTypeHighest,
-			RollOffPlayerIDs: func() []string {
-				ids := make([]string, len(highestRollPlayers))
-				for i, p := range highestRollPlayers {
-					ids[i] = p.PlayerID
-				}
-				return ids
-			}(),
-		}, nil
-	}
-
-	// If we have a single lowest roll player, assign them a drink
-	if len(lowestRollPlayers) == 1 {
-		// Create a drink record for the lowest roll
-		now := s.clock.Now()
-		drinkRecord := &models.DrinkLedger{
-			ID:           s.uuid.NewUUID(),
-			GameID:       input.GameID,
-			FromPlayerID: lowestRollPlayers[0].PlayerID, // Self-assigned for lowest roll
-			ToPlayerID:   lowestRollPlayers[0].PlayerID,
-			Reason:       models.DrinkReasonLowestRoll,
-			Timestamp:    now,
-			Paid:         false,
-		}
-
-		err = s.drinkLedgerRepo.AddDrinkRecord(ctx, &ledgerRepo.AddDrinkRecordInput{
-			Record: drinkRecord,
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Get all drink records for the game
+	// Get drink records for this game
 	drinkRecords, err := s.drinkLedgerRepo.GetDrinkRecordsForGame(ctx, &ledgerRepo.GetDrinkRecordsForGameInput{
 		GameID: input.GameID,
 	})
@@ -934,7 +596,7 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 		return nil, err
 	}
 
-	// Create a map to track player stats
+	// Build a map of player ID to player stats
 	playerStatsMap := make(map[string]*PlayerStats)
 
 	// Initialize stats for all participants
@@ -1255,7 +917,7 @@ func (s *service) FindActiveRollOffGame(ctx context.Context, playerID string, ma
 	}
 
 	// No active roll-off game found for this player
-	return nil, nil
+	return nil, ErrRollOffGameNotFound
 }
 
 // GetGameByChannel retrieves a game by its Discord channel ID
