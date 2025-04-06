@@ -485,8 +485,8 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		} else {
 			// Check if we need a roll-off
 			if endGameOutput.NeedsRollOff {
-				// Get the players who need to roll again
-				var rollOffPlayerNames []string
+				// Announce the roll-off in the channel
+				rollOffPlayerNames := make([]string, 0, len(endGameOutput.RollOffPlayerIDs))
 				for _, playerID := range endGameOutput.RollOffPlayerIDs {
 					for _, participant := range existingGame.Game.Participants {
 						if participant.PlayerID == playerID {
@@ -495,43 +495,15 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 						}
 					}
 				}
-
-				// Send a message to the channel about the roll-off
+				
 				rollOffMessage := fmt.Sprintf("We have a tie! The following players need to roll again: %s", strings.Join(rollOffPlayerNames, ", "))
 				s.ChannelMessageSend(channelID, rollOffMessage)
 
-				// Send private messages to the players who need to roll again
-				for _, playerID := range endGameOutput.RollOffPlayerIDs {
-					// Create a DM channel with the player
-					dmChannel, err := s.UserChannelCreate(playerID)
-					if err != nil {
-						log.Printf("Error creating DM channel with player %s: %v", playerID, err)
-						continue
-					}
-
-					// Create roll button for the roll-off
-					rollButton := discordgo.Button{
-						Label:    "Roll Again",
-						Style:    discordgo.PrimaryButton,
-						CustomID: ButtonRollDice,
-						Emoji: &discordgo.ComponentEmoji{
-							Name: "🎲",
-						},
-					}
-
-					// Send the roll-off message
-					_, err = s.ChannelMessageSendComplex(dmChannel.ID, &discordgo.MessageSend{
-						Content: "You're in a roll-off! Click the button below to roll again.",
-						Components: []discordgo.MessageComponent{
-							discordgo.ActionsRow{
-								Components: []discordgo.MessageComponent{rollButton},
-							},
-						},
-					})
-					if err != nil {
-						log.Printf("Error sending roll-off message to player %s: %v", playerID, err)
-					}
-				}
+				// Game is still active with a roll-off, update the game message
+				// This will show the roll-off status and players can use the same buttons
+				b.updateGameMessage(s, channelID, existingGame.Game.ID)
+				
+				// We don't need to send DMs - players will use the channel buttons
 			} else {
 				// Game is completed, update the game message one more time
 				b.updateGameMessage(s, channelID, existingGame.Game.ID)
@@ -541,7 +513,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 
 	// Respond with the roll result
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Type: discordgo.InteractionResponseTypeDeferredChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: title,
 			Embeds: []*discordgo.MessageEmbed{
@@ -645,7 +617,7 @@ func (b *Bot) handleAssignDrinkSelect(s *discordgo.Session, i *discordgo.Interac
 
 	// Update the current message with a confirmation (no button)
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseUpdateMessage,
+		Type: discordgo.InteractionResponseTypeUpdateMessage,
 		Data: &discordgo.InteractionResponseData{
 			Content: fmt.Sprintf("You assigned a drink to %s! 🍻", targetPlayerName),
 		},
@@ -762,7 +734,7 @@ func (b *Bot) handleStartNewGameButton(s *discordgo.Session, i *discordgo.Intera
 
 	// Acknowledge the interaction without sending a message
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseDeferredMessageUpdate,
+		Type: discordgo.InteractionResponseTypeDeferredMessageUpdate,
 	})
 }
 
