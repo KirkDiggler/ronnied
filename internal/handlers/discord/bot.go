@@ -513,7 +513,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 
 	// Respond with the roll result
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseTypeDeferredChannelMessageWithSource,
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: title,
 			Embeds: []*discordgo.MessageEmbed{
@@ -617,7 +617,7 @@ func (b *Bot) handleAssignDrinkSelect(s *discordgo.Session, i *discordgo.Interac
 
 	// Update the current message with a confirmation (no button)
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseTypeUpdateMessage,
+		Type: discordgo.InteractionResponseUpdateMessage,
 		Data: &discordgo.InteractionResponseData{
 			Content: fmt.Sprintf("You assigned a drink to %s! 🍻", targetPlayerName),
 		},
@@ -734,7 +734,7 @@ func (b *Bot) handleStartNewGameButton(s *discordgo.Session, i *discordgo.Intera
 
 	// Acknowledge the interaction without sending a message
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseTypeDeferredMessageUpdate,
+		Type: discordgo.InteractionResponseDeferredMessageUpdate,
 	})
 }
 
