@@ -5,7 +5,6 @@
 //
 //	mockgen -package=mocks -destination=mocks/mock_repository.go github.com/KirkDiggler/ronnied/internal/repositories/player Repository
 //
-
 // Package mocks is a generated GoMock package.
 package mocks
 
@@ -22,7 +21,6 @@ import (
 type MockRepository struct {
 	ctrl     *gomock.Controller
 	recorder *MockRepositoryMockRecorder
-	isgomock struct{}
 }
 
 // MockRepositoryMockRecorder is the mock recorder for MockRepository.
@@ -43,59 +41,59 @@ func (m *MockRepository) EXPECT() *MockRepositoryMockRecorder {
 }
 
 // GetPlayer mocks base method.
-func (m *MockRepository) GetPlayer(ctx context.Context, input *player.GetPlayerInput) (*models.Player, error) {
+func (m *MockRepository) GetPlayer(arg0 context.Context, arg1 *player.GetPlayerInput) (*models.Player, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPlayer", ctx, input)
+	ret := m.ctrl.Call(m, "GetPlayer", arg0, arg1)
 	ret0, _ := ret[0].(*models.Player)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetPlayer indicates an expected call of GetPlayer.
-func (mr *MockRepositoryMockRecorder) GetPlayer(ctx, input any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) GetPlayer(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPlayer", reflect.TypeOf((*MockRepository)(nil).GetPlayer), ctx, input)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPlayer", reflect.TypeOf((*MockRepository)(nil).GetPlayer), arg0, arg1)
 }
 
 // GetPlayersInGame mocks base method.
-func (m *MockRepository) GetPlayersInGame(ctx context.Context, input *player.GetPlayersInGameInput) (*player.GetPlayersInGameOutput, error) {
+func (m *MockRepository) GetPlayersInGame(arg0 context.Context, arg1 *player.GetPlayersInGameInput) (*player.GetPlayersInGameOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPlayersInGame", ctx, input)
+	ret := m.ctrl.Call(m, "GetPlayersInGame", arg0, arg1)
 	ret0, _ := ret[0].(*player.GetPlayersInGameOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetPlayersInGame indicates an expected call of GetPlayersInGame.
-func (mr *MockRepositoryMockRecorder) GetPlayersInGame(ctx, input any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) GetPlayersInGame(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPlayersInGame", reflect.TypeOf((*MockRepository)(nil).GetPlayersInGame), ctx, input)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPlayersInGame", reflect.TypeOf((*MockRepository)(nil).GetPlayersInGame), arg0, arg1)
 }
 
 // SavePlayer mocks base method.
-func (m *MockRepository) SavePlayer(ctx context.Context, input *player.SavePlayerInput) error {
+func (m *MockRepository) SavePlayer(arg0 context.Context, arg1 *player.SavePlayerInput) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SavePlayer", ctx, input)
+	ret := m.ctrl.Call(m, "SavePlayer", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SavePlayer indicates an expected call of SavePlayer.
-func (mr *MockRepositoryMockRecorder) SavePlayer(ctx, input any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) SavePlayer(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SavePlayer", reflect.TypeOf((*MockRepository)(nil).SavePlayer), ctx, input)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SavePlayer", reflect.TypeOf((*MockRepository)(nil).SavePlayer), arg0, arg1)
 }
 
 // UpdatePlayerGame mocks base method.
-func (m *MockRepository) UpdatePlayerGame(ctx context.Context, input *player.UpdatePlayerGameInput) error {
+func (m *MockRepository) UpdatePlayerGame(arg0 context.Context, arg1 *player.UpdatePlayerGameInput) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdatePlayerGame", ctx, input)
+	ret := m.ctrl.Call(m, "UpdatePlayerGame", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdatePlayerGame indicates an expected call of UpdatePlayerGame.
-func (mr *MockRepositoryMockRecorder) UpdatePlayerGame(ctx, input any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) UpdatePlayerGame(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePlayerGame", reflect.TypeOf((*MockRepository)(nil).UpdatePlayerGame), ctx, input)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePlayerGame", reflect.TypeOf((*MockRepository)(nil).UpdatePlayerGame), arg0, arg1)
 }

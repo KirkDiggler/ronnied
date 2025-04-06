@@ -19,4 +19,7 @@ type Repository interface {
 	
 	// MarkDrinkPaid marks a drink as paid
 	MarkDrinkPaid(ctx context.Context, input *MarkDrinkPaidInput) error
+	
+	// CreateDrinkRecord creates a new drink record with a generated UUID
+	CreateDrinkRecord(ctx context.Context, input *CreateDrinkRecordInput) (*CreateDrinkRecordOutput, error)
 }

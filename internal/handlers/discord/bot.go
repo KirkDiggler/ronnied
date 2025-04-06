@@ -306,35 +306,6 @@ func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.Interacti
 		},
 	}
 
-	// Send a direct message to each participant with a roll button
-	// We can't send multiple interaction responses, so we'll use direct messages instead
-	for _, participant := range existingGame.Game.Participants {
-		// Skip the user who started the game, they'll get the interaction response
-		if participant.PlayerID == userID {
-			continue
-		}
-
-		// Create a DM channel with the participant
-		dmChannel, err := s.UserChannelCreate(participant.PlayerID)
-		if err != nil {
-			log.Printf("Error creating DM channel with %s: %v", participant.PlayerName, err)
-			continue
-		}
-
-		// Send a message with the roll button
-		_, err = s.ChannelMessageSendComplex(dmChannel.ID, &discordgo.MessageSend{
-			Content: "A game has started! Click the button below to roll your dice.",
-			Components: []discordgo.MessageComponent{
-				discordgo.ActionsRow{
-					Components: []discordgo.MessageComponent{rollButton},
-				},
-			},
-		})
-		if err != nil {
-			log.Printf("Error sending DM to %s: %v", participant.PlayerName, err)
-		}
-	}
-
 	// Send an ephemeral message to the user who started the game
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,

@@ -27,4 +27,13 @@ type Repository interface {
 	
 	// GetGamesByParent retrieves all games with a specific parent game ID
 	GetGamesByParent(ctx context.Context, input *GetGamesByParentInput) ([]*models.Game, error)
+	
+	// CreateGame creates a new game with a generated UUID
+	CreateGame(ctx context.Context, input *CreateGameInput) (*CreateGameOutput, error)
+	
+	// CreateRollOffGame creates a new roll-off game with a generated UUID
+	CreateRollOffGame(ctx context.Context, input *CreateRollOffGameInput) (*CreateRollOffGameOutput, error)
+	
+	// CreateParticipant creates a new participant with a generated UUID
+	CreateParticipant(ctx context.Context, input *CreateParticipantInput) (*CreateParticipantOutput, error)
 }

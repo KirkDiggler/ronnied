@@ -40,6 +40,51 @@ func (m *MockRepository) EXPECT() *MockRepositoryMockRecorder {
 	return m.recorder
 }
 
+// CreateGame mocks base method.
+func (m *MockRepository) CreateGame(arg0 context.Context, arg1 *game.CreateGameInput) (*game.CreateGameOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateGame", arg0, arg1)
+	ret0, _ := ret[0].(*game.CreateGameOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateGame indicates an expected call of CreateGame.
+func (mr *MockRepositoryMockRecorder) CreateGame(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateGame", reflect.TypeOf((*MockRepository)(nil).CreateGame), arg0, arg1)
+}
+
+// CreateParticipant mocks base method.
+func (m *MockRepository) CreateParticipant(arg0 context.Context, arg1 *game.CreateParticipantInput) (*game.CreateParticipantOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateParticipant", arg0, arg1)
+	ret0, _ := ret[0].(*game.CreateParticipantOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateParticipant indicates an expected call of CreateParticipant.
+func (mr *MockRepositoryMockRecorder) CreateParticipant(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateParticipant", reflect.TypeOf((*MockRepository)(nil).CreateParticipant), arg0, arg1)
+}
+
+// CreateRollOffGame mocks base method.
+func (m *MockRepository) CreateRollOffGame(arg0 context.Context, arg1 *game.CreateRollOffGameInput) (*game.CreateRollOffGameOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateRollOffGame", arg0, arg1)
+	ret0, _ := ret[0].(*game.CreateRollOffGameOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateRollOffGame indicates an expected call of CreateRollOffGame.
+func (mr *MockRepositoryMockRecorder) CreateRollOffGame(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRollOffGame", reflect.TypeOf((*MockRepository)(nil).CreateRollOffGame), arg0, arg1)
+}
+
 // DeleteGame mocks base method.
 func (m *MockRepository) DeleteGame(arg0 context.Context, arg1 *game.DeleteGameInput) error {
 	m.ctrl.T.Helper()

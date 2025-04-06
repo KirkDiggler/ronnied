@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"github.com/google/uuid"
 
 	"github.com/KirkDiggler/ronnied/internal/models"
 	"github.com/redis/go-redis/v9"
@@ -265,6 +266,44 @@ func (r *redisRepository) GetDrinkRecordsForPlayer(ctx context.Context, input *G
 	return &GetDrinkRecordsForPlayerOutput{
 		Records: records,
 	}, nil
+}
+
+// CreateDrinkRecord creates a new drink record with a generated UUID
+func (r *redisRepository) CreateDrinkRecord(ctx context.Context, input *CreateDrinkRecordInput) (*CreateDrinkRecordOutput, error) {
+	// Validate input
+	if input == nil {
+		return nil, errors.New("input cannot be nil")
+	}
+
+	if input.GameID == "" {
+		return nil, errors.New("game ID cannot be empty")
+	}
+
+	if input.ToPlayerID == "" {
+		return nil, errors.New("recipient player ID cannot be empty")
+	}
+
+	// Generate a new UUID for the drink record
+	drinkID := uuid.New().String()
+
+	// Create the drink record
+	record := &models.DrinkLedger{
+		ID:           drinkID,
+		GameID:       input.GameID,
+		FromPlayerID: input.FromPlayerID,
+		ToPlayerID:   input.ToPlayerID,
+		Reason:       input.Reason,
+		Timestamp:    input.Timestamp,
+		Paid:         false,
+	}
+
+	// Save the drink record
+	err := r.AddDrinkRecord(ctx, &AddDrinkRecordInput{Record: record})
+	if err != nil {
+		return nil, fmt.Errorf("failed to save drink record: %w", err)
+	}
+
+	return &CreateDrinkRecordOutput{Record: record}, nil
 }
 
 // MarkDrinkPaid marks a drink as paid

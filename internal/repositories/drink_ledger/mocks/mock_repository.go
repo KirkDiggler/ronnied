@@ -5,7 +5,6 @@
 //
 //	mockgen -package=mocks -destination=mocks/mock_repository.go github.com/KirkDiggler/ronnied/internal/repositories/drink_ledger Repository
 //
-
 // Package mocks is a generated GoMock package.
 package mocks
 
@@ -21,7 +20,6 @@ import (
 type MockRepository struct {
 	ctrl     *gomock.Controller
 	recorder *MockRepositoryMockRecorder
-	isgomock struct{}
 }
 
 // MockRepositoryMockRecorder is the mock recorder for MockRepository.
@@ -42,59 +40,74 @@ func (m *MockRepository) EXPECT() *MockRepositoryMockRecorder {
 }
 
 // AddDrinkRecord mocks base method.
-func (m *MockRepository) AddDrinkRecord(ctx context.Context, input *drink_ledger.AddDrinkRecordInput) error {
+func (m *MockRepository) AddDrinkRecord(arg0 context.Context, arg1 *drink_ledger.AddDrinkRecordInput) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddDrinkRecord", ctx, input)
+	ret := m.ctrl.Call(m, "AddDrinkRecord", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // AddDrinkRecord indicates an expected call of AddDrinkRecord.
-func (mr *MockRepositoryMockRecorder) AddDrinkRecord(ctx, input any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) AddDrinkRecord(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddDrinkRecord", reflect.TypeOf((*MockRepository)(nil).AddDrinkRecord), ctx, input)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddDrinkRecord", reflect.TypeOf((*MockRepository)(nil).AddDrinkRecord), arg0, arg1)
+}
+
+// CreateDrinkRecord mocks base method.
+func (m *MockRepository) CreateDrinkRecord(arg0 context.Context, arg1 *drink_ledger.CreateDrinkRecordInput) (*drink_ledger.CreateDrinkRecordOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateDrinkRecord", arg0, arg1)
+	ret0, _ := ret[0].(*drink_ledger.CreateDrinkRecordOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateDrinkRecord indicates an expected call of CreateDrinkRecord.
+func (mr *MockRepositoryMockRecorder) CreateDrinkRecord(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDrinkRecord", reflect.TypeOf((*MockRepository)(nil).CreateDrinkRecord), arg0, arg1)
 }
 
 // GetDrinkRecordsForGame mocks base method.
-func (m *MockRepository) GetDrinkRecordsForGame(ctx context.Context, input *drink_ledger.GetDrinkRecordsForGameInput) (*drink_ledger.GetDrinkRecordsForGameOutput, error) {
+func (m *MockRepository) GetDrinkRecordsForGame(arg0 context.Context, arg1 *drink_ledger.GetDrinkRecordsForGameInput) (*drink_ledger.GetDrinkRecordsForGameOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDrinkRecordsForGame", ctx, input)
+	ret := m.ctrl.Call(m, "GetDrinkRecordsForGame", arg0, arg1)
 	ret0, _ := ret[0].(*drink_ledger.GetDrinkRecordsForGameOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetDrinkRecordsForGame indicates an expected call of GetDrinkRecordsForGame.
-func (mr *MockRepositoryMockRecorder) GetDrinkRecordsForGame(ctx, input any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) GetDrinkRecordsForGame(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDrinkRecordsForGame", reflect.TypeOf((*MockRepository)(nil).GetDrinkRecordsForGame), ctx, input)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDrinkRecordsForGame", reflect.TypeOf((*MockRepository)(nil).GetDrinkRecordsForGame), arg0, arg1)
 }
 
 // GetDrinkRecordsForPlayer mocks base method.
-func (m *MockRepository) GetDrinkRecordsForPlayer(ctx context.Context, input *drink_ledger.GetDrinkRecordsForPlayerInput) (*drink_ledger.GetDrinkRecordsForPlayerOutput, error) {
+func (m *MockRepository) GetDrinkRecordsForPlayer(arg0 context.Context, arg1 *drink_ledger.GetDrinkRecordsForPlayerInput) (*drink_ledger.GetDrinkRecordsForPlayerOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDrinkRecordsForPlayer", ctx, input)
+	ret := m.ctrl.Call(m, "GetDrinkRecordsForPlayer", arg0, arg1)
 	ret0, _ := ret[0].(*drink_ledger.GetDrinkRecordsForPlayerOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetDrinkRecordsForPlayer indicates an expected call of GetDrinkRecordsForPlayer.
-func (mr *MockRepositoryMockRecorder) GetDrinkRecordsForPlayer(ctx, input any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) GetDrinkRecordsForPlayer(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDrinkRecordsForPlayer", reflect.TypeOf((*MockRepository)(nil).GetDrinkRecordsForPlayer), ctx, input)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDrinkRecordsForPlayer", reflect.TypeOf((*MockRepository)(nil).GetDrinkRecordsForPlayer), arg0, arg1)
 }
 
 // MarkDrinkPaid mocks base method.
-func (m *MockRepository) MarkDrinkPaid(ctx context.Context, input *drink_ledger.MarkDrinkPaidInput) error {
+func (m *MockRepository) MarkDrinkPaid(arg0 context.Context, arg1 *drink_ledger.MarkDrinkPaidInput) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MarkDrinkPaid", ctx, input)
+	ret := m.ctrl.Call(m, "MarkDrinkPaid", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // MarkDrinkPaid indicates an expected call of MarkDrinkPaid.
-func (mr *MockRepositoryMockRecorder) MarkDrinkPaid(ctx, input any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) MarkDrinkPaid(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkDrinkPaid", reflect.TypeOf((*MockRepository)(nil).MarkDrinkPaid), ctx, input)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkDrinkPaid", reflect.TypeOf((*MockRepository)(nil).MarkDrinkPaid), arg0, arg1)
 }

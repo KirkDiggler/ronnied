@@ -77,7 +77,7 @@ type Config struct {
 	DrinkLedgerRepo ledgerRepo.Repository
 
 	// Service dependencies
-	DiceRoller    *dice.Roller
+	DiceRoller    dice.Roller
 	Clock         clock.Clock
 	UUIDGenerator uuid.UUID
 }

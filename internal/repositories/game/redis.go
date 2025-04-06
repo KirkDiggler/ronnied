@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/KirkDiggler/ronnied/internal/models"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -253,57 +255,193 @@ func (r *redisRepository) GetActiveGames(ctx context.Context, input *GetActiveGa
 
 // GetGamesByParent retrieves all games with a specific parent game ID from Redis
 func (r *redisRepository) GetGamesByParent(ctx context.Context, input *GetGamesByParentInput) ([]*models.Game, error) {
-	// Validate input
-	if input == nil || input.ParentGameID == "" {
-		return nil, errors.New("parent game ID cannot be empty")
-	}
-
-	// Get the games from the parent-child index
-	parentChildIndexKey := fmt.Sprintf("%s%s", parentChildIndex, input.ParentGameID)
-	gameIDs, err := r.client.ZRange(ctx, parentChildIndexKey, 0, -1).Result()
+	// Get the list of child game IDs for this parent
+	childGameIDs, err := r.client.SMembers(ctx, fmt.Sprintf("%s%s", parentChildIndex, input.ParentGameID)).Result()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get games by parent: %w", err)
+		return nil, fmt.Errorf("failed to get child games: %w", err)
 	}
 
-	// If there are no games, return an empty slice
-	if len(gameIDs) == 0 {
+	// If there are no child games, return an empty slice
+	if len(childGameIDs) == 0 {
 		return []*models.Game{}, nil
 	}
 
-	// Get all games in parallel using a pipeline
-	pipe := r.client.Pipeline()
-	gameCommands := make(map[string]*redis.StringCmd)
-
-	for _, gameID := range gameIDs {
-		gameKey := fmt.Sprintf("%s%s", gameKeyPrefix, gameID)
-		gameCommands[gameID] = pipe.Get(ctx, gameKey)
-	}
-
-	// Execute the pipeline
-	_, err = pipe.Exec(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get games by parent: %w", err)
-	}
-
-	// Process the results
-	games := make([]*models.Game, 0, len(gameIDs))
-	for gameID, cmd := range gameCommands {
-		gameJSON, err := cmd.Result()
+	// Get each child game
+	games := make([]*models.Game, 0, len(childGameIDs))
+	for _, gameID := range childGameIDs {
+		game, err := r.GetGame(ctx, &GetGameInput{GameID: gameID})
 		if err != nil {
-			if err == redis.Nil {
-				// Game was deleted between getting the IDs and fetching the game
+			// Skip games that can't be found
+			if errors.Is(err, ErrGameNotFound) {
 				continue
 			}
-			return nil, fmt.Errorf("failed to get game %s: %w", gameID, err)
+			return nil, err
 		}
-
-		var game models.Game
-		if err := json.Unmarshal([]byte(gameJSON), &game); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal game %s: %w", gameID, err)
-		}
-
-		games = append(games, &game)
+		games = append(games, game)
 	}
 
 	return games, nil
+}
+
+// CreateGame creates a new game with a generated UUID
+func (r *redisRepository) CreateGame(ctx context.Context, input *CreateGameInput) (*CreateGameOutput, error) {
+	// Validate input
+	if input == nil {
+		return nil, errors.New("input cannot be nil")
+	}
+
+	if input.ChannelID == "" {
+		return nil, errors.New("channel ID cannot be empty")
+	}
+
+	if input.CreatorID == "" {
+		return nil, errors.New("creator ID cannot be empty")
+	}
+
+	// Generate a new UUID for the game
+	gameID := uuid.New().String()
+
+	// Create the game
+	now := time.Now()
+	game := &models.Game{
+		ID:           gameID,
+		ChannelID:    input.ChannelID,
+		CreatorID:    input.CreatorID,
+		Status:       input.Status,
+		Participants: []*models.Participant{},
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+
+	// Save the game
+	err := r.SaveGame(ctx, &SaveGameInput{Game: game})
+	if err != nil {
+		return nil, fmt.Errorf("failed to save game: %w", err)
+	}
+
+	return &CreateGameOutput{Game: game}, nil
+}
+
+// CreateRollOffGame creates a new roll-off game with a generated UUID
+func (r *redisRepository) CreateRollOffGame(ctx context.Context, input *CreateRollOffGameInput) (*CreateRollOffGameOutput, error) {
+	// Validate input
+	if input == nil {
+		return nil, errors.New("input cannot be nil")
+	}
+
+	if input.ChannelID == "" {
+		return nil, errors.New("channel ID cannot be empty")
+	}
+
+	if input.CreatorID == "" {
+		return nil, errors.New("creator ID cannot be empty")
+	}
+
+	if input.ParentGameID == "" {
+		return nil, errors.New("parent game ID cannot be empty")
+	}
+
+	if len(input.PlayerIDs) == 0 {
+		return nil, errors.New("player IDs cannot be empty")
+	}
+
+	// Generate a new UUID for the game
+	gameID := uuid.New().String()
+
+	// Create the game
+	now := time.Now()
+	game := &models.Game{
+		ID:           gameID,
+		ChannelID:    input.ChannelID,
+		CreatorID:    input.CreatorID,
+		Status:       models.GameStatusRollOff,
+		ParentGameID: input.ParentGameID,
+		Participants: []*models.Participant{},
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+
+	// Create participants for each player
+	for _, playerID := range input.PlayerIDs {
+		participantID := uuid.New().String()
+		playerName := ""
+		
+		// Get the player name if available
+		if input.PlayerNames != nil {
+			if name, ok := input.PlayerNames[playerID]; ok {
+				playerName = name
+			}
+		}
+		
+		participant := &models.Participant{
+			ID:         participantID,
+			GameID:     gameID,
+			PlayerID:   playerID,
+			PlayerName: playerName,
+			Status:     models.ParticipantStatusWaitingToRoll,
+		}
+		
+		game.Participants = append(game.Participants, participant)
+	}
+
+	// Save the game
+	err := r.SaveGame(ctx, &SaveGameInput{Game: game})
+	if err != nil {
+		return nil, fmt.Errorf("failed to save roll-off game: %w", err)
+	}
+
+	return &CreateRollOffGameOutput{Game: game}, nil
+}
+
+// CreateParticipant creates a new participant with a generated UUID
+func (r *redisRepository) CreateParticipant(ctx context.Context, input *CreateParticipantInput) (*CreateParticipantOutput, error) {
+	// Validate input
+	if input == nil {
+		return nil, errors.New("input cannot be nil")
+	}
+
+	if input.GameID == "" {
+		return nil, errors.New("game ID cannot be empty")
+	}
+
+	if input.PlayerID == "" {
+		return nil, errors.New("player ID cannot be empty")
+	}
+
+	// Get the game
+	game, err := r.GetGame(ctx, &GetGameInput{GameID: input.GameID})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get game: %w", err)
+	}
+
+	// Check if the player is already a participant
+	for _, p := range game.Participants {
+		if p.PlayerID == input.PlayerID {
+			return nil, errors.New("player is already a participant")
+		}
+	}
+
+	// Generate a new UUID for the participant
+	participantID := uuid.New().String()
+
+	// Create the participant
+	participant := &models.Participant{
+		ID:         participantID,
+		GameID:     input.GameID,
+		PlayerID:   input.PlayerID,
+		PlayerName: input.PlayerName,
+		Status:     input.Status,
+	}
+
+	// Add the participant to the game
+	game.Participants = append(game.Participants, participant)
+	game.UpdatedAt = time.Now()
+
+	// Save the updated game
+	err = r.SaveGame(ctx, &SaveGameInput{Game: game})
+	if err != nil {
+		return nil, fmt.Errorf("failed to save game with new participant: %w", err)
+	}
+
+	return &CreateParticipantOutput{Participant: participant}, nil
 }

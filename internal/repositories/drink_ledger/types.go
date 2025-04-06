@@ -1,6 +1,9 @@
 package drink_ledger
 
-import "github.com/KirkDiggler/ronnied/internal/models"
+import (
+	"time"
+	"github.com/KirkDiggler/ronnied/internal/models"
+)
 
 // AddDrinkRecordInput contains parameters for adding a drink record
 type AddDrinkRecordInput struct {
@@ -30,4 +33,18 @@ type GetDrinkRecordsForPlayerOutput struct {
 // MarkDrinkPaidInput contains parameters for marking a drink as paid
 type MarkDrinkPaidInput struct {
 	DrinkID string
+}
+
+// CreateDrinkRecordInput contains parameters for creating a new drink record
+type CreateDrinkRecordInput struct {
+	GameID       string
+	FromPlayerID string // Empty for system-assigned drinks
+	ToPlayerID   string
+	Reason       models.DrinkReason
+	Timestamp    time.Time
+}
+
+// CreateDrinkRecordOutput contains the result of creating a new drink record
+type CreateDrinkRecordOutput struct {
+	Record *models.DrinkLedger
 }
