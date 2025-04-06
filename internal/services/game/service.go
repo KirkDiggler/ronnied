@@ -354,7 +354,7 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 
 	// Check if the participant has already rolled
 	if participant.RollTime != nil {
-		return nil, errors.New("player has already rolled in this game")
+		return nil, fmt.Errorf("player %s has already rolled in this game", participant.PlayerName)
 	}
 
 	// Roll the dice

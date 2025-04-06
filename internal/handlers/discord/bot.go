@@ -511,22 +511,41 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 	// Update the game message in the channel
 	b.updateGameMessage(s, channelID, existingGame.Game.ID)
 
-	// Respond with the roll result
-	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: title,
-			Embeds: []*discordgo.MessageEmbed{
-				{
-					Title:       title,
-					Description: description,
-					Color:       0x00ff00, // Green color
+	// Check if this is a component interaction (button click)
+	if i.Type == discordgo.InteractionMessageComponent {
+		// Update the existing message instead of sending a new one
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseUpdateMessage,
+			Data: &discordgo.InteractionResponseData{
+				Content: title,
+				Embeds: []*discordgo.MessageEmbed{
+					{
+						Title:       title,
+						Description: description,
+						Color:       0x00ff00, // Green color
+					},
 				},
+				Components: messageComponents,
 			},
-			Components: messageComponents,
-			Flags:      discordgo.MessageFlagsEphemeral,
-		},
-	})
+		})
+	} else {
+		// For the initial interaction, create a new ephemeral message
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: title,
+				Embeds: []*discordgo.MessageEmbed{
+					{
+						Title:       title,
+						Description: description,
+						Color:       0x00ff00, // Green color
+					},
+				},
+				Components: messageComponents,
+				Flags:      discordgo.MessageFlagsEphemeral,
+			},
+		})
+	}
 }
 
 // handleAssignDrinkSelect handles the assign drink dropdown selection
@@ -581,11 +600,26 @@ func (b *Bot) handleAssignDrinkSelect(s *discordgo.Session, i *discordgo.Interac
 	// Update the game message in the channel to show the drink assignment
 	b.updateGameMessage(s, channelID, existingGame.Game.ID)
 
-	// Update the current message with a confirmation (no button)
+	// Create roll button for the next roll
+	rollButton := discordgo.Button{
+		Label:    "Roll Again",
+		Style:    discordgo.PrimaryButton,
+		CustomID: ButtonRollDice,
+		Emoji: &discordgo.ComponentEmoji{
+			Name: "🎲",
+		},
+	}
+
+	// Update the current message with a confirmation and a roll button
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseUpdateMessage,
 		Data: &discordgo.InteractionResponseData{
 			Content: fmt.Sprintf("You assigned a drink to %s! 🍻", targetPlayerName),
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{rollButton},
+				},
+			},
 		},
 	})
 }
@@ -1000,12 +1034,8 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 				beginButton,
 			},
 		})
-	} else if gameOutput.Game.Status == models.GameStatusActive {
-		// No buttons for active games in the main channel message
-		// Players will use the whisper message buttons
-	} else if gameOutput.Game.Status == models.GameStatusRollOff {
-		// No buttons for roll-off games in the main channel message
-		// Players will use the whisper message buttons
+	} else if gameOutput.Game.Status == models.GameStatusActive || gameOutput.Game.Status == models.GameStatusRollOff {
+		// No buttons for active or roll-off games
 	} else if gameOutput.Game.Status == models.GameStatusCompleted {
 		// Add new game button
 		newGameButton := discordgo.Button{
