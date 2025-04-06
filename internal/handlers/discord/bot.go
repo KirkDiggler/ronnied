@@ -425,7 +425,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 
 	// Handle critical hit (assign a drink)
 	if rollOutput.IsCriticalHit {
-		title = "Assign a Drink"
+		title = "You Rolled a 6! Critical Hit!"
 		description = "Select a player to assign a drink:"
 
 		// Get players for dropdown
@@ -482,9 +482,25 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 
 			components = append(components, discordgo.SelectMenu(playerSelect))
 		}
+	} else if rollOutput.IsCriticalFail {
+		// For critical fails, show the roll value
+		title = "You Rolled a 1! Critical Fail!"
+		description = "Drink up! 🍺"
+		
+		// Add roll dice button for next roll
+		rollButton := discordgo.Button{
+			Label:    "Roll Again",
+			Style:    discordgo.PrimaryButton,
+			CustomID: ButtonRollDice,
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "🎲",
+			},
+		}
+		
+		components = append(components, rollButton)
 	} else {
-		// For all other rolls, just show a simple message with a roll button
-		title = "Roll Recorded"
+		// For normal rolls, show the roll value
+		title = fmt.Sprintf("You Rolled a %d", rollOutput.Value)
 		description = "Your roll has been recorded."
 		
 		// Add roll dice button for next roll
