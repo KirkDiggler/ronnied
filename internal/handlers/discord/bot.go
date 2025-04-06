@@ -340,8 +340,24 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 	}
 
 	// Check if the game is in a state where players can roll
-	if existingGame.Game.Status != models.GameStatusActive {
+	if existingGame.Game.Status != models.GameStatusActive && existingGame.Game.Status != models.GameStatusRollOff {
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Wait for %s to start the game.", existingGame.Game.GetCreatorName()))
+	}
+
+	// For roll-offs, check if this player is eligible to roll
+	if existingGame.Game.Status == models.GameStatusRollOff {
+		// Check if this player is part of the roll-off
+		isInRollOff := false
+		for _, participant := range existingGame.Game.Participants {
+			if participant.PlayerID == userID {
+				isInRollOff = true
+				break
+			}
+		}
+		
+		if !isInRollOff {
+			return RespondWithEphemeralMessage(s, i, "You are not part of the current roll-off.")
+		}
 	}
 
 	// Roll the dice
@@ -351,6 +367,25 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 	})
 	if err != nil {
 		log.Printf("Error rolling dice: %v", err)
+		
+		// Check if the error is about being in a roll-off game
+		if strings.Contains(err.Error(), "roll-off game") {
+			// Extract the roll-off game ID from the error message
+			parts := strings.Split(err.Error(), ":")
+			if len(parts) > 1 {
+				rollOffGameID := strings.TrimSpace(parts[1])
+				
+				// Get the roll-off game
+				rollOffGameOutput, err := b.gameService.GetGame(ctx, &game.GetGameInput{
+					GameID: rollOffGameID,
+				})
+				
+				if err == nil && rollOffGameOutput.Game != nil {
+					return RespondWithEphemeralMessage(s, i, fmt.Sprintf("You need to roll in the roll-off game. Check the game message for details."))
+				}
+			}
+		}
+		
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to roll dice: %v", err))
 	}
 
@@ -426,14 +461,6 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 
 			components = append(components, discordgo.SelectMenu(playerSelect))
 		}
-	} else if rollOutput.IsCriticalFail {
-		// Handle critical fail (take a drink)
-		title = "Critical Fail! 🍻"
-		description = "You rolled a critical fail! Take a drink."
-	} else {
-		// Regular roll
-		title = "Dice Roll"
-		description = fmt.Sprintf("You rolled a %d.", rollOutput.Value)
 	}
 
 	// Create action row for components if we have any
@@ -516,6 +543,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
+			Content: title,
 			Embeds: []*discordgo.MessageEmbed{
 				{
 					Title:       title,
@@ -525,7 +553,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 				},
 			},
 			Components: messageComponents,
-			Flags:      discordgo.MessageFlagsEphemeral, // Make the message ephemeral
+			Flags:      discordgo.MessageFlagsEphemeral,
 		},
 	})
 }
@@ -979,13 +1007,9 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 	}
 
 	// Create the embed
-	var title, description string
 	var components []discordgo.MessageComponent
 
 	if gameOutput.Game.Status == models.GameStatusWaiting {
-		title = "Game Waiting for Players"
-		description = "Click the Join button to join the game. Once everyone has joined, the creator can click Begin to start the game."
-
 		// Add join and begin buttons
 		joinButton := discordgo.Button{
 			Label:    "Join Game",
@@ -1012,9 +1036,6 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 			},
 		})
 	} else if gameOutput.Game.Status == models.GameStatusActive {
-		title = "Game in Progress"
-		description = "Roll the dice when it's your turn!"
-
 		// Add roll dice button
 		rollButton := discordgo.Button{
 			Label:    "Roll Dice",
@@ -1031,14 +1052,8 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 			},
 		})
 	} else if gameOutput.Game.Status == models.GameStatusRollOff {
-		title = "Roll-Off in Progress"
-		description = "Players in the roll-off need to roll again to determine the outcome!"
-
 		// No buttons for roll-off games in the main channel message
 	} else if gameOutput.Game.Status == models.GameStatusCompleted {
-		title = "Game Completed"
-		description = "The game has ended. Check the final results below!"
-
 		// Add new game button
 		newGameButton := discordgo.Button{
 			Label:    "Start New Game",
@@ -1056,28 +1071,52 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 		})
 	}
 
-	// Create message components if we have any
-	var messageComponents []discordgo.MessageComponent
-	if len(components) > 0 {
-		messageComponents = components
-	}
-
 	// Edit the message
 	_, err = s.ChannelMessageEditComplex(&discordgo.MessageEdit{
-		Channel: channelID,
+		Channel: gameOutput.Game.ChannelID,
 		ID:      gameOutput.Game.MessageID,
 		Embeds: &[]*discordgo.MessageEmbed{
 			{
-				Title:       title,
-				Description: description,
+				Title:       getGameStatusTitle(gameOutput.Game.Status),
+				Description: getGameStatusDescription(gameOutput.Game.Status),
 				Color:       0x00ff00, // Green color
 				Fields:      fields,
 			},
 		},
-		Components: &messageComponents,
+		Components: &components,
 	})
 
 	if err != nil {
 		log.Printf("Error updating game message: %v", err)
+	}
+}
+
+func getGameStatusTitle(status models.GameStatus) string {
+	switch status {
+	case models.GameStatusWaiting:
+		return "Game Waiting"
+	case models.GameStatusActive:
+		return "Game Active"
+	case models.GameStatusRollOff:
+		return "Roll-Off"
+	case models.GameStatusCompleted:
+		return "Game Completed"
+	default:
+		return "Unknown Status"
+	}
+}
+
+func getGameStatusDescription(status models.GameStatus) string {
+	switch status {
+	case models.GameStatusWaiting:
+		return "Players are waiting to join the game."
+	case models.GameStatusActive:
+		return "The game is active. Players can roll their dice."
+	case models.GameStatusRollOff:
+		return "A roll-off is in progress."
+	case models.GameStatusCompleted:
+		return "The game is completed."
+	default:
+		return "Unknown status"
 	}
 }
