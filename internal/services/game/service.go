@@ -142,7 +142,7 @@ func (s *service) CreateGame(ctx context.Context, input *CreateGameInput) (*Crea
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Create the creator as a participant
 	_, err = s.gameRepo.CreateParticipant(ctx, &gameRepo.CreateParticipantInput{
 		GameID:     createGameOutput.Game.ID,
@@ -365,7 +365,7 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		participant.Status = models.ParticipantStatusNeedsToAssign
 	} else {
 		participant.Status = models.ParticipantStatusActive
-		
+
 		// If it's a critical fail, automatically assign a drink to self
 		if isCriticalFail {
 			// Create a new drink record using the repository
@@ -375,7 +375,7 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 				ToPlayerID:   input.PlayerID,
 				Reason:       models.DrinkReasonCriticalFail,
 			})
-			
+
 			if err != nil {
 				log.Printf("Error saving critical fail drink record: %v", err)
 				// Don't return the error, continue with the roll
@@ -406,7 +406,7 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 	needsRollOff := false
 	rollOffType := ""
 	rollOffGameID := ""
-	
+
 	if allPlayersRolled {
 		// Check if any players need to assign drinks
 		allDrinksAssigned := true
@@ -416,13 +416,13 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 				break
 			}
 		}
-		
+
 		// Only try to end the game if all drinks are assigned
 		if allDrinksAssigned {
 			endGameOutput, err = s.EndGame(ctx, &EndGameInput{
 				GameID: input.GameID,
 			})
-			
+
 			if err == nil {
 				if endGameOutput.NeedsRollOff {
 					needsRollOff = true
@@ -437,13 +437,13 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 	}
 
 	return &RollDiceOutput{
-		Value:           rollValue,
-		IsCriticalHit:   isCriticalHit,
-		IsCriticalFail:  isCriticalFail,
+		Value:            rollValue,
+		IsCriticalHit:    isCriticalHit,
+		IsCriticalFail:   isCriticalFail,
 		AllPlayersRolled: allPlayersRolled,
-		NeedsRollOff:    needsRollOff,
-		RollOffType:     RollOffType(rollOffType),
-		RollOffGameID:   rollOffGameID,
+		NeedsRollOff:     needsRollOff,
+		RollOffType:      RollOffType(rollOffType),
+		RollOffGameID:    rollOffGameID,
 	}, nil
 }
 
@@ -531,13 +531,13 @@ func (s *service) AssignDrink(ctx context.Context, input *AssignDrinkInput) (*As
 			allPlayersRolled = false
 			break
 		}
-		
+
 		if participant.Status == models.ParticipantStatusNeedsToAssign {
 			allDrinksAssigned = false
 			break
 		}
 	}
-	
+
 	// If all players have rolled and all drinks are assigned, attempt to end the game
 	var endGameOutput *EndGameOutput
 	if allPlayersRolled && allDrinksAssigned {
@@ -552,8 +552,8 @@ func (s *service) AssignDrink(ctx context.Context, input *AssignDrinkInput) (*As
 	}
 
 	return &AssignDrinkOutput{
-		Success:   true,
-		GameEnded: allPlayersRolled && allDrinksAssigned,
+		Success:       true,
+		GameEnded:     allPlayersRolled && allDrinksAssigned,
 		EndGameOutput: endGameOutput,
 	}, nil
 }
@@ -637,11 +637,6 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 
 	// First pass: find the lowest roll value
 	for _, participant := range game.Participants {
-		// Skip critical fails (1) as they already have a drink assigned
-		if participant.RollValue == s.criticalFailValue {
-			continue
-		}
-
 		if participant.RollValue < lowestRoll {
 			lowestRoll = participant.RollValue
 			lowestRollPlayerIDs = []string{participant.PlayerID}
@@ -653,21 +648,21 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 	// If there's only one player with the lowest roll, assign them a drink
 	if len(lowestRollPlayerIDs) == 1 && lowestRoll < s.diceSides {
 		lowestPlayerID := lowestRollPlayerIDs[0]
-		
+
 		// Create a drink record for the player with the lowest roll using the repository
 		_, err = s.drinkLedgerRepo.CreateDrinkRecord(ctx, &ledgerRepo.CreateDrinkRecordInput{
-			GameID:       input.GameID,
-			ToPlayerID:   lowestPlayerID,
-			Reason:       models.DrinkReasonLowestRoll,
+			GameID:     input.GameID,
+			ToPlayerID: lowestPlayerID,
+			Reason:     models.DrinkReasonLowestRoll,
 		})
-		
+
 		if err != nil {
 			log.Printf("Error saving lowest roll drink record: %v", err)
 			// Don't return the error, continue with ending the game
 		}
 	} else if len(lowestRollPlayerIDs) > 1 {
 		// Multiple players tied for lowest roll, create a roll-off game using the repository
-		
+
 		// Create a map of player IDs to names for the roll-off game
 		playerNames := make(map[string]string)
 		for _, participant := range game.Participants {
@@ -678,7 +673,7 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 				}
 			}
 		}
-		
+
 		// Create the roll-off game with the repository
 		rollOffGameOutput, err := s.gameRepo.CreateRollOffGame(ctx, &gameRepo.CreateRollOffGameInput{
 			ChannelID:    game.ChannelID,
@@ -687,11 +682,11 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 			PlayerIDs:    lowestRollPlayerIDs,
 			PlayerNames:  playerNames,
 		})
-		
+
 		if err != nil {
 			return nil, fmt.Errorf("failed to create roll-off game: %w", err)
 		}
-		
+
 		// Update the players' current game ID
 		for _, playerID := range lowestRollPlayerIDs {
 			player, err := s.playerRepo.GetPlayer(ctx, &playerRepo.GetPlayerInput{
@@ -700,9 +695,9 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 			if err != nil {
 				return nil, err
 			}
-			
+
 			player.CurrentGameID = rollOffGameOutput.Game.ID
-			
+
 			err = s.playerRepo.SavePlayer(ctx, &playerRepo.SavePlayerInput{
 				Player: player,
 			})
@@ -710,7 +705,7 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 				return nil, err
 			}
 		}
-		
+
 		// Return early with roll-off information
 		return &EndGameOutput{
 			Success:          false,
@@ -891,7 +886,7 @@ func (s *service) HandleRollOff(ctx context.Context, input *HandleRollOffInput) 
 			PlayerIDs:    winners,
 			PlayerNames:  getPlayerNames(rollOffGame.Participants, winners),
 		})
-		
+
 		if err != nil {
 			return nil, fmt.Errorf("failed to create roll-off game: %w", err)
 		}
@@ -905,11 +900,11 @@ func (s *service) HandleRollOff(ctx context.Context, input *HandleRollOffInput) 
 			for _, loserID := range winners {
 				// Create a drink ledger entry for each loser using the repository
 				_, drinkErr := s.drinkLedgerRepo.CreateDrinkRecord(ctx, &ledgerRepo.CreateDrinkRecordInput{
-					GameID:       input.ParentGameID,
-					ToPlayerID:   loserID,
-					Reason:       models.DrinkReasonLowestRoll,
+					GameID:     input.ParentGameID,
+					ToPlayerID: loserID,
+					Reason:     models.DrinkReasonLowestRoll,
 				})
-				
+
 				if drinkErr != nil {
 					return nil, fmt.Errorf("failed to create drink record: %w", drinkErr)
 				}
