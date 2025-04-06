@@ -774,8 +774,14 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 					rollOffInfo := fmt.Sprintf("This is a roll-off for **%s**\n", rollOffType)
 					rollOffInfo += "Players in the roll-off:\n"
 
+					// Add player mentions for those who need to roll
 					for _, participant := range gameOutput.Game.Participants {
-						rollOffInfo += fmt.Sprintf("- **%s**\n", participant.PlayerName)
+						// Check if the participant hasn't rolled yet
+						if participant.RollTime == nil {
+							rollOffInfo += fmt.Sprintf("- <@%s> **%s** (needs to roll)\n", participant.PlayerID, participant.PlayerName)
+						} else {
+							rollOffInfo += fmt.Sprintf("- **%s** (rolled a %d)\n", participant.PlayerName, participant.RollValue)
+						}
 					}
 
 					fields = append(fields, &discordgo.MessageEmbedField{
@@ -793,14 +799,27 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 			if err == nil {
 				// Create a list of players in the roll-off
 				var rollOffPlayerNames []string
+				var playersNeedingToRoll []string
+				
 				for _, participant := range rollOffGameOutput.Game.Participants {
-					rollOffPlayerNames = append(rollOffPlayerNames, participant.PlayerName)
+					if participant.RollTime == nil {
+						playersNeedingToRoll = append(playersNeedingToRoll, fmt.Sprintf("<@%s>", participant.PlayerID))
+						rollOffPlayerNames = append(rollOffPlayerNames, fmt.Sprintf("**%s** (needs to roll)", participant.PlayerName))
+					} else {
+						rollOffPlayerNames = append(rollOffPlayerNames, fmt.Sprintf("**%s** (rolled a %d)", participant.PlayerName, participant.RollValue))
+					}
 				}
 
 				// Add roll-off information field
 				rollOffInfo := "A roll-off is in progress with the following players:\n"
 				for _, name := range rollOffPlayerNames {
-					rollOffInfo += fmt.Sprintf("- **%s**\n", name)
+					rollOffInfo += fmt.Sprintf("- %s\n", name)
+				}
+				
+				// Add a call to action if players still need to roll
+				if len(playersNeedingToRoll) > 0 {
+					rollOffInfo += "\n**Waiting for rolls from:** " + strings.Join(playersNeedingToRoll, ", ") + "\n"
+					rollOffInfo += "Please click the 'Roll for Tie-Breaker' button to roll."
 				}
 
 				fields = append(fields, &discordgo.MessageEmbedField{
@@ -954,7 +973,21 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 			},
 		})
 	} else if gameOutput.Game.Status == models.GameStatusRollOff {
-		// No buttons for roll-off games in the main channel message
+		// Add roll dice button for roll-off games
+		rollButton := discordgo.Button{
+			Label:    "Roll for Tie-Breaker",
+			Style:    discordgo.PrimaryButton,
+			CustomID: ButtonRollDice,
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "🎲",
+			},
+		}
+
+		components = append(components, discordgo.ActionsRow{
+			Components: []discordgo.MessageComponent{
+				rollButton,
+			},
+		})
 	} else if gameOutput.Game.Status == models.GameStatusCompleted {
 		// Add new game button
 		newGameButton := discordgo.Button{
