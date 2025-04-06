@@ -308,7 +308,7 @@ func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.Interacti
 
 	// Send an ephemeral message to the user who started the game
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: "Game Started! Click the button below to roll your dice.",
 			Flags:   discordgo.MessageFlagsEphemeral,
@@ -476,7 +476,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 
 	// Respond with the roll result
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: title,
 			Embeds: []*discordgo.MessageEmbed{
