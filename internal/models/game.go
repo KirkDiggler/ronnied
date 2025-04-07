@@ -21,6 +21,58 @@ const (
 	GameStatusCompleted GameStatus = "completed"
 )
 
+// DisplayTitle returns a user-friendly title for the game status
+func (s GameStatus) DisplayTitle() string {
+	switch s {
+	case GameStatusWaiting:
+		return "Ronnied Game - Waiting for Players"
+	case GameStatusActive:
+		return "Ronnied Game - In Progress"
+	case GameStatusRollOff:
+		return "Ronnied Game - Roll-Off in Progress"
+	case GameStatusCompleted:
+		return "Ronnied Game - Completed"
+	default:
+		return "Ronnied Game"
+	}
+}
+
+// Description returns a user-friendly description for the game status
+func (s GameStatus) Description() string {
+	switch s {
+	case GameStatusWaiting:
+		return "Waiting for players to join. Click the Join button to join the game!"
+	case GameStatusActive:
+		return "Game in progress. Players should check their DMs for a roll button."
+	case GameStatusRollOff:
+		return "A roll-off is in progress to determine who drinks!"
+	case GameStatusCompleted:
+		return "Game completed. Check the leaderboard to see who owes drinks!"
+	default:
+		return "Unknown game status."
+	}
+}
+
+// IsWaiting returns true if the game status is waiting
+func (s GameStatus) IsWaiting() bool {
+	return s == GameStatusWaiting
+}
+
+// IsActive returns true if the game status is active or roll-off
+func (s GameStatus) IsActive() bool {
+	return s == GameStatusActive || s == GameStatusRollOff
+}
+
+// IsRollOff returns true if the game status is roll-off
+func (s GameStatus) IsRollOff() bool {
+	return s == GameStatusRollOff
+}
+
+// IsCompleted returns true if the game status is completed
+func (s GameStatus) IsCompleted() bool {
+	return s == GameStatusCompleted
+}
+
 // Game represents a dice rolling game session
 type Game struct {
 	// ID is the unique identifier for the game
