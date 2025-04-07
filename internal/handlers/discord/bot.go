@@ -262,20 +262,12 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 		} else {
 			content = "You're already in this game!"
 		}
-	} else if joinOutput.GameAlreadyStarted {
-		if existingGame.Game.Status.IsActive() {
-			content = "You've joined the active game! Click the Roll Dice button to roll."
-		} else if existingGame.Game.Status.IsRollOff() {
-			content = "You've joined during a roll-off! You'll be able to participate in the next round."
-		} else {
-			content = "You've joined the game!"
-		}
 	} else {
 		content = "You've joined the game! Wait for the creator to start the game."
 	}
 
-	log.Printf("Player %s joined game %s with status %s (already joined: %v, game already started: %v)", 
-		username, existingGame.Game.ID, existingGame.Game.Status, joinOutput.AlreadyJoined, joinOutput.GameAlreadyStarted)
+	log.Printf("Player %s joined game %s with status %s (already joined: %v)", 
+		username, existingGame.Game.ID, existingGame.Game.Status, joinOutput.AlreadyJoined)
 
 	// Respond with success message
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{

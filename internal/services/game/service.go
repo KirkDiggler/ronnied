@@ -192,12 +192,30 @@ func (s *service) JoinGame(ctx context.Context, input *JoinGameInput) (*JoinGame
 		return nil, ErrGameNotFound
 	}
 
-	// Check if the game is in a valid state for joining
-	// We now allow joining in any state, but we'll track if it's already started
-	gameAlreadyStarted := game.Status != models.GameStatusWaiting
+	// Check if player is already in the game
+	playerAlreadyInGame := false
+	for _, participant := range game.Participants {
+		if participant.PlayerID == input.PlayerID {
+			playerAlreadyInGame = true
+			break
+		}
+	}
 
-	// Check if the game is full (only check if the game is still waiting)
-	if !gameAlreadyStarted && len(game.Participants) >= s.maxPlayers {
+	// If player is not already in the game and the game is not in waiting state, they cannot join
+	if !playerAlreadyInGame && game.Status != models.GameStatusWaiting {
+		return nil, ErrInvalidGameState
+	}
+
+	// If player is already in the game, just return success
+	if playerAlreadyInGame {
+		return &JoinGameOutput{
+			Success:       true,
+			AlreadyJoined: true,
+		}, nil
+	}
+
+	// Check if the game is full
+	if len(game.Participants) >= s.maxPlayers {
 		return nil, ErrGameFull
 	}
 
@@ -209,15 +227,6 @@ func (s *service) JoinGame(ctx context.Context, input *JoinGameInput) (*JoinGame
 	// If player exists, check if they're already in a game
 	if err == nil {
 		if existingPlayer.CurrentGameID != "" {
-			// Check if they're already in this game
-			if existingPlayer.CurrentGameID == input.GameID {
-				// Player is already in this game, just return success
-				return &JoinGameOutput{
-					Success: true,
-					AlreadyJoined: true,
-				}, nil
-			}
-
 			// They're in another game, update their game ID
 			err = s.playerRepo.UpdatePlayerGame(ctx, &playerRepo.UpdatePlayerGameInput{
 				PlayerID: input.PlayerID,
@@ -255,31 +264,19 @@ func (s *service) JoinGame(ctx context.Context, input *JoinGameInput) (*JoinGame
 		}
 	}
 
-	// Add player to the game if not already in it
-	playerAlreadyInGame := false
-	for _, participant := range game.Participants {
-		if participant.PlayerID == input.PlayerID {
-			playerAlreadyInGame = true
-			break
-		}
-	}
-
-	if !playerAlreadyInGame {
-		// Use the repository to create a participant with a generated UUID
-		_, err = s.gameRepo.CreateParticipant(ctx, &gameRepo.CreateParticipantInput{
-			GameID:     input.GameID,
-			PlayerID:   input.PlayerID,
-			PlayerName: input.PlayerName,
-			Status:     models.ParticipantStatusWaitingToRoll,
-		})
-		if err != nil {
-			return nil, err
-		}
+	// Use the repository to create a participant with a generated UUID
+	_, err = s.gameRepo.CreateParticipant(ctx, &gameRepo.CreateParticipantInput{
+		GameID:     input.GameID,
+		PlayerID:   input.PlayerID,
+		PlayerName: input.PlayerName,
+		Status:     models.ParticipantStatusWaitingToRoll,
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return &JoinGameOutput{
 		Success: true,
-		GameAlreadyStarted: gameAlreadyStarted,
 	}, nil
 }
 
