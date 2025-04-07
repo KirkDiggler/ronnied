@@ -11,15 +11,17 @@ import (
 
 	"github.com/KirkDiggler/ronnied/internal/models"
 	"github.com/KirkDiggler/ronnied/internal/services/game"
+	"github.com/KirkDiggler/ronnied/internal/services/messaging"
 )
 
 // Bot represents the Discord bot instance
 type Bot struct {
-	session     *discordgo.Session
-	commands    map[string]CommandHandler
-	commandIDs  map[string]string // Maps command name to command ID
-	gameService game.Service
-	config      *Config
+	session          *discordgo.Session
+	gameService      game.Service
+	messagingService messaging.Service
+	commands         map[string]CommandHandler
+	commandIDs       map[string]string // Maps command name to command ID
+	config           *Config
 }
 
 // Config holds the configuration for the bot
@@ -35,6 +37,9 @@ type Config struct {
 
 	// Game service
 	GameService game.Service
+
+	// Messaging service
+	MessagingService messaging.Service
 }
 
 // New creates a new Discord bot
@@ -51,6 +56,10 @@ func New(cfg *Config) (*Bot, error) {
 		return nil, fmt.Errorf("game service cannot be nil")
 	}
 
+	if cfg.MessagingService == nil {
+		return nil, fmt.Errorf("messaging service cannot be nil")
+	}
+
 	// Create a new Discord session
 	session, err := discordgo.New("Bot " + cfg.Token)
 	if err != nil {
@@ -58,11 +67,12 @@ func New(cfg *Config) (*Bot, error) {
 	}
 
 	bot := &Bot{
-		session:     session,
-		commands:    make(map[string]CommandHandler),
-		commandIDs:  make(map[string]string),
-		gameService: cfg.GameService,
-		config:      cfg,
+		session:          session,
+		gameService:      cfg.GameService,
+		messagingService: cfg.MessagingService,
+		commands:         make(map[string]CommandHandler),
+		commandIDs:       make(map[string]string),
+		config:           cfg,
 	}
 
 	// Register the interaction handler
@@ -235,7 +245,14 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 	if err != nil {
 		log.Printf("Error joining game: %v", err)
 		if err == game.ErrInvalidGameState {
-			return RespondWithEphemeralMessage(s, i, "Too late to join this round! Wait for the next game to start.")
+			// Get a friendly error message from the messaging service
+			errorMsgOutput, msgErr := b.messagingService.GetErrorMessage(ctx, &messaging.GetErrorMessageInput{
+				ErrorType: "invalid_game_state",
+			})
+			if msgErr != nil {
+				return RespondWithEphemeralMessage(s, i, "Too late to join this round! Wait for the next game to start.")
+			}
+			return RespondWithEphemeralMessage(s, i, errorMsgOutput.Message)
 		}
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to join game: %v", err))
 	}
@@ -253,30 +270,29 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 		},
 	}
 
-	// Customize message based on game status and join result
-	var content string
-	if joinOutput.AlreadyJoined {
-		if existingGame.Game.Status.IsWaiting() {
-			content = "You're already in the game, eager beaver! Just hang tight while we wait for everyone."
-		} else if existingGame.Game.Status.IsActive() {
-			content = "Ready to roll? Here's your dice button again. Don't lose it this time! 😉"
-		} else if existingGame.Game.Status.IsRollOff() {
-			content = "Patience, young padawan! The roll-off is in progress. Your turn will come."
-		} else {
-			content = "You're already in this game! Did you forget? 🤔"
+	// Get a join game message from the messaging service
+	joinMsgOutput, err := b.messagingService.GetJoinGameMessage(ctx, &messaging.GetJoinGameMessageInput{
+		PlayerName:   username,
+		GameStatus:   existingGame.Game.Status,
+		AlreadyJoined: joinOutput.AlreadyJoined,
+	})
+	
+	if err != nil {
+		// Fallback message if the messaging service fails
+		log.Printf("Error getting join game message: %v", err)
+		joinMsgOutput = &messaging.GetJoinGameMessageOutput{
+			Message: "You've joined the game!",
 		}
-	} else {
-		content = "Welcome to the party! 🎉 Get ready to roll when the game begins."
 	}
 
-	log.Printf("Player %s joined game %s with status %s (already joined: %v)",
+	log.Printf("Player %s joined game %s with status %s (already joined: %v)", 
 		username, existingGame.Game.ID, existingGame.Game.Status, joinOutput.AlreadyJoined)
 
 	// Respond with success message
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: content,
+			Content: joinMsgOutput.Message,
 			Flags:   discordgo.MessageFlagsEphemeral,
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
