@@ -18,6 +18,7 @@ import (
 	"github.com/KirkDiggler/ronnied/internal/repositories/game"
 	"github.com/KirkDiggler/ronnied/internal/repositories/player"
 	gameService "github.com/KirkDiggler/ronnied/internal/services/game"
+	messagingService "github.com/KirkDiggler/ronnied/internal/services/messaging"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 )
@@ -116,6 +117,15 @@ func main() {
 		log.Fatalf("Failed to create game service: %v", err)
 	}
 	
+	// Initialize messaging service
+	fmt.Println("Initializing messaging service...")
+	msgSvc, err := messagingService.NewService(&messagingService.ServiceConfig{
+		// We'll add repository configuration here later when we implement message storage
+	})
+	if err != nil {
+		log.Fatalf("Failed to create messaging service: %v", err)
+	}
+	
 	// Initialize Discord bot
 	fmt.Println("Initializing Discord bot...")
 	bot, err := discord.New(&discord.Config{
@@ -123,6 +133,7 @@ func main() {
 		ApplicationID: applicationID,
 		GuildID:       guildID,
 		GameService:   gameSvc,
+		MessagingService: msgSvc,
 	})
 	if err != nil {
 		log.Fatalf("Failed to create Discord bot: %v", err)
