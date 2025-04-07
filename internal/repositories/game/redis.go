@@ -365,14 +365,14 @@ func (r *redisRepository) CreateRollOffGame(ctx context.Context, input *CreateRo
 	for _, playerID := range input.PlayerIDs {
 		participantID := uuid.New().String()
 		playerName := ""
-		
+
 		// Get the player name if available
 		if input.PlayerNames != nil {
 			if name, ok := input.PlayerNames[playerID]; ok {
 				playerName = name
 			}
 		}
-		
+
 		participant := &models.Participant{
 			ID:         participantID,
 			GameID:     gameID,
@@ -380,7 +380,7 @@ func (r *redisRepository) CreateRollOffGame(ctx context.Context, input *CreateRo
 			PlayerName: playerName,
 			Status:     models.ParticipantStatusWaitingToRoll,
 		}
-		
+
 		game.Participants = append(game.Participants, participant)
 	}
 

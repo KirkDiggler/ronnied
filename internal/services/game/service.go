@@ -16,25 +16,6 @@ import (
 	playerRepo "github.com/KirkDiggler/ronnied/internal/repositories/player"
 )
 
-// Define errors
-var (
-	ErrGameNotFound        = errors.New("game not found")
-	ErrPlayerNotFound      = errors.New("player not found")
-	ErrPlayerAlreadyInGame = errors.New("player already in game")
-	ErrGameAlreadyExists   = errors.New("game already exists for this channel")
-	ErrInvalidGameState    = errors.New("invalid game state")
-	ErrPlayerNotInGame     = errors.New("player not in game")
-	ErrGameFull            = errors.New("game is at maximum capacity")
-	ErrRollOffGameNotFound = errors.New("no active roll-off game found")
-	ErrNilConfig           = errors.New("config cannot be nil")
-	ErrNilGameRepo         = errors.New("game repository cannot be nil")
-	ErrNilPlayerRepo       = errors.New("player repository cannot be nil")
-	ErrNilDrinkLedgerRepo  = errors.New("drink ledger repository cannot be nil")
-	ErrNilDiceRoller       = errors.New("dice roller cannot be nil")
-	ErrNilClock            = errors.New("clock cannot be nil")
-	ErrNilUUIDGenerator    = errors.New("UUID generator cannot be nil")
-)
-
 // service implements the Service interface
 type service struct {
 	// Configuration parameters
