@@ -115,7 +115,9 @@ type JoinGameInput struct {
 // JoinGameOutput contains the result of joining a game
 type JoinGameOutput struct {
 	// Success indicates if the player successfully joined the game
-	Success bool
+	Success           bool
+	AlreadyJoined     bool // Indicates if the player was already in the game
+	GameAlreadyStarted bool // Indicates if the game had already started when the player joined
 }
 
 // LeaveGameInput contains parameters for leaving a game

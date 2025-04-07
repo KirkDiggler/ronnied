@@ -227,7 +227,7 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 	}
 
 	// Join the game
-	_, err = b.gameService.JoinGame(ctx, &game.JoinGameInput{
+	joinOutput, err := b.gameService.JoinGame(ctx, &game.JoinGameInput{
 		GameID:     existingGame.Game.ID,
 		PlayerID:   userID,
 		PlayerName: username,
@@ -250,19 +250,32 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 		},
 	}
 
-	// Customize message based on game status
+	// Customize message based on game status and join result
 	var content string
-	if existingGame.Game.Status.IsWaiting() {
-		content = "You've joined the game! Wait for the creator to start the game."
-	} else if existingGame.Game.Status.IsActive() {
-		content = "You've joined the active game! Click the Roll Dice button to roll."
-	} else if existingGame.Game.Status.IsRollOff() {
-		content = "You've joined during a roll-off! You'll be able to participate in the next round."
+	if joinOutput.AlreadyJoined {
+		if existingGame.Game.Status.IsWaiting() {
+			content = "You're already in this game! Wait for the creator to start the game."
+		} else if existingGame.Game.Status.IsActive() {
+			content = "You're already in this game! Click the Roll Dice button to roll."
+		} else if existingGame.Game.Status.IsRollOff() {
+			content = "You're already in this game! Wait for your turn in the roll-off."
+		} else {
+			content = "You're already in this game!"
+		}
+	} else if joinOutput.GameAlreadyStarted {
+		if existingGame.Game.Status.IsActive() {
+			content = "You've joined the active game! Click the Roll Dice button to roll."
+		} else if existingGame.Game.Status.IsRollOff() {
+			content = "You've joined during a roll-off! You'll be able to participate in the next round."
+		} else {
+			content = "You've joined the game!"
+		}
 	} else {
-		content = "You've joined the game!"
+		content = "You've joined the game! Wait for the creator to start the game."
 	}
 
-	log.Printf("Player %s joined game %s with status %s", username, existingGame.Game.ID, existingGame.Game.Status)
+	log.Printf("Player %s joined game %s with status %s (already joined: %v, game already started: %v)", 
+		username, existingGame.Game.ID, existingGame.Game.Status, joinOutput.AlreadyJoined, joinOutput.GameAlreadyStarted)
 
 	// Respond with success message
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -669,16 +682,9 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 		return
 	}
 
-	log.Printf("Applying message edit for game %s (status: %s) with components: %v", 
-		gameID, 
-		gameOutput.Game.Status,
-		messageEdit.Components != nil && len(*messageEdit.Components) > 0)
-
 	// Send the message edit
 	_, err = s.ChannelMessageEditComplex(messageEdit)
 	if err != nil {
 		log.Printf("Error updating game message: %v", err)
-	} else {
-		log.Printf("Successfully updated game message for game %s", gameID)
 	}
 }

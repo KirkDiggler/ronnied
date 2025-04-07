@@ -193,12 +193,11 @@ func (s *service) JoinGame(ctx context.Context, input *JoinGameInput) (*JoinGame
 	}
 
 	// Check if the game is in a valid state for joining
-	if game.Status != models.GameStatusWaiting {
-		return nil, ErrInvalidGameState
-	}
+	// We now allow joining in any state, but we'll track if it's already started
+	gameAlreadyStarted := game.Status != models.GameStatusWaiting
 
-	// Check if the game is full
-	if len(game.Participants) >= s.maxPlayers {
+	// Check if the game is full (only check if the game is still waiting)
+	if !gameAlreadyStarted && len(game.Participants) >= s.maxPlayers {
 		return nil, ErrGameFull
 	}
 
@@ -212,7 +211,11 @@ func (s *service) JoinGame(ctx context.Context, input *JoinGameInput) (*JoinGame
 		if existingPlayer.CurrentGameID != "" {
 			// Check if they're already in this game
 			if existingPlayer.CurrentGameID == input.GameID {
-				return nil, ErrPlayerAlreadyInGame
+				// Player is already in this game, just return success
+				return &JoinGameOutput{
+					Success: true,
+					AlreadyJoined: true,
+				}, nil
 			}
 
 			// They're in another game, update their game ID
@@ -276,6 +279,7 @@ func (s *service) JoinGame(ctx context.Context, input *JoinGameInput) (*JoinGame
 
 	return &JoinGameOutput{
 		Success: true,
+		GameAlreadyStarted: gameAlreadyStarted,
 	}, nil
 }
 
