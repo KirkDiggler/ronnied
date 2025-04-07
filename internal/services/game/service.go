@@ -417,7 +417,61 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		}
 	}
 
+	// Prepare rendering information
+	title := ""
+	description := ""
+	shouldRedirectToRollOff := false
+	var eligiblePlayers []PlayerOption
+
+	// Set title and description based on roll result
+	if isCriticalHit {
+		title = fmt.Sprintf("You Rolled a %d! Critical Hit!", rollValue)
+		description = "Select a player to assign a drink:"
+
+		// Get eligible players for drink assignment
+		for _, p := range game.Participants {
+			isCurrentPlayer := p.PlayerID == input.PlayerID
+			
+			// For critical hits, include all players except the current player initially
+			if !isCurrentPlayer {
+				eligiblePlayers = append(eligiblePlayers, PlayerOption{
+					PlayerID:       p.PlayerID,
+					PlayerName:     p.PlayerName,
+					IsCurrentPlayer: false,
+				})
+			}
+		}
+
+		// If there are no other players, include the current player
+		if len(eligiblePlayers) == 0 {
+			// Find the current player
+			for _, p := range game.Participants {
+				if p.PlayerID == input.PlayerID {
+					eligiblePlayers = append(eligiblePlayers, PlayerOption{
+						PlayerID:       p.PlayerID,
+						PlayerName:     p.PlayerName + " (You)",
+						IsCurrentPlayer: true,
+					})
+					break
+				}
+			}
+			description += "\n\nYou're the only player, so you'll have to drink yourself!"
+		}
+	} else if isCriticalFail {
+		title = "You Rolled a 1! Critical Fail!"
+		description = "Drink up! 🍺"
+	} else {
+		title = fmt.Sprintf("You Rolled a %d", rollValue)
+		description = "Your roll has been recorded."
+	}
+
+	// Check if the player should be redirected to a roll-off game
+	if rollOffGame != nil && rollOffGame.ID != input.GameID {
+		shouldRedirectToRollOff = true
+	}
+
 	return &RollDiceOutput{
+		// Basic roll information
 		Value:            rollValue,
 		IsCriticalHit:    isCriticalHit,
 		IsCriticalFail:   isCriticalFail,
@@ -425,6 +479,13 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		NeedsRollOff:     needsRollOff,
 		RollOffType:      RollOffType(rollOffType),
 		RollOffGameID:    rollOffGameID,
+		
+		// Rendering information
+		Title:                  title,
+		Description:            description,
+		ShouldRedirectToRollOff: shouldRedirectToRollOff,
+		EligiblePlayers:        eligiblePlayers,
+		Game:                   game,
 	}, nil
 }
 

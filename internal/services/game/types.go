@@ -142,6 +142,18 @@ type RollDiceInput struct {
 	PlayerID string
 }
 
+// PlayerOption represents a player who can be selected for a drink assignment
+type PlayerOption struct {
+	// PlayerID is the unique identifier for the player
+	PlayerID string
+
+	// PlayerName is the display name of the player
+	PlayerName string
+
+	// IsCurrentPlayer indicates if this is the player who rolled
+	IsCurrentPlayer bool
+}
+
 // RollDiceOutput contains the result of rolling dice
 type RollDiceOutput struct {
 	// Value is the result of the dice roll
@@ -168,6 +180,23 @@ type RollDiceOutput struct {
 
 	// AllPlayersRolled indicates if all players in the game have rolled
 	AllPlayersRolled bool
+
+	// --- Rendering Information ---
+
+	// Title is the title to display in the UI
+	Title string
+
+	// Description is the description to display in the UI
+	Description string
+
+	// ShouldRedirectToRollOff indicates if the player should be redirected to a roll-off game
+	ShouldRedirectToRollOff bool
+
+	// EligiblePlayers is a list of players who can be assigned a drink (for critical hits)
+	EligiblePlayers []PlayerOption
+
+	// Game is the current game state
+	Game *models.Game
 }
 
 // AssignDrinkInput contains parameters for assigning a drink

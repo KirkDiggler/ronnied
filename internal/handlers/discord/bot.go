@@ -337,7 +337,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		}
 		log.Printf("Error getting game: %v", err)
 
-		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Error getting game: %v", err))
+		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("%v", err))
 	}
 
 	// Check if the game is in a state where players can roll
@@ -375,7 +375,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 				})
 
 				if err == nil && rollOffGameOutput.Game != nil {
-					return RespondWithEphemeralMessage(s, i, fmt.Sprintf("You need to roll in the roll-off game. Check the game message for details."))
+					return RespondWithEphemeralMessage(s, i, "You need to roll in the roll-off game. Check the game message for details.")
 				}
 			}
 		}
@@ -383,150 +383,16 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to roll dice: %v", err))
 	}
 
-	// Build the response message based on the roll result
-	var title string
-	var description string
-	var components []discordgo.MessageComponent
-
-	// Handle critical hit (assign a drink)
-	if rollOutput.IsCriticalHit {
-		title = "You Rolled a 6! Critical Hit!"
-		description = "Select a player to assign a drink:"
-
-		// Get players for dropdown
-		var playerOptions []discordgo.SelectMenuOption
-
-		// Check if there are other players
-		hasOtherPlayers := false
-		for _, participant := range existingGame.Game.Participants {
-			// Skip the current player initially
-			if participant.PlayerID == userID {
-				continue
-			}
-
-			hasOtherPlayers = true
-
-			// Add player to options
-			playerOptions = append(playerOptions, discordgo.SelectMenuOption{
-				Label:       participant.PlayerName,
-				Value:       participant.PlayerID,
-				Description: "Assign a drink to this player",
-				Emoji: &discordgo.ComponentEmoji{
-					Name: "🍺",
-				},
-			})
-		}
-
-		// If there are no other players, include the current player
-		if !hasOtherPlayers {
-			// Find the current player
-			for _, participant := range existingGame.Game.Participants {
-				if participant.PlayerID == userID {
-					playerOptions = append(playerOptions, discordgo.SelectMenuOption{
-						Label:       participant.PlayerName + " (You)",
-						Value:       participant.PlayerID,
-						Description: "Assign a drink to yourself (no choice!)",
-						Emoji: &discordgo.ComponentEmoji{
-							Name: "🍺",
-						},
-					})
-					break
-				}
-			}
-
-			description += "\n\nYou're the only player, so you'll have to drink yourself!"
-		}
-
-		// Create dropdown for player selection
-		if len(playerOptions) > 0 {
-			playerSelect := discordgo.SelectMenu{
-				CustomID:    SelectAssignDrink,
-				Placeholder: "Select a player to drink",
-				Options:     playerOptions,
-			}
-
-			components = append(components, discordgo.SelectMenu(playerSelect))
-		}
-	} else if rollOutput.IsCriticalFail {
-		// For critical fails, show the roll value
-		title = "You Rolled a 1! Critical Fail!"
-		description = "Drink up! 🍺"
-
-		// Add roll dice button for next roll
-		rollButton := discordgo.Button{
-			Label:    "Roll Again",
-			Style:    discordgo.PrimaryButton,
-			CustomID: ButtonRollDice,
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "🎲",
-			},
-		}
-
-		components = append(components, rollButton)
-	} else {
-		// For normal rolls, show the roll value
-		title = fmt.Sprintf("You Rolled a %d", rollOutput.Value)
-		description = "Your roll has been recorded."
-
-		// Add roll dice button for next roll
-		rollButton := discordgo.Button{
-			Label:    "Roll Again",
-			Style:    discordgo.PrimaryButton,
-			CustomID: ButtonRollDice,
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "🎲",
-			},
-		}
-
-		components = append(components, rollButton)
-	}
-
-	// Create action row for components if we have any
-	var messageComponents []discordgo.MessageComponent
-	if len(components) > 0 {
-		messageComponents = append(messageComponents, discordgo.ActionsRow{
-			Components: components,
-		})
-	}
-
 	// Update the game message in the channel
 	b.updateGameMessage(s, channelID, existingGame.Game.ID)
 
-	// Check if this is a component interaction (button click)
-	if i.Type == discordgo.InteractionMessageComponent {
-		// Update the existing message instead of sending a new one
-		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseUpdateMessage,
-			Data: &discordgo.InteractionResponseData{
-				Content: title,
-				Embeds: []*discordgo.MessageEmbed{
-					{
-						Title:       title,
-						Description: description,
-						Color:       0x00ff00, // Green color
-					},
-				},
-				Components: messageComponents,
-			},
-		})
-	} else {
-		// For the initial interaction, create a new ephemeral message
-		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: title,
-				Embeds: []*discordgo.MessageEmbed{
-					{
-						Title:       title,
-						Description: description,
-						Color:       0x00ff00, // Green color
-					},
-				},
-				Components: messageComponents,
-				Flags:      discordgo.MessageFlagsEphemeral,
-			},
-		})
+	// Check if the player should be redirected to a roll-off game
+	if rollOutput.ShouldRedirectToRollOff {
+		return RespondWithEphemeralMessage(s, i, "You need to roll in the roll-off game. Check the game message for details.")
 	}
+
+	// Render the response using the dedicated rendering function
+	return renderRollDiceResponse(s, i, rollOutput)
 }
 
 // handleAssignDrinkSelect handles the assign drink dropdown selection
