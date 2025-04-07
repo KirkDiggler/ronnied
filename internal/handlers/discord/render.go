@@ -315,9 +315,11 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 
 	log.Printf("Rendering game message for game %s with status %s", game.ID, game.Status)
 
-	if game.Status.IsWaiting() {
-		log.Printf("Game %s is waiting, adding join and begin buttons", game.ID)
-		// Add join and begin buttons
+	// Always show the Join button for waiting and active games
+	if game.Status.IsWaiting() || game.Status.IsActive() {
+		log.Printf("Game %s is waiting or active, adding join button", game.ID)
+		
+		// Create the Join button
 		joinButton := discordgo.Button{
 			Label:    "Join Game",
 			Style:    discordgo.SuccessButton,
@@ -326,22 +328,34 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 				Name: "🎲",
 			},
 		}
-
-		beginButton := discordgo.Button{
-			Label:    "Begin Game",
-			Style:    discordgo.PrimaryButton,
-			CustomID: ButtonBeginGame,
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "▶️",
-			},
+		
+		// For waiting games, also add the Begin button
+		if game.Status.IsWaiting() {
+			log.Printf("Game %s is waiting, also adding begin button", game.ID)
+			
+			beginButton := discordgo.Button{
+				Label:    "Begin Game",
+				Style:    discordgo.PrimaryButton,
+				CustomID: ButtonBeginGame,
+				Emoji: &discordgo.ComponentEmoji{
+					Name: "▶️",
+				},
+			}
+			
+			components = append(components, discordgo.ActionsRow{
+				Components: []discordgo.MessageComponent{
+					joinButton,
+					beginButton,
+				},
+			})
+		} else {
+			// For active games, just add the Join button
+			components = append(components, discordgo.ActionsRow{
+				Components: []discordgo.MessageComponent{
+					joinButton,
+				},
+			})
 		}
-
-		components = append(components, discordgo.ActionsRow{
-			Components: []discordgo.MessageComponent{
-				joinButton,
-				beginButton,
-			},
-		})
 	} else if game.Status.IsCompleted() {
 		log.Printf("Game %s is completed, adding new game button", game.ID)
 		// Add new game button
@@ -360,7 +374,7 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 			},
 		})
 	} else {
-		log.Printf("Game %s is active or roll-off, no buttons needed", game.ID)
+		log.Printf("Game %s is roll-off, no buttons needed", game.ID)
 	}
 
 	// Create the message edit

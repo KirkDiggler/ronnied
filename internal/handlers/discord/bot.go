@@ -250,11 +250,25 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 		},
 	}
 
+	// Customize message based on game status
+	var content string
+	if existingGame.Game.Status.IsWaiting() {
+		content = "You've joined the game! Wait for the creator to start the game."
+	} else if existingGame.Game.Status.IsActive() {
+		content = "You've joined the active game! Click the Roll Dice button to roll."
+	} else if existingGame.Game.Status.IsRollOff() {
+		content = "You've joined during a roll-off! You'll be able to participate in the next round."
+	} else {
+		content = "You've joined the game!"
+	}
+
+	log.Printf("Player %s joined game %s with status %s", username, existingGame.Game.ID, existingGame.Game.Status)
+
 	// Respond with success message
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: "You've joined the game! Wait for the creator to start the game.",
+			Content: content,
 			Flags:   discordgo.MessageFlagsEphemeral,
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
