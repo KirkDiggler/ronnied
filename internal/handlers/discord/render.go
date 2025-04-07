@@ -96,7 +96,7 @@ func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate
 }
 
 // renderGameMessage renders the game message based on the current game state
-func renderGameMessage(game *models.Game, drinkRecords []*models.DrinkLedger, leaderboardEntries []game.LeaderboardEntry, rollOffGame *models.Game, parentGame *models.Game) (*discordgo.MessageEdit, error) {
+func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkLedger, leaderboardEntries []game.LeaderboardEntry, rollOffGame *models.Game, parentGame *models.Game) (*discordgo.MessageEdit, error) {
 	// Create fields for the message
 	fields := []*discordgo.MessageEmbedField{
 		{
@@ -313,7 +313,10 @@ func renderGameMessage(game *models.Game, drinkRecords []*models.DrinkLedger, le
 	// Create the embed
 	var components []discordgo.MessageComponent
 
+	log.Printf("Rendering game message for game %s with status %s", game.ID, game.Status)
+
 	if game.Status.IsWaiting() {
+		log.Printf("Game %s is waiting, adding join and begin buttons", game.ID)
 		// Add join and begin buttons
 		joinButton := discordgo.Button{
 			Label:    "Join Game",
@@ -340,6 +343,7 @@ func renderGameMessage(game *models.Game, drinkRecords []*models.DrinkLedger, le
 			},
 		})
 	} else if game.Status.IsCompleted() {
+		log.Printf("Game %s is completed, adding new game button", game.ID)
 		// Add new game button
 		newGameButton := discordgo.Button{
 			Label:    "Start New Game",
@@ -355,6 +359,8 @@ func renderGameMessage(game *models.Game, drinkRecords []*models.DrinkLedger, le
 				newGameButton,
 			},
 		})
+	} else {
+		log.Printf("Game %s is active or roll-off, no buttons needed", game.ID)
 	}
 
 	// Create the message edit
@@ -373,12 +379,14 @@ func renderGameMessage(game *models.Game, drinkRecords []*models.DrinkLedger, le
 
 	// Only set Components if we have any
 	if len(components) > 0 {
+		log.Printf("Setting %d components for game %s", len(components), game.ID)
 		messageEdit.Components = &components
 	} else {
-		log.Println("No components to set for message edit")
+		log.Printf("No components to set for message edit for game %s (status: %s)", game.ID, game.Status)
 		// Explicitly set to nil to remove any existing components
 		var emptyComponents []discordgo.MessageComponent
 		messageEdit.Components = &emptyComponents
+		log.Printf("Set empty components array for game %s to clear buttons", game.ID)
 	}
 
 	return messageEdit, nil

@@ -649,15 +649,22 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 	}
 
 	// Render the game message
-	messageEdit, err := renderGameMessage(gameOutput.Game, drinkRecords, leaderboardEntries, rollOffGame, parentGame)
+	messageEdit, err := b.renderGameMessage(gameOutput.Game, drinkRecords, leaderboardEntries, rollOffGame, parentGame)
 	if err != nil {
 		log.Printf("Error rendering game message: %v", err)
 		return
 	}
 
+	log.Printf("Applying message edit for game %s (status: %s) with components: %v", 
+		gameID, 
+		gameOutput.Game.Status,
+		messageEdit.Components != nil && len(*messageEdit.Components) > 0)
+
 	// Send the message edit
 	_, err = s.ChannelMessageEditComplex(messageEdit)
 	if err != nil {
 		log.Printf("Error updating game message: %v", err)
+	} else {
+		log.Printf("Successfully updated game message for game %s", gameID)
 	}
 }
