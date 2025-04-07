@@ -417,16 +417,16 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		}
 	}
 
-	// Prepare rendering information
-	title := ""
-	description := ""
-	shouldRedirectToRollOff := false
+	// Prepare domain result information
+	result := ""
+	details := ""
+	activeRollOffGameID := ""
 	var eligiblePlayers []PlayerOption
 
-	// Set title and description based on roll result
+	// Set result and details based on roll result
 	if isCriticalHit {
-		title = fmt.Sprintf("You Rolled a %d! Critical Hit!", rollValue)
-		description = "Select a player to assign a drink:"
+		result = fmt.Sprintf("You Rolled a %d! Critical Hit!", rollValue)
+		details = "Select a player to assign a drink:"
 
 		// Get eligible players for drink assignment
 		for _, p := range game.Participants {
@@ -455,19 +455,19 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 					break
 				}
 			}
-			description += "\n\nYou're the only player, so you'll have to drink yourself!"
+			details += "\n\nYou're the only player, so you'll have to drink yourself!"
 		}
 	} else if isCriticalFail {
-		title = "You Rolled a 1! Critical Fail!"
-		description = "Drink up! 🍺"
+		result = "You Rolled a 1! Critical Fail!"
+		details = "Drink up! 🍺"
 	} else {
-		title = fmt.Sprintf("You Rolled a %d", rollValue)
-		description = "Your roll has been recorded."
+		result = fmt.Sprintf("You Rolled a %d", rollValue)
+		details = "Your roll has been recorded."
 	}
 
 	// Check if the player should be redirected to a roll-off game
 	if rollOffGame != nil && rollOffGame.ID != input.GameID {
-		shouldRedirectToRollOff = true
+		activeRollOffGameID = rollOffGame.ID
 	}
 
 	return &RollDiceOutput{
@@ -480,12 +480,12 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		RollOffType:      RollOffType(rollOffType),
 		RollOffGameID:    rollOffGameID,
 		
-		// Rendering information
-		Title:                  title,
-		Description:            description,
-		ShouldRedirectToRollOff: shouldRedirectToRollOff,
-		EligiblePlayers:        eligiblePlayers,
-		Game:                   game,
+		// Domain result information
+		Result:             result,
+		Details:            details,
+		ActiveRollOffGameID: activeRollOffGameID,
+		EligiblePlayers:    eligiblePlayers,
+		Game:               game,
 	}, nil
 }
 

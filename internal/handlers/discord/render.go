@@ -59,8 +59,8 @@ func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate
 	// Create embeds
 	embeds := []*discordgo.MessageEmbed{
 		{
-			Title:       output.Title,
-			Description: output.Description,
+			Title:       output.Result,
+			Description: output.Details,
 			Color:       0x00ff00, // Green color
 		},
 	}
@@ -71,7 +71,7 @@ func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate
 		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseUpdateMessage,
 			Data: &discordgo.InteractionResponseData{
-				Content:    output.Title,
+				Content:    output.Result,
 				Embeds:     embeds,
 				Components: messageComponents,
 			},
@@ -81,7 +81,7 @@ func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate
 		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
-				Content:    output.Title,
+				Content:    output.Result,
 				Embeds:     embeds,
 				Components: messageComponents,
 				Flags:      discordgo.MessageFlagsEphemeral,

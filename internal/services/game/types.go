@@ -154,7 +154,7 @@ type PlayerOption struct {
 	IsCurrentPlayer bool
 }
 
-// RollDiceOutput contains the result of rolling dice
+// RollDiceOutput contains the result of a dice roll
 type RollDiceOutput struct {
 	// Value is the result of the dice roll
 	Value int
@@ -181,16 +181,17 @@ type RollDiceOutput struct {
 	// AllPlayersRolled indicates if all players in the game have rolled
 	AllPlayersRolled bool
 
-	// --- Rendering Information ---
+	// --- Domain Result Information ---
 
-	// Title is the title to display in the UI
-	Title string
+	// Result is the primary outcome message of the roll
+	Result string
 
-	// Description is the description to display in the UI
-	Description string
+	// Details provides additional context about the roll result
+	Details string
 
-	// ShouldRedirectToRollOff indicates if the player should be redirected to a roll-off game
-	ShouldRedirectToRollOff bool
+	// ActiveRollOffGameID is the ID of an active roll-off game the player should participate in
+	// If empty, the player should roll in the current game
+	ActiveRollOffGameID string
 
 	// EligiblePlayers is a list of players who can be assigned a drink (for critical hits)
 	EligiblePlayers []PlayerOption

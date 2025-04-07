@@ -387,7 +387,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 	b.updateGameMessage(s, channelID, existingGame.Game.ID)
 
 	// Check if the player should be redirected to a roll-off game
-	if rollOutput.ShouldRedirectToRollOff {
+	if rollOutput.ActiveRollOffGameID != "" {
 		return RespondWithEphemeralMessage(s, i, "You need to roll in the roll-off game. Check the game message for details.")
 	}
 
