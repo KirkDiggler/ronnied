@@ -234,6 +234,9 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 	})
 	if err != nil {
 		log.Printf("Error joining game: %v", err)
+		if err == game.ErrInvalidGameState {
+			return RespondWithEphemeralMessage(s, i, "Too late to join this round! Wait for the next game to start.")
+		}
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to join game: %v", err))
 	}
 
@@ -254,19 +257,19 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 	var content string
 	if joinOutput.AlreadyJoined {
 		if existingGame.Game.Status.IsWaiting() {
-			content = "You're already in this game! Wait for the creator to start the game."
+			content = "You're already in the game, eager beaver! Just hang tight while we wait for everyone."
 		} else if existingGame.Game.Status.IsActive() {
-			content = "You're already in this game! Click the Roll Dice button to roll."
+			content = "Ready to roll? Here's your dice button again. Don't lose it this time! 😉"
 		} else if existingGame.Game.Status.IsRollOff() {
-			content = "You're already in this game! Wait for your turn in the roll-off."
+			content = "Patience, young padawan! The roll-off is in progress. Your turn will come."
 		} else {
-			content = "You're already in this game!"
+			content = "You're already in this game! Did you forget? 🤔"
 		}
 	} else {
-		content = "You've joined the game! Wait for the creator to start the game."
+		content = "Welcome to the party! 🎉 Get ready to roll when the game begins."
 	}
 
-	log.Printf("Player %s joined game %s with status %s (already joined: %v)", 
+	log.Printf("Player %s joined game %s with status %s (already joined: %v)",
 		username, existingGame.Game.ID, existingGame.Game.Status, joinOutput.AlreadyJoined)
 
 	// Respond with success message
