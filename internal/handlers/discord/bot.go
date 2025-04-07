@@ -336,26 +336,20 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 			return RespondWithEphemeralMessage(s, i, "No active game found in this channel. Use `/ronnied start` to create a new game.")
 		}
 		log.Printf("Error getting game: %v", err)
+
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Error getting game: %v", err))
 	}
 
 	// Check if the game is in a state where players can roll
-	if existingGame.Game.Status != models.GameStatusActive && existingGame.Game.Status != models.GameStatusRollOff {
-		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Wait for %s to start the game.", existingGame.Game.GetCreatorName()))
+	if existingGame.Game.Status == models.GameStatusWaiting {
+		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Waiting on %s to start the game.", existingGame.Game.GetCreatorName()))
 	}
 
 	// For roll-offs, check if this player is eligible to roll
 	if existingGame.Game.Status == models.GameStatusRollOff {
 		// Check if this player is part of the roll-off
-		isInRollOff := false
-		for _, participant := range existingGame.Game.Participants {
-			if participant.PlayerID == userID {
-				isInRollOff = true
-				break
-			}
-		}
-
-		if !isInRollOff {
+		participant := existingGame.Game.GetParticipant(userID)
+		if participant == nil {
 			return RespondWithEphemeralMessage(s, i, "You are not part of the current roll-off.")
 		}
 	}
@@ -457,7 +451,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		// For critical fails, show the roll value
 		title = "You Rolled a 1! Critical Fail!"
 		description = "Drink up! 🍺"
-		
+
 		// Add roll dice button for next roll
 		rollButton := discordgo.Button{
 			Label:    "Roll Again",
@@ -467,13 +461,13 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 				Name: "🎲",
 			},
 		}
-		
+
 		components = append(components, rollButton)
 	} else {
 		// For normal rolls, show the roll value
 		title = fmt.Sprintf("You Rolled a %d", rollOutput.Value)
 		description = "Your roll has been recorded."
-		
+
 		// Add roll dice button for next roll
 		rollButton := discordgo.Button{
 			Label:    "Roll Again",
@@ -483,7 +477,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 				Name: "🎲",
 			},
 		}
-		
+
 		components = append(components, rollButton)
 	}
 
@@ -857,7 +851,7 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 				// Create a list of players in the roll-off
 				var rollOffPlayerNames []string
 				var playersNeedingToRoll []string
-				
+
 				for _, participant := range rollOffGameOutput.Game.Participants {
 					if participant.RollTime == nil {
 						playersNeedingToRoll = append(playersNeedingToRoll, fmt.Sprintf("<@%s>", participant.PlayerID))
@@ -872,7 +866,7 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 				for _, name := range rollOffPlayerNames {
 					rollOffInfo += fmt.Sprintf("- %s\n", name)
 				}
-				
+
 				// Add a call to action if players still need to roll
 				if len(playersNeedingToRoll) > 0 {
 					rollOffInfo += "\n**Waiting for rolls from:** " + strings.Join(playersNeedingToRoll, ", ") + "\n"
@@ -986,7 +980,7 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 
 	// Get the game status description
 	description := getGameStatusDescription(gameOutput.Game.Status)
-	
+
 	// Add additional information for active games
 	if gameOutput.Game.Status == models.GameStatusActive || gameOutput.Game.Status == models.GameStatusRollOff {
 		description += "\n\n**Players:** Check your DMs for a roll button message."
