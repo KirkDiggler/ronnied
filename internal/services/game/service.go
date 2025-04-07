@@ -508,10 +508,6 @@ func (s *service) AssignDrink(ctx context.Context, input *AssignDrinkInput) (*As
 		return nil, errors.New("to player ID cannot be empty")
 	}
 
-	if input.FromPlayerID == input.ToPlayerID {
-		return nil, errors.New("cannot assign a drink to yourself")
-	}
-
 	// Get the game
 	game, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
 		GameID: input.GameID,
