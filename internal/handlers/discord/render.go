@@ -2,6 +2,7 @@ package discord
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/KirkDiggler/ronnied/internal/models"
@@ -338,10 +339,6 @@ func renderGameMessage(game *models.Game, drinkRecords []*models.DrinkLedger, le
 				beginButton,
 			},
 		})
-	} else if game.Status.IsActive() || game.Status.IsRollOff() {
-		// Explicitly set components to an empty slice for active or roll-off games
-		// This ensures any previous components are removed
-		components = []discordgo.MessageComponent{}
 	} else if game.Status.IsCompleted() {
 		// Add new game button
 		newGameButton := discordgo.Button{
@@ -373,11 +370,12 @@ func renderGameMessage(game *models.Game, drinkRecords []*models.DrinkLedger, le
 			},
 		},
 	}
-	
+
 	// Only set Components if we have any
 	if len(components) > 0 {
 		messageEdit.Components = &components
 	} else {
+		log.Println("No components to set for message edit")
 		// Explicitly set to nil to remove any existing components
 		var emptyComponents []discordgo.MessageComponent
 		messageEdit.Components = &emptyComponents
