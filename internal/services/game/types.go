@@ -159,6 +159,15 @@ type PlayerOption struct {
 type RollDiceOutput struct {
 	// Value is the result of the dice roll
 	Value int
+	
+	// RollValue is an alias for Value to maintain compatibility
+	RollValue int
+	
+	// PlayerID is the ID of the player who rolled
+	PlayerID string
+	
+	// PlayerName is the name of the player who rolled
+	PlayerName string
 
 	// IsCriticalHit indicates if the roll was a critical hit
 	IsCriticalHit bool

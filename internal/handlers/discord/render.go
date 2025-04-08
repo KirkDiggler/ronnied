@@ -15,7 +15,7 @@ import (
 )
 
 // renderRollDiceResponse renders the response for a roll dice action
-func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate, output *game.RollDiceOutput) error {
+func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate, output *game.RollDiceOutput, messagingService messaging.Service) error {
 	var components []discordgo.MessageComponent
 
 	// Build components based on the roll result
@@ -65,13 +65,50 @@ func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate
 		})
 	}
 
-	// Create embeds
-	embeds := []*discordgo.MessageEmbed{
-		{
-			Title:       output.Result,
-			Description: output.Details,
-			Color:       0x00ff00, // Green color
-		},
+	// Get a dynamic roll result message from the messaging service
+	ctx := context.Background()
+	
+	// Determine color based on roll result
+	var embedColor int
+	if output.IsCriticalHit {
+		embedColor = 0x2ecc71 // Green for critical hits
+	} else if output.RollValue == 1 {
+		embedColor = 0xe74c3c // Red for critical fails
+	} else {
+		embedColor = 0x3498db // Blue for normal rolls
+	}
+	
+	rollResultOutput, err := messagingService.GetRollResultMessage(ctx, &messaging.GetRollResultMessageInput{
+		PlayerName:   output.PlayerName,
+		RollValue:    output.RollValue,
+		IsCriticalHit: output.IsCriticalHit,
+		IsCriticalFail: output.RollValue == 1, // Assuming 1 is critical fail
+	})
+	
+	// Create embeds - either with messaging service output or fallback to static content
+	var embeds []*discordgo.MessageEmbed
+	var contentText string
+	
+	if err != nil {
+		log.Printf("Failed to get roll result message: %v", err)
+		// Fallback to static description if messaging service fails
+		embeds = []*discordgo.MessageEmbed{
+			{
+				Title:       output.Result,
+				Description: output.Details,
+				Color:       embedColor,
+			},
+		}
+		contentText = output.Result
+	} else {
+		embeds = []*discordgo.MessageEmbed{
+			{
+				Title:       rollResultOutput.Title,
+				Description: rollResultOutput.Message,
+				Color:       embedColor,
+			},
+		}
+		contentText = rollResultOutput.Title
 	}
 
 	// Check if this is a component interaction (button click)
@@ -80,7 +117,7 @@ func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate
 		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseUpdateMessage,
 			Data: &discordgo.InteractionResponseData{
-				Content:    output.Result,
+				Content:    contentText,
 				Embeds:     embeds,
 				Components: messageComponents,
 			},
@@ -90,7 +127,7 @@ func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate
 		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
-				Content:    output.Result,
+				Content:    contentText,
 				Embeds:     embeds,
 				Components: messageComponents,
 				Flags:      discordgo.MessageFlagsEphemeral,

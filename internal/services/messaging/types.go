@@ -74,6 +74,7 @@ type GetJoinGameErrorMessageInput struct {
 
 // GetJoinGameErrorMessageOutput is the output for GetJoinGameErrorMessage
 type GetJoinGameErrorMessageOutput struct {
+	Title   string
 	Message string
 }
 
@@ -89,31 +90,18 @@ type GetGameStatusMessageOutput struct {
 	Message string
 }
 
-// GetRollResultMessageInput contains parameters for getting a roll result message
+// GetRollResultMessageInput contains the input for GetRollResultMessage
 type GetRollResultMessageInput struct {
-	// PlayerName is the name of the player who rolled
-	PlayerName string
-	
-	// RollValue is the value of the roll
-	RollValue int
-	
-	// IsCriticalHit indicates if the roll was a critical hit (6)
-	IsCriticalHit bool
-	
-	// IsCriticalFail indicates if the roll was a critical fail (1)
+	PlayerName     string
+	RollValue      int
+	IsCriticalHit  bool
 	IsCriticalFail bool
-	
-	// PreferredTone is the preferred tone for the message (optional)
-	PreferredTone MessageTone
 }
 
-// GetRollResultMessageOutput contains the result of getting a roll result message
+// GetRollResultMessageOutput contains the output for GetRollResultMessage
 type GetRollResultMessageOutput struct {
-	// Message is the generated message
+	Title   string
 	Message string
-	
-	// Tone is the tone of the message
-	Tone MessageTone
 }
 
 // GetErrorMessageInput contains parameters for getting an error message

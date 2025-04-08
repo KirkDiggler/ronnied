@@ -2,6 +2,7 @@ package messaging
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"time"
@@ -148,6 +149,7 @@ func (s *service) GetJoinGameErrorMessage(ctx context.Context, input *GetJoinGam
 	selectedMessage := messages[s.rand.Intn(len(messages))]
 	
 	return &GetJoinGameErrorMessageOutput{
+		Title:   "Error Joining Game",
 		Message: selectedMessage,
 	}, nil
 }
@@ -217,86 +219,83 @@ func (s *service) GetGameStatusMessage(ctx context.Context, input *GetGameStatus
 	}, nil
 }
 
-// GetRollResultMessage returns a message for a dice roll result
+// GetRollResultMessage returns a dynamic message for a dice roll result
 func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResultMessageInput) (*GetRollResultMessageOutput, error) {
-	var messages []string
-	var tone MessageTone
-	
-	// Set default tone if not specified
-	if input.PreferredTone == "" {
-		if input.IsCriticalHit {
-			tone = ToneCelebration
-		} else if input.IsCriticalFail {
-			tone = ToneSarcastic
-		} else {
-			tone = ToneNeutral
-		}
-	} else {
-		tone = input.PreferredTone
+	if input == nil {
+		return nil, errors.New("input cannot be nil")
 	}
-	
-	// Select messages based on roll result
-	if input.IsCriticalHit {
-		messages = []string{
-			"CRITICAL HIT! Time to make someone drink!",
-			"A perfect 6! Someone's about to have a bad day!",
-			"The dice gods smile upon you with a 6! Choose your victim!",
-			"BOOM! A 6! Point your finger at the unlucky soul who drinks!",
+
+	var title, message string
+
+	// Generate dynamic messages based on roll value
+	switch {
+	case input.IsCriticalHit:
+		// Critical hit (6)
+		titles := []string{
+			"CRITICAL HIT!",
+			"BOOM! Critical Hit!",
+			"Natural 6!",
+			"Perfect Roll!",
+			"MAXIMUM DAMAGE!",
 		}
-	} else if input.IsCriticalFail {
-		messages = []string{
-			"CRITICAL FAIL! Bottoms up!",
-			"A pitiful 1! Drink up, buttercup!",
-			"The dice gods laugh at your misfortune! Take a drink!",
-			"Ouch, a 1! Hope that drink tastes good!",
+		
+		messages := []string{
+			fmt.Sprintf("%s rolled a 6! Time to make someone drink!", input.PlayerName),
+			fmt.Sprintf("Incredible! %s just rolled a 6 and gets to assign a drink!", input.PlayerName),
+			fmt.Sprintf("%s is on fire! A perfect 6 means someone's about to get thirsty!", input.PlayerName),
+			fmt.Sprintf("The dice gods favor %s today! That's a 6! Choose your victim!", input.PlayerName),
+			fmt.Sprintf("CRITICAL HIT! %s rolled a 6 and now has the power to make someone drink!", input.PlayerName),
 		}
-	} else {
-		// Normal roll
-		switch input.RollValue {
-		case 2:
-			messages = []string{
-				"A 2! Not great, not terrible.",
-				"Rolling a 2... barely better than a critical fail!",
-				"A 2 appears! At least it's not a 1?",
-				"The dice show 2. The dice are not your friend today.",
-			}
-		case 3:
-			messages = []string{
-				"A 3! Middle of the road.",
-				"Rolling a 3... decidedly average.",
-				"The dice land on 3. Could be worse!",
-				"A 3 appears! Neither impressive nor embarrassing.",
-			}
-		case 4:
-			messages = []string{
-				"A 4! Getting better!",
-				"Rolling a 4... not bad at all!",
-				"The dice show 4. You're in good shape!",
-				"A solid 4! You're doing alright.",
-			}
-		case 5:
-			messages = []string{
-				"A 5! So close to greatness!",
-				"Rolling a 5... almost perfect!",
-				"The dice show 5! Just shy of a critical hit!",
-				"A 5! You can almost taste the victory.",
-			}
-		default:
-			messages = []string{
-				"The dice have spoken!",
-				"The roll is complete!",
-				"Let's see what fate has in store!",
-				"The dice have decided your destiny!",
-			}
+		
+		title = titles[rand.Intn(len(titles))]
+		message = messages[rand.Intn(len(messages))]
+		
+	case input.IsCriticalFail:
+		// Critical fail (1)
+		titles := []string{
+			"CRITICAL FAIL!",
+			"Ouch! Snake Eyes!",
+			"Natural 1!",
+			"MINIMUM DAMAGE!",
+			"Better luck next time!",
 		}
+		
+		messages := []string{
+			fmt.Sprintf("%s rolled a 1! Time to drink up!", input.PlayerName),
+			fmt.Sprintf("Oof! %s just rolled a 1. Bottoms up!", input.PlayerName),
+			fmt.Sprintf("%s angered the dice gods with that 1! Drink up, friend!", input.PlayerName),
+			fmt.Sprintf("The dice have spoken! %s rolled a 1 and must take a drink!", input.PlayerName),
+			fmt.Sprintf("CRITICAL FAIL! %s rolled a 1 and has to drink!", input.PlayerName),
+		}
+		
+		title = titles[rand.Intn(len(titles))]
+		message = messages[rand.Intn(len(messages))]
+		
+	default:
+		// Normal roll (2-5)
+		titles := []string{
+			fmt.Sprintf("You rolled a %d!", input.RollValue),
+			fmt.Sprintf("It's a %d!", input.RollValue),
+			fmt.Sprintf("%d Points!", input.RollValue),
+			fmt.Sprintf("Roll: %d", input.RollValue),
+			fmt.Sprintf("The dice shows %d", input.RollValue),
+		}
+		
+		messages := []string{
+			fmt.Sprintf("%s rolled a %d. Not bad!", input.PlayerName, input.RollValue),
+			fmt.Sprintf("The dice landed on %d for %s.", input.RollValue, input.PlayerName),
+			fmt.Sprintf("%s's roll: %d - Keep trying!", input.PlayerName, input.RollValue),
+			fmt.Sprintf("A solid %d from %s!", input.RollValue, input.PlayerName),
+			fmt.Sprintf("%s rolled %d. The game continues!", input.PlayerName, input.RollValue),
+		}
+		
+		title = titles[rand.Intn(len(titles))]
+		message = messages[rand.Intn(len(messages))]
 	}
-	
-	// Select a random message
-	selectedMessage := messages[s.rand.Intn(len(messages))]
-	
+
 	return &GetRollResultMessageOutput{
-		Message: selectedMessage,
-		Tone:    tone,
+		Title:   title,
+		Message: message,
 	}, nil
 }
 

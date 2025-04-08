@@ -436,6 +436,15 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 	activeRollOffGameID := ""
 	var eligiblePlayers []PlayerOption
 
+	// Get the player name
+	playerName := ""
+	for _, p := range game.Participants {
+		if p.PlayerID == input.PlayerID {
+			playerName = p.PlayerName
+			break
+		}
+	}
+
 	// Set result and details based on roll result
 	if isCriticalHit {
 		result = fmt.Sprintf("You Rolled a %d! Critical Hit!", rollValue)
@@ -486,6 +495,9 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 	return &RollDiceOutput{
 		// Basic roll information
 		Value:            rollValue,
+		RollValue:        rollValue,  // Alias for Value to maintain compatibility
+		PlayerID:         input.PlayerID,
+		PlayerName:       playerName,
 		IsCriticalHit:    isCriticalHit,
 		IsCriticalFail:   isCriticalFail,
 		AllPlayersRolled: allPlayersRolled,

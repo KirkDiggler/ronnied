@@ -244,7 +244,7 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 	})
 	if err != nil {
 		log.Printf("Error joining game: %v", err)
-		
+
 		// Map the error to an error type for the messaging service
 		var errorType string
 		switch err {
@@ -262,7 +262,7 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 			// For any other error, just return the error message
 			return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to join game: %v", err))
 		}
-		
+
 		// Get a friendly error message from the messaging service
 		errorMsgOutput, msgErr := b.messagingService.GetErrorMessage(ctx, &messaging.GetErrorMessageInput{
 			ErrorType: errorType,
@@ -289,11 +289,11 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 
 	// Get a join game message from the messaging service
 	joinMsgOutput, err := b.messagingService.GetJoinGameMessage(ctx, &messaging.GetJoinGameMessageInput{
-		PlayerName:   username,
-		GameStatus:   existingGame.Game.Status,
+		PlayerName:    username,
+		GameStatus:    existingGame.Game.Status,
 		AlreadyJoined: joinOutput.AlreadyJoined,
 	})
-	
+
 	if err != nil {
 		// Fallback message if the messaging service fails
 		log.Printf("Error getting join game message: %v", err)
@@ -302,7 +302,7 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 		}
 	}
 
-	log.Printf("Player %s joined game %s with status %s (already joined: %v)", 
+	log.Printf("Player %s joined game %s with status %s (already joined: %v)",
 		username, existingGame.Game.ID, existingGame.Game.Status, joinOutput.AlreadyJoined)
 
 	// Respond with success message
@@ -447,7 +447,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 	}
 
 	// Render the response using the dedicated rendering function
-	return renderRollDiceResponse(s, i, rollOutput)
+	return renderRollDiceResponse(s, i, rollOutput, b.messagingService)
 }
 
 // handleAssignDrinkSelect handles the assign drink dropdown selection
@@ -587,8 +587,8 @@ func (b *Bot) handleStartNewGameButton(s *discordgo.Session, i *discordgo.Intera
 	// Create the embed
 	embeds := []*discordgo.MessageEmbed{
 		{
-			Title:       "New Game Started",
-			Description: "A new game has been created! Click the Join button to join the game. Once everyone has joined, the creator can click Begin to start the game.",
+			Title:       "Ronnie D Rollem get in here!",
+			Description: "Let's get ready to RRROOOLLL!.",
 			Color:       0x00ff00, // Green color
 			Fields: []*discordgo.MessageEmbedField{
 				{
