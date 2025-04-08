@@ -247,12 +247,33 @@ func (s *service) GetErrorMessage(ctx context.Context, input *GetErrorMessageInp
 	
 	// Select messages based on error type
 	switch input.ErrorType {
+	case "game_active":
+		messages = []string{
+			"This game is already rolling! Catch the next one.",
+			"Too late, hotshot! The dice are already in motion.",
+			"The game has started without you. Next time be quicker!",
+			"Sorry, this train has left the station. Wait for the next game.",
+		}
+	case "game_roll_off":
+		messages = []string{
+			"There's an epic roll-off happening! Wait for the next round.",
+			"Roll-off in progress! No new players allowed in this tense moment.",
+			"The fate of drinks is being decided in a roll-off. Join the next game!",
+			"Can't join during a roll-off! The tension is too high for newcomers.",
+		}
+	case "game_completed":
+		messages = []string{
+			"This game is already over! Check out who's buying drinks.",
+			"You missed this one completely. The game is already finished!",
+			"Too late! The tab has already been settled for this game.",
+			"Game over! But you can start a new one if you're thirsty.",
+		}
 	case "invalid_game_state":
 		messages = []string{
-			"Too late to join this round! Wait for the next game to start.",
-			"This game is already in progress! Catch the next one.",
-			"You missed your chance! This game has already started.",
-			"The train has left the station! Wait for the next game.",
+			"The game is in a weird state. Try again later or start a new one.",
+			"Something's off with this game. Maybe it's had too many drinks?",
+			"Can't join right now. The game is... confused.",
+			"This game has gone rogue! Best to start a fresh one.",
 		}
 	case "game_full":
 		messages = []string{

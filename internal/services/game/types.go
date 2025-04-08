@@ -7,7 +7,7 @@ import (
 	"github.com/KirkDiggler/ronnied/internal/common/uuid"
 	"github.com/KirkDiggler/ronnied/internal/dice"
 	"github.com/KirkDiggler/ronnied/internal/models"
-	ledgerRepo "github.com/KirkDiggler/ronnied/internal/repositories/drink_ledger"
+	drinkLedgerRepo "github.com/KirkDiggler/ronnied/internal/repositories/drink_ledger"
 	gameRepo "github.com/KirkDiggler/ronnied/internal/repositories/game"
 	playerRepo "github.com/KirkDiggler/ronnied/internal/repositories/player"
 )
@@ -74,7 +74,7 @@ type Config struct {
 	// Repository dependencies
 	GameRepo        gameRepo.Repository
 	PlayerRepo      playerRepo.Repository
-	DrinkLedgerRepo ledgerRepo.Repository
+	DrinkLedgerRepo drinkLedgerRepo.Repository
 
 	// Service dependencies
 	DiceRoller    dice.Roller

@@ -244,17 +244,34 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 	})
 	if err != nil {
 		log.Printf("Error joining game: %v", err)
-		if err == game.ErrInvalidGameState {
-			// Get a friendly error message from the messaging service
-			errorMsgOutput, msgErr := b.messagingService.GetErrorMessage(ctx, &messaging.GetErrorMessageInput{
-				ErrorType: "invalid_game_state",
-			})
-			if msgErr != nil {
-				return RespondWithEphemeralMessage(s, i, "Too late to join this round! Wait for the next game to start.")
-			}
-			return RespondWithEphemeralMessage(s, i, errorMsgOutput.Message)
+		
+		// Map the error to an error type for the messaging service
+		var errorType string
+		switch err {
+		case game.ErrGameActive:
+			errorType = "game_active"
+		case game.ErrGameRollOff:
+			errorType = "game_roll_off"
+		case game.ErrGameCompleted:
+			errorType = "game_completed"
+		case game.ErrGameFull:
+			errorType = "game_full"
+		case game.ErrInvalidGameState:
+			errorType = "invalid_game_state"
+		default:
+			// For any other error, just return the error message
+			return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to join game: %v", err))
 		}
-		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to join game: %v", err))
+		
+		// Get a friendly error message from the messaging service
+		errorMsgOutput, msgErr := b.messagingService.GetErrorMessage(ctx, &messaging.GetErrorMessageInput{
+			ErrorType: errorType,
+		})
+		if msgErr != nil {
+			// If messaging service fails, use a generic message
+			return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to join game: %v", err))
+		}
+		return RespondWithEphemeralMessage(s, i, errorMsgOutput.Message)
 	}
 
 	// Update the game message

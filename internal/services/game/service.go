@@ -201,9 +201,26 @@ func (s *service) JoinGame(ctx context.Context, input *JoinGameInput) (*JoinGame
 		}
 	}
 
-	// If player is not already in the game and the game is not in waiting state, they cannot join
-	if !playerAlreadyInGame && game.Status != models.GameStatusWaiting {
-		return nil, ErrInvalidGameState
+	// If player is not already in the game, check if they can join based on game state
+	if !playerAlreadyInGame {
+		// Return specific error based on game state
+		switch game.Status {
+		case models.GameStatusActive:
+			return nil, ErrGameActive
+		case models.GameStatusRollOff:
+			return nil, ErrGameRollOff
+		case models.GameStatusCompleted:
+			return nil, ErrGameCompleted
+		case models.GameStatusWaiting:
+			// Check if the game is full
+			if len(game.Participants) >= s.maxPlayers {
+				return nil, ErrGameFull
+			}
+			// Game is waiting and not full, so player can join
+		default:
+			// Unknown game status
+			return nil, ErrInvalidGameState
+		}
 	}
 
 	// If player is already in the game, just return success
@@ -212,11 +229,6 @@ func (s *service) JoinGame(ctx context.Context, input *JoinGameInput) (*JoinGame
 			Success:       true,
 			AlreadyJoined: true,
 		}, nil
-	}
-
-	// Check if the game is full
-	if len(game.Participants) >= s.maxPlayers {
-		return nil, ErrGameFull
 	}
 
 	// Check if player already exists
