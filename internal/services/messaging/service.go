@@ -226,76 +226,168 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 	}
 
 	var title, message string
+	isPersonal := input.IsPersonalMessage
 
 	// Generate dynamic messages based on roll value
 	switch {
 	case input.IsCriticalHit:
 		// Critical hit (6)
-		titles := []string{
-			"CRITICAL HIT!",
-			"BOOM! Critical Hit!",
-			"Natural 6!",
-			"Perfect Roll!",
-			"MAXIMUM DAMAGE!",
+		if isPersonal {
+			titles := []string{
+				"CRITICAL HIT!",
+				"BOOM! Critical Hit!",
+				"Natural 6!",
+				"Perfect Roll!",
+				"MAXIMUM DAMAGE!",
+			}
+			
+			messages := []string{
+				"You rolled a 6! Time to make someone drink!",
+				"Incredible! You just rolled a 6 and get to assign a drink!",
+				"You're on fire! A perfect 6 means someone's about to get thirsty!",
+				"The dice gods favor you today! That's a 6! Choose your victim!",
+				"CRITICAL HIT! You rolled a 6 and now have the power to make someone drink!",
+			}
+			
+			title = titles[rand.Intn(len(titles))]
+			message = messages[rand.Intn(len(messages))]
+		} else {
+			titles := []string{
+				"CRITICAL HIT!",
+				"BOOM! Critical Hit!",
+				"Natural 6!",
+				"Perfect Roll!",
+				"MAXIMUM DAMAGE!",
+			}
+			
+			messages := []string{
+				fmt.Sprintf("%s rolled a 6! Time to make someone drink!", input.PlayerName),
+				fmt.Sprintf("Incredible! %s just rolled a 6 and gets to assign a drink!", input.PlayerName),
+				fmt.Sprintf("%s is on fire! A perfect 6 means someone's about to get thirsty!", input.PlayerName),
+				fmt.Sprintf("The dice gods favor %s today! That's a 6! Choose your victim!", input.PlayerName),
+				fmt.Sprintf("CRITICAL HIT! %s rolled a 6 and now has the power to make someone drink!", input.PlayerName),
+			}
+			
+			title = titles[rand.Intn(len(titles))]
+			message = messages[rand.Intn(len(messages))]
 		}
-		
-		messages := []string{
-			fmt.Sprintf("%s rolled a 6! Time to make someone drink!", input.PlayerName),
-			fmt.Sprintf("Incredible! %s just rolled a 6 and gets to assign a drink!", input.PlayerName),
-			fmt.Sprintf("%s is on fire! A perfect 6 means someone's about to get thirsty!", input.PlayerName),
-			fmt.Sprintf("The dice gods favor %s today! That's a 6! Choose your victim!", input.PlayerName),
-			fmt.Sprintf("CRITICAL HIT! %s rolled a 6 and now has the power to make someone drink!", input.PlayerName),
-		}
-		
-		title = titles[rand.Intn(len(titles))]
-		message = messages[rand.Intn(len(messages))]
 		
 	case input.IsCriticalFail:
 		// Critical fail (1)
-		titles := []string{
-			"CRITICAL FAIL!",
-			"Ouch! Snake Eyes!",
-			"Natural 1!",
-			"MINIMUM DAMAGE!",
-			"Better luck next time!",
+		if isPersonal {
+			titles := []string{
+				"CRITICAL FAIL!",
+				"Ouch! Snake Eyes!",
+				"Natural 1!",
+				"MINIMUM DAMAGE!",
+				"Better luck next time!",
+			}
+			
+			messages := []string{
+				"You rolled a 1! Time to drink up!",
+				"Oof! You just rolled a 1. Bottoms up!",
+				"You angered the dice gods with that 1! Drink up, friend!",
+				"The dice have spoken! You rolled a 1 and must take a drink!",
+				"CRITICAL FAIL! You rolled a 1 and have to drink!",
+			}
+			
+			title = titles[rand.Intn(len(titles))]
+			message = messages[rand.Intn(len(messages))]
+		} else {
+			titles := []string{
+				"CRITICAL FAIL!",
+				"Ouch! Snake Eyes!",
+				"Natural 1!",
+				"MINIMUM DAMAGE!",
+				"Better luck next time!",
+			}
+			
+			messages := []string{
+				fmt.Sprintf("%s rolled a 1! Time to drink up!", input.PlayerName),
+				fmt.Sprintf("Oof! %s just rolled a 1. Bottoms up!", input.PlayerName),
+				fmt.Sprintf("%s angered the dice gods with that 1! Drink up, friend!", input.PlayerName),
+				fmt.Sprintf("The dice have spoken! %s rolled a 1 and must take a drink!", input.PlayerName),
+				fmt.Sprintf("CRITICAL FAIL! %s rolled a 1 and has to drink!", input.PlayerName),
+			}
+			
+			title = titles[rand.Intn(len(titles))]
+			message = messages[rand.Intn(len(messages))]
 		}
-		
-		messages := []string{
-			fmt.Sprintf("%s rolled a 1! Time to drink up!", input.PlayerName),
-			fmt.Sprintf("Oof! %s just rolled a 1. Bottoms up!", input.PlayerName),
-			fmt.Sprintf("%s angered the dice gods with that 1! Drink up, friend!", input.PlayerName),
-			fmt.Sprintf("The dice have spoken! %s rolled a 1 and must take a drink!", input.PlayerName),
-			fmt.Sprintf("CRITICAL FAIL! %s rolled a 1 and has to drink!", input.PlayerName),
-		}
-		
-		title = titles[rand.Intn(len(titles))]
-		message = messages[rand.Intn(len(messages))]
 		
 	default:
 		// Normal roll (2-5)
-		titles := []string{
-			fmt.Sprintf("You rolled a %d!", input.RollValue),
-			fmt.Sprintf("It's a %d!", input.RollValue),
-			fmt.Sprintf("%d Points!", input.RollValue),
-			fmt.Sprintf("Roll: %d", input.RollValue),
-			fmt.Sprintf("The dice shows %d", input.RollValue),
+		if isPersonal {
+			titles := []string{
+				fmt.Sprintf("You rolled a %d!", input.RollValue),
+				fmt.Sprintf("It's a %d!", input.RollValue),
+				fmt.Sprintf("%d Points!", input.RollValue),
+				fmt.Sprintf("Roll: %d", input.RollValue),
+				fmt.Sprintf("The dice shows %d", input.RollValue),
+			}
+			
+			messages := []string{
+				fmt.Sprintf("You rolled a %d. Not bad!", input.RollValue),
+				fmt.Sprintf("The dice landed on %d.", input.RollValue),
+				fmt.Sprintf("Your roll: %d - Keep trying!", input.RollValue),
+				fmt.Sprintf("A solid %d!", input.RollValue),
+				fmt.Sprintf("You rolled %d. The game continues!", input.RollValue),
+			}
+			
+			title = titles[rand.Intn(len(titles))]
+			message = messages[rand.Intn(len(messages))]
+		} else {
+			titles := []string{
+				fmt.Sprintf("%d!", input.RollValue),
+				fmt.Sprintf("It's a %d!", input.RollValue),
+				fmt.Sprintf("%d Points!", input.RollValue),
+				fmt.Sprintf("Roll: %d", input.RollValue),
+				fmt.Sprintf("The dice shows %d", input.RollValue),
+			}
+			
+			messages := []string{
+				fmt.Sprintf("%s rolled a %d. Not bad!", input.PlayerName, input.RollValue),
+				fmt.Sprintf("The dice landed on %d for %s.", input.RollValue, input.PlayerName),
+				fmt.Sprintf("%s's roll: %d - Keep trying!", input.PlayerName, input.RollValue),
+				fmt.Sprintf("A solid %d from %s!", input.RollValue, input.PlayerName),
+				fmt.Sprintf("%s rolled %d. The game continues!", input.PlayerName, input.RollValue),
+			}
+			
+			title = titles[rand.Intn(len(titles))]
+			message = messages[rand.Intn(len(messages))]
 		}
-		
-		messages := []string{
-			fmt.Sprintf("%s rolled a %d. Not bad!", input.PlayerName, input.RollValue),
-			fmt.Sprintf("The dice landed on %d for %s.", input.RollValue, input.PlayerName),
-			fmt.Sprintf("%s's roll: %d - Keep trying!", input.PlayerName, input.RollValue),
-			fmt.Sprintf("A solid %d from %s!", input.RollValue, input.PlayerName),
-			fmt.Sprintf("%s rolled %d. The game continues!", input.PlayerName, input.RollValue),
-		}
-		
-		title = titles[rand.Intn(len(titles))]
-		message = messages[rand.Intn(len(messages))]
 	}
 
 	return &GetRollResultMessageOutput{
 		Title:   title,
 		Message: message,
+	}, nil
+}
+
+// GetGameStartedMessage returns a dynamic message for when a game is started
+func (s *service) GetGameStartedMessage(ctx context.Context, input *GetGameStartedMessageInput) (*GetGameStartedMessageOutput, error) {
+	if input == nil {
+		return nil, errors.New("input cannot be nil")
+	}
+
+	// Create a variety of fun messages for when a game is started
+	messages := []string{
+		"Game Started! Click the button below to roll your dice.",
+		fmt.Sprintf("The game is ON! %d players are ready to roll. Your turn now!", input.PlayerCount),
+		"Let the dice decide your fate! Roll now!",
+		"Time to test your luck! Click to roll the dice!",
+		"The game has begun! Roll the dice and see what destiny has in store!",
+		"Ready, set, ROLL! Click the button to throw your dice!",
+		fmt.Sprintf("Game's on! You and %d other brave souls are about to tempt fate!", input.PlayerCount-1),
+		"May the odds be ever in your favor! Roll your dice!",
+		"It's dice time! Click to roll and see if luck is on your side today!",
+		"Game started! Will you roll a critical hit or a critical fail? Find out now!",
+	}
+
+	// Select a random message
+	selectedMessage := messages[s.rand.Intn(len(messages))]
+
+	return &GetGameStartedMessageOutput{
+		Message: selectedMessage,
 	}, nil
 }
 

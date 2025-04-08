@@ -78,10 +78,11 @@ func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate
 	}
 
 	rollResultOutput, err := messagingService.GetRollResultMessage(ctx, &messaging.GetRollResultMessageInput{
-		PlayerName:     output.PlayerName,
-		RollValue:      output.RollValue,
-		IsCriticalHit:  output.IsCriticalHit,
-		IsCriticalFail: output.RollValue == 1, // Assuming 1 is critical fail
+		PlayerName:       output.PlayerName,
+		RollValue:        output.RollValue,
+		IsCriticalHit:    output.IsCriticalHit,
+		IsCriticalFail:   output.RollValue == 1, // Assuming 1 is critical fail
+		IsPersonalMessage: true, // This is an ephemeral message to the player
 	})
 
 	// Create embeds - either with messaging service output or fallback to static content

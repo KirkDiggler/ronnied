@@ -92,15 +92,27 @@ type GetGameStatusMessageOutput struct {
 
 // GetRollResultMessageInput contains the input for GetRollResultMessage
 type GetRollResultMessageInput struct {
-	PlayerName     string
-	RollValue      int
-	IsCriticalHit  bool
-	IsCriticalFail bool
+	PlayerName       string
+	RollValue        int
+	IsCriticalHit    bool
+	IsCriticalFail   bool
+	IsPersonalMessage bool // Indicates if this is a personal/ephemeral message to the player
 }
 
 // GetRollResultMessageOutput contains the output for GetRollResultMessage
 type GetRollResultMessageOutput struct {
 	Title   string
+	Message string
+}
+
+// GetGameStartedMessageInput contains the input for GetGameStartedMessage
+type GetGameStartedMessageInput struct {
+	CreatorName string
+	PlayerCount int
+}
+
+// GetGameStartedMessageOutput contains the output for GetGameStartedMessage
+type GetGameStartedMessageOutput struct {
 	Message string
 }
 

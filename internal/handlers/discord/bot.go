@@ -361,11 +361,25 @@ func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.Interacti
 		},
 	}
 
+	// Get a dynamic game started message from the messaging service
+	startMsgOutput, err := b.messagingService.GetGameStartedMessage(ctx, &messaging.GetGameStartedMessageInput{
+		CreatorName: existingGame.Game.GetCreatorName(),
+		PlayerCount: len(existingGame.Game.Participants),
+	})
+
+	// Default message if the messaging service fails
+	gameStartedMessage := "Game Started! Click the button below to roll your dice."
+	if err == nil {
+		gameStartedMessage = startMsgOutput.Message
+	} else {
+		log.Printf("Error getting game started message: %v", err)
+	}
+
 	// Send an ephemeral message to the user who started the game
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: "Game Started! Click the button below to roll your dice.",
+			Content: gameStartedMessage,
 			Flags:   discordgo.MessageFlagsEphemeral,
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{

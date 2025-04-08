@@ -16,6 +16,9 @@ type Service interface {
 	// GetRollResultMessage returns a dynamic message for a dice roll result
 	GetRollResultMessage(ctx context.Context, input *GetRollResultMessageInput) (*GetRollResultMessageOutput, error)
 	
+	// GetGameStartedMessage returns a dynamic message for when a game is started
+	GetGameStartedMessage(ctx context.Context, input *GetGameStartedMessageInput) (*GetGameStartedMessageOutput, error)
+	
 	// GetErrorMessage returns a user-friendly error message
 	GetErrorMessage(ctx context.Context, input *GetErrorMessageInput) (*GetErrorMessageOutput, error)
 }
