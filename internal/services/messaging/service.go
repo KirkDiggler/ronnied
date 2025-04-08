@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"time"
-	
+
 	"github.com/KirkDiggler/ronnied/internal/models"
 )
 
@@ -22,7 +22,7 @@ const (
 type service struct {
 	// We'll add a repository here later when we implement message storage
 	// repository Repository
-	
+
 	// Random number generator for selecting random messages
 	rand *rand.Rand
 }
@@ -31,7 +31,7 @@ type service struct {
 func NewService(config *ServiceConfig) (Service, error) {
 	// Create a new random source with the current time as seed
 	source := rand.NewSource(time.Now().UnixNano())
-	
+
 	return &service{
 		// repository: config.Repository,
 		rand: rand.New(source),
@@ -43,14 +43,14 @@ func (s *service) GetJoinGameMessage(ctx context.Context, input *GetJoinGameMess
 	// In the future, we could fetch these from a repository
 	var messages []string
 	var tone MessageTone
-	
+
 	// Set default tone if not specified
 	if input.PreferredTone == "" {
 		tone = ToneFunny
 	} else {
 		tone = input.PreferredTone
 	}
-	
+
 	// Select messages based on game status and whether player already joined
 	if input.AlreadyJoined {
 		if input.GameStatus.IsWaiting() {
@@ -59,6 +59,7 @@ func (s *service) GetJoinGameMessage(ctx context.Context, input *GetJoinGameMess
 				"Patience, grasshopper! You're already in this game.",
 				"Double-dipping, are we? You're already in this game!",
 				"You're already on the roster! Take a seat and grab a drink.",
+				"Look man, I would say I would pour you a drink, but I'm already busy.",
 			}
 		} else if input.GameStatus.IsActive() {
 			messages = []string{
@@ -66,6 +67,7 @@ func (s *service) GetJoinGameMessage(ctx context.Context, input *GetJoinGameMess
 				"Found your dice button again! Try not to drop it this time.",
 				"Look who came back for their dice! Roll away, my friend.",
 				"The dice await your command... again. Let's hope they're luckier this time!",
+				"Did you lose your dice... again? here you go bud",
 			}
 		} else if input.GameStatus.IsRollOff() {
 			messages = []string{
@@ -73,6 +75,11 @@ func (s *service) GetJoinGameMessage(ctx context.Context, input *GetJoinGameMess
 				"Hold your horses! There's a roll-off happening.",
 				"Roll-off in progress! This is where legends (and hangovers) are made.",
 				"The tension builds during this roll-off! Stay tuned for your turn.",
+			}
+		} else if input.GameStatus.IsCompleted() {
+			messages = []string{
+				"You're still here? it's over, go home, you're drunk",
+				"I know, I miss that game too, maybe start another one?",
 			}
 		} else {
 			messages = []string{
@@ -91,10 +98,10 @@ func (s *service) GetJoinGameMessage(ctx context.Context, input *GetJoinGameMess
 			"Look who decided to join! The dice gods await your tribute.",
 		}
 	}
-	
+
 	// Select a random message
 	selectedMessage := messages[s.rand.Intn(len(messages))]
-	
+
 	return &GetJoinGameMessageOutput{
 		Message: selectedMessage,
 		Tone:    tone,
@@ -108,9 +115,9 @@ func (s *service) GetJoinGameErrorMessage(ctx context.Context, input *GetJoinGam
 	if tone == "" {
 		tone = MessageToneFunny // Default to funny tone
 	}
-	
+
 	var messages []string
-	
+
 	// Select messages based on error type
 	switch input.ErrorType {
 	case "game_active":
@@ -144,10 +151,10 @@ func (s *service) GetJoinGameErrorMessage(ctx context.Context, input *GetJoinGam
 			fmt.Sprintf("No dice, %s! Something's preventing you from joining. Try again or wait for a new game.", input.PlayerName),
 		}
 	}
-	
+
 	// Select a random message
 	selectedMessage := messages[s.rand.Intn(len(messages))]
-	
+
 	return &GetJoinGameErrorMessageOutput{
 		Title:   "Error Joining Game",
 		Message: selectedMessage,
@@ -161,9 +168,9 @@ func (s *service) GetGameStatusMessage(ctx context.Context, input *GetGameStatus
 	if tone == "" {
 		tone = MessageToneFunny // Default to funny tone
 	}
-	
+
 	var messages []string
-	
+
 	// Select messages based on game status
 	switch input.GameStatus {
 	case models.GameStatusWaiting:
@@ -204,7 +211,7 @@ func (s *service) GetGameStatusMessage(ctx context.Context, input *GetGameStatus
 			Message: "Ronnied drinking game in progress. May the odds be in your favor!",
 		}, nil
 	}
-	
+
 	// Select a random message from the appropriate list
 	if len(messages) > 0 {
 		randomIndex := rand.Intn(len(messages))
@@ -212,7 +219,7 @@ func (s *service) GetGameStatusMessage(ctx context.Context, input *GetGameStatus
 			Message: messages[randomIndex],
 		}, nil
 	}
-	
+
 	// Fallback message if no messages available
 	return &GetGameStatusMessageOutput{
 		Message: "Ronnied drinking game in progress. May the odds be in your favor!",
@@ -234,13 +241,13 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 		// Critical hit (6)
 		if isPersonal {
 			titles := []string{
-				"CRITICAL HIT!",
+				"CRIT!",
 				"BOOM! Critical Hit!",
-				"Natural 6!",
+				"Nat 6!",
 				"Perfect Roll!",
 				"MAXIMUM DAMAGE!",
 			}
-			
+
 			messages := []string{
 				"You rolled a 6! Time to make someone drink!",
 				"Incredible! You just rolled a 6 and get to assign a drink!",
@@ -248,18 +255,18 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				"The dice gods favor you today! That's a 6! Choose your victim!",
 				"CRITICAL HIT! You rolled a 6 and now have the power to make someone drink!",
 			}
-			
+
 			title = titles[rand.Intn(len(titles))]
 			message = messages[rand.Intn(len(messages))]
 		} else {
 			titles := []string{
-				"CRITICAL HIT!",
+				"CRIT!",
 				"BOOM! Critical Hit!",
-				"Natural 6!",
+				"Nat 6!",
 				"Perfect Roll!",
 				"MAXIMUM DAMAGE!",
 			}
-			
+
 			messages := []string{
 				fmt.Sprintf("%s rolled a 6! Time to make someone drink!", input.PlayerName),
 				fmt.Sprintf("Incredible! %s just rolled a 6 and gets to assign a drink!", input.PlayerName),
@@ -267,41 +274,43 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				fmt.Sprintf("The dice gods favor %s today! That's a 6! Choose your victim!", input.PlayerName),
 				fmt.Sprintf("CRITICAL HIT! %s rolled a 6 and now has the power to make someone drink!", input.PlayerName),
 			}
-			
+
 			title = titles[rand.Intn(len(titles))]
 			message = messages[rand.Intn(len(messages))]
 		}
-		
+
 	case input.IsCriticalFail:
 		// Critical fail (1)
 		if isPersonal {
 			titles := []string{
 				"CRITICAL FAIL!",
-				"Ouch! Snake Eyes!",
-				"Natural 1!",
+				"Ouch! Snake Eye!",
+				"Nat 1!",
 				"MINIMUM DAMAGE!",
 				"Better luck next time!",
+				"I didn't see it, was it a good roll?",
 			}
-			
+
 			messages := []string{
-				"You rolled a 1! Time to drink up!",
+				"You rolled a 1! Drink up!",
 				"Oof! You just rolled a 1. Bottoms up!",
 				"You angered the dice gods with that 1! Drink up, friend!",
-				"The dice have spoken! You rolled a 1 and must take a drink!",
+				"Ronnie has spoken! You rolled a 1 and must take a drink!",
 				"CRITICAL FAIL! You rolled a 1 and have to drink!",
 			}
-			
+
 			title = titles[rand.Intn(len(titles))]
 			message = messages[rand.Intn(len(messages))]
 		} else {
 			titles := []string{
 				"CRITICAL FAIL!",
-				"Ouch! Snake Eyes!",
-				"Natural 1!",
+				"Ouch! Snake Eye!",
+				"Nat 1!",
 				"MINIMUM DAMAGE!",
 				"Better luck next time!",
+				":trumpet: Sad Trumpet :(",
 			}
-			
+
 			messages := []string{
 				fmt.Sprintf("%s rolled a 1! Time to drink up!", input.PlayerName),
 				fmt.Sprintf("Oof! %s just rolled a 1. Bottoms up!", input.PlayerName),
@@ -309,11 +318,11 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				fmt.Sprintf("The dice have spoken! %s rolled a 1 and must take a drink!", input.PlayerName),
 				fmt.Sprintf("CRITICAL FAIL! %s rolled a 1 and has to drink!", input.PlayerName),
 			}
-			
+
 			title = titles[rand.Intn(len(titles))]
 			message = messages[rand.Intn(len(messages))]
 		}
-		
+
 	default:
 		// Normal roll (2-5)
 		if isPersonal {
@@ -324,15 +333,15 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				fmt.Sprintf("Roll: %d", input.RollValue),
 				fmt.Sprintf("The dice shows %d", input.RollValue),
 			}
-			
+
 			messages := []string{
-				fmt.Sprintf("You rolled a %d. Not bad!", input.RollValue),
-				fmt.Sprintf("The dice landed on %d.", input.RollValue),
+				fmt.Sprintf("You rolled a %d. Not bad!, not good either but not bad?", input.RollValue),
+				fmt.Sprintf("The dice landed on %d. I guess that could work", input.RollValue),
 				fmt.Sprintf("Your roll: %d - Keep trying!", input.RollValue),
-				fmt.Sprintf("A solid %d!", input.RollValue),
+				fmt.Sprintf("A solid %d! That works for you in your income bracket", input.RollValue),
 				fmt.Sprintf("You rolled %d. The game continues!", input.RollValue),
 			}
-			
+
 			title = titles[rand.Intn(len(titles))]
 			message = messages[rand.Intn(len(messages))]
 		} else {
@@ -343,7 +352,7 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				fmt.Sprintf("Roll: %d", input.RollValue),
 				fmt.Sprintf("The dice shows %d", input.RollValue),
 			}
-			
+
 			messages := []string{
 				fmt.Sprintf("%s rolled a %d. Not bad!", input.PlayerName, input.RollValue),
 				fmt.Sprintf("The dice landed on %d for %s.", input.RollValue, input.PlayerName),
@@ -351,7 +360,7 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				fmt.Sprintf("A solid %d from %s!", input.RollValue, input.PlayerName),
 				fmt.Sprintf("%s rolled %d. The game continues!", input.PlayerName, input.RollValue),
 			}
-			
+
 			title = titles[rand.Intn(len(titles))]
 			message = messages[rand.Intn(len(messages))]
 		}
@@ -395,14 +404,14 @@ func (s *service) GetGameStartedMessage(ctx context.Context, input *GetGameStart
 func (s *service) GetErrorMessage(ctx context.Context, input *GetErrorMessageInput) (*GetErrorMessageOutput, error) {
 	var messages []string
 	var tone MessageTone
-	
+
 	// Set default tone if not specified
 	if input.PreferredTone == "" {
 		tone = ToneFunny
 	} else {
 		tone = input.PreferredTone
 	}
-	
+
 	// Select messages based on error type
 	switch input.ErrorType {
 	case "game_active":
@@ -462,10 +471,10 @@ func (s *service) GetErrorMessage(ctx context.Context, input *GetErrorMessageInp
 			"Technical difficulties! The dice are being recalibrated.",
 		}
 	}
-	
+
 	// Select a random message
 	selectedMessage := messages[s.rand.Intn(len(messages))]
-	
+
 	return &GetErrorMessageOutput{
 		Message: selectedMessage,
 		Tone:    tone,

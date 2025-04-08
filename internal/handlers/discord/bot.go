@@ -423,6 +423,18 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		}
 	}
 
+	// If the game is completed, return a specific message
+	if existingGame.Game.Status == models.GameStatusCompleted {
+		// Get a friendly error message from the messaging service
+		errorMsgOutput, msgErr := b.messagingService.GetErrorMessage(ctx, &messaging.GetErrorMessageInput{
+			ErrorType: "game_completed",
+		})
+		if msgErr != nil {
+			return RespondWithEphemeralMessage(s, i, "This game is already completed. Start a new game to roll again.")
+		}
+		return RespondWithEphemeralMessage(s, i, errorMsgOutput.Message)
+	}
+
 	// Roll the dice
 	rollOutput, err := b.gameService.RollDice(ctx, &game.RollDiceInput{
 		GameID:   existingGame.Game.ID,
@@ -449,7 +461,33 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 			}
 		}
 
-		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to roll dice: %v", err))
+		// Map the error to an error type for the messaging service
+		var errorType string
+		switch err {
+		case game.ErrGameActive:
+			errorType = "game_active"
+		case game.ErrGameRollOff:
+			errorType = "game_roll_off"
+		case game.ErrGameCompleted:
+			errorType = "game_completed"
+		case game.ErrInvalidGameState:
+			errorType = "invalid_game_state"
+		case game.ErrPlayerNotInGame:
+			return RespondWithEphemeralMessage(s, i, "You are not part of this game.")
+		default:
+			// For any other error, just return the error message
+			return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to roll dice: %v", err))
+		}
+
+		// Get a friendly error message from the messaging service
+		errorMsgOutput, msgErr := b.messagingService.GetErrorMessage(ctx, &messaging.GetErrorMessageInput{
+			ErrorType: errorType,
+		})
+		if msgErr != nil {
+			// If messaging service fails, use a generic message
+			return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to roll dice: %v", err))
+		}
+		return RespondWithEphemeralMessage(s, i, errorMsgOutput.Message)
 	}
 
 	// Update the game message in the channel
@@ -460,7 +498,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		return RespondWithEphemeralMessage(s, i, "You need to roll in the roll-off game. Check the game message for details.")
 	}
 
-	// Render the response using the dedicated rendering function
+	// Render the roll response
 	return renderRollDiceResponse(s, i, rollOutput, b.messagingService)
 }
 
