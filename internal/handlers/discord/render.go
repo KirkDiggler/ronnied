@@ -6,7 +6,6 @@ import (
 	"log"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/KirkDiggler/ronnied/internal/models"
 	"github.com/KirkDiggler/ronnied/internal/services/game"
@@ -67,7 +66,7 @@ func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate
 
 	// Get a dynamic roll result message from the messaging service
 	ctx := context.Background()
-	
+
 	// Determine color based on roll result
 	var embedColor int
 	if output.IsCriticalHit {
@@ -77,18 +76,18 @@ func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate
 	} else {
 		embedColor = 0x3498db // Blue for normal rolls
 	}
-	
+
 	rollResultOutput, err := messagingService.GetRollResultMessage(ctx, &messaging.GetRollResultMessageInput{
-		PlayerName:   output.PlayerName,
-		RollValue:    output.RollValue,
-		IsCriticalHit: output.IsCriticalHit,
+		PlayerName:     output.PlayerName,
+		RollValue:      output.RollValue,
+		IsCriticalHit:  output.IsCriticalHit,
 		IsCriticalFail: output.RollValue == 1, // Assuming 1 is critical fail
 	})
-	
+
 	// Create embeds - either with messaging service output or fallback to static content
 	var embeds []*discordgo.MessageEmbed
 	var contentText string
-	
+
 	if err != nil {
 		log.Printf("Failed to get roll result message: %v", err)
 		// Fallback to static description if messaging service fails
@@ -194,9 +193,6 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 				Value:  game.CreatedAt.Format("Jan 2, 2006 3:04 PM"),
 				Inline: true,
 			},
-		},
-		Footer: &discordgo.MessageEmbedFooter{
-			Text: fmt.Sprintf("Game ID: %s • %s", game.ID, time.Now().Format("Jan 2, 2006 3:04 PM")),
 		},
 	}
 
