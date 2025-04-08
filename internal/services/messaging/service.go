@@ -2,8 +2,19 @@ package messaging
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"time"
+	
+	"github.com/KirkDiggler/ronnied/internal/models"
+)
+
+// MessageTones
+const (
+	MessageToneNeutral     MessageTone = "neutral"
+	MessageToneFunny       MessageTone = "funny"
+	MessageToneSarcastic   MessageTone = "sarcastic"
+	MessageToneEncouraging MessageTone = "encouraging"
 )
 
 // service implements the Service interface
@@ -59,7 +70,7 @@ func (s *service) GetJoinGameMessage(ctx context.Context, input *GetJoinGameMess
 			messages = []string{
 				"Patience, young padawan! The roll-off is in progress. Your turn will come.",
 				"Hold your horses! There's a roll-off happening.",
-				"Roll-off in progress! Your moment of glory (or shame) is coming soon.",
+				"Roll-off in progress! This is where legends (and hangovers) are made.",
 				"The tension builds during this roll-off! Stay tuned for your turn.",
 			}
 		} else {
@@ -89,64 +100,120 @@ func (s *service) GetJoinGameMessage(ctx context.Context, input *GetJoinGameMess
 	}, nil
 }
 
-// GetGameStatusMessage returns a message describing the current game status
-func (s *service) GetGameStatusMessage(ctx context.Context, input *GetGameStatusMessageInput) (*GetGameStatusMessageOutput, error) {
-	var messages []string
-	var tone MessageTone
-	
+// GetJoinGameErrorMessage returns an error message for when a player fails to join a game
+func (s *service) GetJoinGameErrorMessage(ctx context.Context, input *GetJoinGameErrorMessageInput) (*GetJoinGameErrorMessageOutput, error) {
 	// Set default tone if not specified
-	if input.PreferredTone == "" {
-		tone = ToneNeutral
-	} else {
-		tone = input.PreferredTone
+	tone := input.Tone
+	if tone == "" {
+		tone = MessageToneFunny // Default to funny tone
 	}
 	
-	// Select messages based on game status
-	if input.GameStatus.IsWaiting() {
-		if input.ParticipantCount == 0 {
-			messages = []string{
-				"A new game is forming! Who will be the first to join?",
-				"Fresh game, no players yet. Don't be shy!",
-				"The dice are lonely. Won't someone join them?",
-				"Game night is starting! Who's in?",
-			}
-		} else {
-			messages = []string{
-				"Waiting for more players or for the game to begin!",
-				"The dice are warming up! Waiting for the game to start.",
-				"Players are gathering... who else wants in?",
-				"Almost ready to roll! Just waiting for the signal.",
-			}
-		}
-	} else if input.GameStatus.IsActive() {
+	var messages []string
+	
+	// Select messages based on error type
+	switch input.ErrorType {
+	case "game_active":
 		messages = []string{
-			"Game on! Time to roll those dice!",
-			"The game is afoot! Roll for your dignity!",
-			"Dice are hot! Who will be lucky today?",
-			"Roll or forever hold your peace!",
+			fmt.Sprintf("Sorry, %s! The game is already in progress. Wait for the next round to show off your dice skills.", input.PlayerName),
+			fmt.Sprintf("Whoa there, %s! This train has already left the station. Catch the next game!", input.PlayerName),
+			fmt.Sprintf("Too late, %s! The dice are already rolling. Next time, be quicker on the draw!", input.PlayerName),
 		}
-	} else if input.GameStatus.IsRollOff() {
+	case "game_completed":
 		messages = []string{
-			"Roll-off in progress! Who will emerge victorious?",
-			"The tension builds during this epic roll-off!",
-			"It's a roll-off! May the odds be ever in your favor.",
-			"Roll-off time! This is where legends are made.",
+			fmt.Sprintf("%s, this game is over! But don't worry, there's always another chance to lose... I mean play!", input.PlayerName),
+			fmt.Sprintf("Game's done, %s! You missed all the fun. Start a new one?", input.PlayerName),
+			fmt.Sprintf("Sorry %s, you can't join a finished game. That's like trying to board a plane that's already landed!", input.PlayerName),
 		}
-	} else {
+	case "game_roll_off":
 		messages = []string{
-			"Game complete! Check out who owes drinks!",
-			"That's a wrap! Time to pay your debts.",
-			"Game over! The tab awaits the unfortunate.",
-			"The dice have spoken! Time to settle up.",
+			fmt.Sprintf("%s, there's a roll-off in progress! Only the tied players get to participate in this showdown.", input.PlayerName),
+			fmt.Sprintf("Hold your horses, %s! This is a special tie-breaker round. Wait for the next full game.", input.PlayerName),
+			fmt.Sprintf("Nice try, %s, but roll-offs are invitation-only events. Wait for the next game to start!", input.PlayerName),
+		}
+	case "already_joined":
+		messages = []string{
+			fmt.Sprintf("%s, you're already in this game! One player, one set of dice - those are the rules.", input.PlayerName),
+			fmt.Sprintf("Easy there, %s! You're already part of this game. No need to join twice!", input.PlayerName),
+			fmt.Sprintf("Whoa, %s! You can't join twice. We know you're excited, but save some enthusiasm for the actual game!", input.PlayerName),
+		}
+	default:
+		messages = []string{
+			fmt.Sprintf("Sorry %s, you can't join the game right now. Try again later!", input.PlayerName),
+			fmt.Sprintf("Hmm, something went wrong, %s. The dice gods are not smiling upon your join attempt.", input.PlayerName),
+			fmt.Sprintf("No dice, %s! Something's preventing you from joining. Try again or wait for a new game.", input.PlayerName),
 		}
 	}
 	
 	// Select a random message
 	selectedMessage := messages[s.rand.Intn(len(messages))]
 	
-	return &GetGameStatusMessageOutput{
+	return &GetJoinGameErrorMessageOutput{
 		Message: selectedMessage,
-		Tone:    tone,
+	}, nil
+}
+
+// GetGameStatusMessage returns a dynamic message based on the game status
+func (s *service) GetGameStatusMessage(ctx context.Context, input *GetGameStatusMessageInput) (*GetGameStatusMessageOutput, error) {
+	// Set default tone if not specified
+	tone := input.Tone
+	if tone == "" {
+		tone = MessageToneFunny // Default to funny tone
+	}
+	
+	var messages []string
+	
+	// Select messages based on game status
+	switch input.GameStatus {
+	case models.GameStatusWaiting:
+		messages = []string{
+			"Gather 'round, brave souls! The dice await your courage (and your liver).",
+			"A new drinking game is forming. Join now or forever hold your sobriety!",
+			"Looking for players who can roll dice better than they can hold their liquor.",
+			fmt.Sprintf("We've got %d player(s) so far. The more the merrier (and drunker)!", input.ParticipantCount),
+			"Game night is loading... Please wait while we prepare the regrets for tomorrow morning.",
+		}
+	case models.GameStatusActive:
+		messages = []string{
+			"The game is afoot! Roll those dice and pray to the drinking gods.",
+			"May the odds be ever in your favor (but the drinks against you).",
+			"It's rolling time! Remember: a 6 means you're lucky, a 1 means you're thirsty.",
+			"Game in progress! Roll well or prepare to drink well.",
+			"The dice are hot, and soon your throat will be too! Roll wisely.",
+		}
+	case models.GameStatusRollOff:
+		messages = []string{
+			"ROLL-OFF! When regular drinking games aren't intense enough.",
+			"It's tie-breaker time! May the luckiest drinker win.",
+			"The tension mounts as our tied players face the ultimate test of luck.",
+			"Roll-off in progress! This is where legends (and hangovers) are made.",
+			"The dice gods demand a sacrifice... of sobriety! Roll to determine who drinks.",
+		}
+	case models.GameStatusCompleted:
+		messages = []string{
+			"Game over! Time to pay your liquid debts.",
+			"The dice have spoken, and they said 'drink up!'",
+			"Another game for the books (and another round for the losers).",
+			"Game complete! Remember: it's not about winning, it's about making friends drink.",
+			"The final tally is in. Bottoms up to the unlucky ones!",
+		}
+	default:
+		// Fallback message
+		return &GetGameStatusMessageOutput{
+			Message: "Ronnied drinking game in progress. May the odds be in your favor!",
+		}, nil
+	}
+	
+	// Select a random message from the appropriate list
+	if len(messages) > 0 {
+		randomIndex := rand.Intn(len(messages))
+		return &GetGameStatusMessageOutput{
+			Message: messages[randomIndex],
+		}, nil
+	}
+	
+	// Fallback message if no messages available
+	return &GetGameStatusMessageOutput{
+		Message: "Ronnied drinking game in progress. May the odds be in your favor!",
 	}, nil
 }
 

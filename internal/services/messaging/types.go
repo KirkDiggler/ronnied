@@ -1,6 +1,8 @@
 package messaging
 
-import "github.com/KirkDiggler/ronnied/internal/models"
+import (
+	"github.com/KirkDiggler/ronnied/internal/models"
+)
 
 // MessageType represents different categories of messages
 type MessageType string
@@ -63,25 +65,28 @@ type GetJoinGameMessageOutput struct {
 	Tone MessageTone
 }
 
-// GetGameStatusMessageInput contains parameters for getting a game status message
-type GetGameStatusMessageInput struct {
-	// GameStatus is the current status of the game
-	GameStatus models.GameStatus
-	
-	// ParticipantCount is the number of participants in the game
-	ParticipantCount int
-	
-	// PreferredTone is the preferred tone for the message (optional)
-	PreferredTone MessageTone
+// GetJoinGameErrorMessageInput is the input for GetJoinGameErrorMessage
+type GetJoinGameErrorMessageInput struct {
+	PlayerName string
+	ErrorType  string
+	Tone       MessageTone
 }
 
-// GetGameStatusMessageOutput contains the result of getting a game status message
-type GetGameStatusMessageOutput struct {
-	// Message is the generated message
+// GetJoinGameErrorMessageOutput is the output for GetJoinGameErrorMessage
+type GetJoinGameErrorMessageOutput struct {
 	Message string
-	
-	// Tone is the tone of the message
-	Tone MessageTone
+}
+
+// GetGameStatusMessageInput is the input for GetGameStatusMessage
+type GetGameStatusMessageInput struct {
+	GameStatus       models.GameStatus
+	ParticipantCount int
+	Tone             MessageTone
+}
+
+// GetGameStatusMessageOutput is the output for GetGameStatusMessage
+type GetGameStatusMessageOutput struct {
+	Message string
 }
 
 // GetRollResultMessageInput contains parameters for getting a roll result message
