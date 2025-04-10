@@ -85,6 +85,14 @@ func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate
 		IsPersonalMessage: true, // This is an ephemeral message to the player
 	})
 
+	// Get a supportive whisper message from Ronnie
+	rollWhisperOutput, whisperErr := messagingService.GetRollWhisperMessage(ctx, &messaging.GetRollWhisperMessageInput{
+		PlayerName:     output.PlayerName,
+		RollValue:      output.RollValue,
+		IsCriticalHit:  output.IsCriticalHit,
+		IsCriticalFail: output.RollValue == 1, // Assuming 1 is critical fail
+	})
+
 	// Create embeds - either with messaging service output or fallback to static content
 	var embeds []*discordgo.MessageEmbed
 	var contentText string
@@ -109,6 +117,20 @@ func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate
 			},
 		}
 		contentText = rollResultOutput.Title
+	}
+
+	// Add the whisper message as a second embed if available
+	if whisperErr == nil {
+		whisperEmbed := &discordgo.MessageEmbed{
+			Title:       "Ronnie whispers...",
+			Description: rollWhisperOutput.Message,
+			Color:       0x95a5a6, // Gray color for whispers
+			Footer: &discordgo.MessageEmbedFooter{
+				Text: "Just between us...",
+				IconURL: "https://cdn.discordapp.com/emojis/839903382661799966.png", // Optional: Add a whisper emoji
+			},
+		}
+		embeds = append(embeds, whisperEmbed)
 	}
 
 	// Check if this is a component interaction (button click)

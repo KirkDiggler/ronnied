@@ -21,4 +21,7 @@ type Service interface {
 	
 	// GetErrorMessage returns a user-friendly error message
 	GetErrorMessage(ctx context.Context, input *GetErrorMessageInput) (*GetErrorMessageOutput, error)
+	
+	// GetRollWhisperMessage returns a supportive whisper message after a roll
+	GetRollWhisperMessage(ctx context.Context, input *GetRollWhisperMessageInput) (*GetRollWhisperMessageOutput, error)
 }

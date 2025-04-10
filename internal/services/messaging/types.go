@@ -134,6 +134,33 @@ type GetErrorMessageOutput struct {
 	Tone MessageTone
 }
 
+// GetRollWhisperMessageInput contains parameters for getting a whisper message after a roll
+type GetRollWhisperMessageInput struct {
+	// PlayerName is the name of the player who rolled
+	PlayerName string
+	
+	// RollValue is the value that was rolled
+	RollValue int
+	
+	// IsCriticalHit indicates if the roll was a critical hit (e.g., 6)
+	IsCriticalHit bool
+	
+	// IsCriticalFail indicates if the roll was a critical fail (e.g., 1)
+	IsCriticalFail bool
+	
+	// PreferredTone is the preferred tone for the message (optional)
+	PreferredTone MessageTone
+}
+
+// GetRollWhisperMessageOutput contains the result of getting a whisper message
+type GetRollWhisperMessageOutput struct {
+	// Message is the generated whisper message
+	Message string
+	
+	// Tone is the tone of the message
+	Tone MessageTone
+}
+
 // ServiceConfig contains configuration for the messaging service
 type ServiceConfig struct {
 	// Repository is the repository for storing and retrieving messages
