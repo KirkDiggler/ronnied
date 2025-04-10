@@ -411,7 +411,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 
 	// Check if the game is in a state where players can roll
 	if existingGame.Game.Status == models.GameStatusWaiting {
-		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Waiting on %s to start the game.", existingGame.Game.GetCreatorName()))
+		log.Printf("Player %s is rolling in waiting state for game %s", userID, existingGame.Game.ID)
 	}
 
 	// For roll-offs, check if this player is eligible to roll

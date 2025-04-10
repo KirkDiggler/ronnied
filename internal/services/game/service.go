@@ -326,8 +326,8 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		return nil, ErrGameNotFound
 	}
 
-	// Check if game is active or in roll-off
-	if game.Status != models.GameStatusActive && game.Status != models.GameStatusRollOff {
+	// Check if game is active or in roll-off or waiting
+	if game.Status != models.GameStatusActive && game.Status != models.GameStatusRollOff && game.Status != models.GameStatusWaiting {
 		return nil, ErrInvalidGameState
 	}
 
@@ -541,8 +541,8 @@ func (s *service) AssignDrink(ctx context.Context, input *AssignDrinkInput) (*As
 		return nil, ErrGameNotFound
 	}
 
-	// Check if game is active
-	if game.Status != models.GameStatusActive && game.Status != models.GameStatusRollOff {
+	// Check if game is active or waiting
+	if game.Status != models.GameStatusActive && game.Status != models.GameStatusRollOff && game.Status != models.GameStatusWaiting {
 		return nil, ErrInvalidGameState
 	}
 

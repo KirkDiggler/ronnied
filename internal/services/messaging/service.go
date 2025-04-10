@@ -136,8 +136,7 @@ func (s *service) GetJoinGameErrorMessage(ctx context.Context, input *GetJoinGam
 		messages = []string{
 			fmt.Sprintf("%s, there's a roll-off in progress! Only the tied players get to participate in this showdown.", input.PlayerName),
 			fmt.Sprintf("Hold your horses, %s! This is a special tie-breaker round. Wait for the next full game.", input.PlayerName),
-			fmt.Sprintf("Roll-off in progress! This is where legends (and hangovers) are made.", input.PlayerName),
-			fmt.Sprintf("Roll-off in progress! This is where legends (and hangovers) are made, %s.", input.PlayerName),
+			fmt.Sprintf("Nice try, %s, but roll-offs are invitation-only events. Wait for the next game to start!", input.PlayerName),
 		}
 	case "already_joined":
 		messages = []string{
@@ -251,9 +250,9 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 			messages := []string{
 				"You rolled a 6! Time to make someone drink!",
 				"Incredible! You just rolled a 6 and get to assign a drink!",
-				"You're on fire! A perfect 6 means someone's about to get thirsty!",
+				"You're on fire! This means someone's about to get thirsty!",
 				"The dice gods favor you today! That's a 6! Choose your victim!",
-				"CRITICAL HIT! You rolled a 6 and now have the power to make someone drink!",
+				"CRIT! You have the power to make someone drink!",
 			}
 
 			title = titles[rand.Intn(len(titles))]
@@ -272,14 +271,14 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				fmt.Sprintf("Incredible! %s just rolled a 6 and gets to assign a drink!", input.PlayerName),
 				fmt.Sprintf("%s is on fire! A perfect 6 means someone's about to get thirsty!", input.PlayerName),
 				fmt.Sprintf("The dice gods favor %s today! That's a 6! Choose your victim!", input.PlayerName),
-				fmt.Sprintf("CRITICAL HIT! %s rolled a 6 and now has the power to make someone drink!", input.PlayerName),
+				fmt.Sprintf("CRIT! %s has the power to make someone drink!", input.PlayerName),
 				fmt.Sprintf("%s rolled a 6! Someone's getting a drink whether they like it or not!", input.PlayerName),
 				fmt.Sprintf("Look at %s showing off with that 6! Now they get to choose who drinks!", input.PlayerName),
 				fmt.Sprintf("A wild 6 appears for %s! Time to inflict some liquid damage!", input.PlayerName),
 				fmt.Sprintf("%s just rolled a 6! Finally achieving something in life!", input.PlayerName),
-				fmt.Sprintf("The chosen one! %s rolled a 6 and now wields the power of drink assignment!", input.PlayerName),
+				fmt.Sprintf("The chosen one! %s r now wields the power of drink assignment!", input.PlayerName),
 				fmt.Sprintf("Against all odds, %s somehow managed to roll a 6! Must be their birthday!", input.PlayerName),
-				fmt.Sprintf("%s's 6 is the universe's way of saying someone else needs to drink more!", input.PlayerName),
+				fmt.Sprintf("%s's 6 is the universe's way of saying someone needs to drink more!", input.PlayerName),
 			}
 
 			title = titles[rand.Intn(len(titles))]
@@ -322,7 +321,7 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				fmt.Sprintf("%s rolled a 1! Time to drink up!", input.PlayerName),
 				fmt.Sprintf("Oof! %s just rolled a 1. Bottoms up!", input.PlayerName),
 				fmt.Sprintf("%s angered the dice gods with that 1! Drink up, friend!", input.PlayerName),
-				fmt.Sprintf("The dice have spoken! %s rolled a 1 and must take a drink!", input.PlayerName),
+				fmt.Sprintf("Ronnie has spoken! %s rolled a 1 and must take a drink!", input.PlayerName),
 				fmt.Sprintf("CRITICAL FAIL! %s rolled a 1 and has to drink!", input.PlayerName),
 				fmt.Sprintf("%s rolled a 1! Exactly what we all expected from them!", input.PlayerName),
 				fmt.Sprintf("The dice gods have forsaken %s with that 1! Drink to drown your sorrows!", input.PlayerName),
@@ -592,7 +591,7 @@ func (s *service) GetLeaderboardMessage(ctx context.Context, input *GetLeaderboa
 			fmt.Sprintf("All hail %s, who managed to make others drink %d times! Truly a master of the dice.", input.PlayerName, input.DrinkCount),
 			fmt.Sprintf("%s takes the gold with %d drinks assigned! Their strategy? Pure luck and zero remorse.", input.PlayerName, input.DrinkCount),
 			fmt.Sprintf("The crown goes to %s with %d drinks! Remember this moment, it's all downhill from here.", input.PlayerName, input.DrinkCount),
-			fmt.Sprintf("%s dominated with %d drinks assigned! Exactly what we'd expect from someone with their ruthless personality.", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("%s dominated with %d drinks assigned! Exactly what we'd expect from someone in their income bracket.", input.PlayerName, input.DrinkCount),
 		}
 		message = messages[s.rand.Intn(len(messages))]
 	} else if input.Rank == 1 { // Second place
@@ -614,7 +613,7 @@ func (s *service) GetLeaderboardMessage(ctx context.Context, input *GetLeaderboa
 			fmt.Sprintf("%s takes the bronze with %d drinks assigned. Better luck next time, maybe?", input.PlayerName, input.DrinkCount),
 		}
 		message = messages[s.rand.Intn(len(messages))]
-	} else if input.Rank == input.TotalPlayers - 1 { // Last place
+	} else if input.Rank == input.TotalPlayers-1 { // Last place
 		messages := []string{
 			fmt.Sprintf("Dead last: %s with %d drinks. Even the dice feel sorry for you.", input.PlayerName, input.DrinkCount),
 			fmt.Sprintf("%s: %d drinks assigned. You're so bad at this it's almost impressive.", input.PlayerName, input.DrinkCount),
@@ -625,7 +624,7 @@ func (s *service) GetLeaderboardMessage(ctx context.Context, input *GetLeaderboa
 		message = messages[s.rand.Intn(len(messages))]
 	} else { // Middle of the pack
 		messages := []string{
-			fmt.Sprintf("%s: %d drinks assigned. Perfectly average, just like their personality.", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("%s: %d drinks assigned. Perfectly average, just like their choice of clothing.", input.PlayerName, input.DrinkCount),
 			fmt.Sprintf("Middle of the pack: %s with %d drinks. Not good, not bad, just... there.", input.PlayerName, input.DrinkCount),
 			fmt.Sprintf("%s managed to assign %d drinks. The embodiment of 'meh'.", input.PlayerName, input.DrinkCount),
 			fmt.Sprintf("%s: %d drinks. Aggressively mediocre performance as usual.", input.PlayerName, input.DrinkCount),
