@@ -471,6 +471,18 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 					}
 
 					drinkTotals += fmt.Sprintf("%s **%s**: %d drink(s)\n", prefix, entry.PlayerName, entry.DrinkCount)
+					
+					// Get a funny message for this leaderboard entry
+					leaderboardMsgOutput, err := b.messagingService.GetLeaderboardMessage(ctx, &messaging.GetLeaderboardMessageInput{
+						PlayerName:   entry.PlayerName,
+						DrinkCount:   entry.DrinkCount,
+						Rank:         i,
+						TotalPlayers: len(leaderboardEntries),
+					})
+					
+					if err == nil {
+						drinkTotals += fmt.Sprintf("> *%s*\n", leaderboardMsgOutput.Message)
+					}
 				}
 			}
 

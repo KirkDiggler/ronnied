@@ -24,4 +24,7 @@ type Service interface {
 	
 	// GetRollWhisperMessage returns a supportive whisper message after a roll
 	GetRollWhisperMessage(ctx context.Context, input *GetRollWhisperMessageInput) (*GetRollWhisperMessageOutput, error)
+
+	// GetLeaderboardMessage returns a funny message for a player in the leaderboard
+	GetLeaderboardMessage(ctx context.Context, input *GetLeaderboardMessageInput) (*GetLeaderboardMessageOutput, error)
 }

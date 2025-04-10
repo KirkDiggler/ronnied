@@ -136,7 +136,8 @@ func (s *service) GetJoinGameErrorMessage(ctx context.Context, input *GetJoinGam
 		messages = []string{
 			fmt.Sprintf("%s, there's a roll-off in progress! Only the tied players get to participate in this showdown.", input.PlayerName),
 			fmt.Sprintf("Hold your horses, %s! This is a special tie-breaker round. Wait for the next full game.", input.PlayerName),
-			fmt.Sprintf("Nice try, %s, but roll-offs are invitation-only events. Wait for the next game to start!", input.PlayerName),
+			fmt.Sprintf("Roll-off in progress! This is where legends (and hangovers) are made.", input.PlayerName),
+			fmt.Sprintf("Roll-off in progress! This is where legends (and hangovers) are made, %s.", input.PlayerName),
 		}
 	case "already_joined":
 		messages = []string{
@@ -195,7 +196,6 @@ func (s *service) GetGameStatusMessage(ctx context.Context, input *GetGameStatus
 			"It's tie-breaker time! May the luckiest drinker win.",
 			"The tension mounts as our tied players face the ultimate test of luck.",
 			"Roll-off in progress! This is where legends (and hangovers) are made.",
-			"The dice gods demand a sacrifice... of sobriety! Roll to determine who drinks.",
 		}
 	case models.GameStatusCompleted:
 		messages = []string{
@@ -431,7 +431,7 @@ func (s *service) GetErrorMessage(ctx context.Context, input *GetErrorMessageInp
 
 	// Set default tone if not specified
 	if input.PreferredTone == "" {
-		tone = ToneFunny
+		tone = MessageToneFunny
 	} else {
 		tone = input.PreferredTone
 	}
@@ -451,6 +451,7 @@ func (s *service) GetErrorMessage(ctx context.Context, input *GetErrorMessageInp
 			"Roll-off in progress! No new players allowed in this tense moment.",
 			"The fate of drinks is being decided in a roll-off. Join the next game!",
 			"Can't join during a roll-off! The tension is too high for newcomers.",
+			"Roll-off in progress! This is where legends (and hangovers) are made.",
 		}
 	case "game_completed":
 		messages = []string{
@@ -572,5 +573,68 @@ func (s *service) GetRollWhisperMessage(ctx context.Context, input *GetRollWhisp
 	return &GetRollWhisperMessageOutput{
 		Message: selectedMessage,
 		Tone:    tone,
+	}, nil
+}
+
+// GetLeaderboardMessage returns a funny message for a player in the leaderboard
+func (s *service) GetLeaderboardMessage(ctx context.Context, input *GetLeaderboardMessageInput) (*GetLeaderboardMessageOutput, error) {
+	if input == nil {
+		return nil, errors.New("input cannot be nil")
+	}
+
+	var message string
+
+	// Different messages based on rank
+	if input.Rank == 0 { // First place
+		messages := []string{
+			fmt.Sprintf("%s is the champion of drinking delegation! %d drinks assigned - their liver thanks them for the outsourcing.", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("First place: %s with %d drinks! The puppetmaster of alcohol consumption!", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("All hail %s, who managed to make others drink %d times! Truly a master of the dice.", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("%s takes the gold with %d drinks assigned! Their strategy? Pure luck and zero remorse.", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("The crown goes to %s with %d drinks! Remember this moment, it's all downhill from here.", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("%s dominated with %d drinks assigned! Exactly what we'd expect from someone with their ruthless personality.", input.PlayerName, input.DrinkCount),
+		}
+		message = messages[s.rand.Intn(len(messages))]
+	} else if input.Rank == 1 { // Second place
+		messages := []string{
+			fmt.Sprintf("Silver medalist %s assigned %d drinks. So close to greatness, yet so far.", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("%s takes second place with %d drinks assigned. First loser is still a loser!", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("Almost impressive: %s with %d drinks. Maybe try harder next time?", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("%s got %d drinks assigned - the silver medal of making others suffer!", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("Second place: %s with %d drinks. Nobody remembers second place, but we'll try.", input.PlayerName, input.DrinkCount),
+		}
+		message = messages[s.rand.Intn(len(messages))]
+	} else if input.Rank == 2 { // Third place
+		messages := []string{
+			fmt.Sprintf("Bronze tier: %s with %d drinks assigned. At least you made the podium!", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("%s managed %d drinks. Bronze is just a fancy word for third place.", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("Third place goes to %s with %d drinks. Not great, not terrible, just mediocre.", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("%s: %d drinks assigned and a bronze medal. It's like winning, but worse!", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("The bronze medal of drink delegation goes to %s with %d drinks. You're technically on the podium!", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("%s takes the bronze with %d drinks assigned. Better luck next time, maybe?", input.PlayerName, input.DrinkCount),
+		}
+		message = messages[s.rand.Intn(len(messages))]
+	} else if input.Rank == input.TotalPlayers - 1 { // Last place
+		messages := []string{
+			fmt.Sprintf("Dead last: %s with %d drinks. Even the dice feel sorry for you.", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("%s: %d drinks assigned. You're so bad at this it's almost impressive.", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("Last place: %s with %d drinks. There's always next game to disappoint everyone again!", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("%s assigned %d drinks. If 'participation trophy' was a person.", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("And then there's %s with %d drinks. Thanks for showing up, I guess?", input.PlayerName, input.DrinkCount),
+		}
+		message = messages[s.rand.Intn(len(messages))]
+	} else { // Middle of the pack
+		messages := []string{
+			fmt.Sprintf("%s: %d drinks assigned. Perfectly average, just like their personality.", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("Middle of the pack: %s with %d drinks. Not good, not bad, just... there.", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("%s managed to assign %d drinks. The embodiment of 'meh'.", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("%s: %d drinks. Aggressively mediocre performance as usual.", input.PlayerName, input.DrinkCount),
+			fmt.Sprintf("With %d drinks assigned, %s continues their lifelong streak of being unremarkable.", input.DrinkCount, input.PlayerName),
+		}
+		message = messages[s.rand.Intn(len(messages))]
+	}
+
+	return &GetLeaderboardMessageOutput{
+		Message: message,
 	}, nil
 }

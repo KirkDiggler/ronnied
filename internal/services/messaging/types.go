@@ -161,6 +161,19 @@ type GetRollWhisperMessageOutput struct {
 	Tone MessageTone
 }
 
+// GetLeaderboardMessageInput is the input for GetLeaderboardMessage
+type GetLeaderboardMessageInput struct {
+	PlayerName  string
+	DrinkCount  int
+	Rank        int
+	TotalPlayers int
+}
+
+// GetLeaderboardMessageOutput is the output for GetLeaderboardMessage
+type GetLeaderboardMessageOutput struct {
+	Message string
+}
+
 // ServiceConfig contains configuration for the messaging service
 type ServiceConfig struct {
 	// Repository is the repository for storing and retrieving messages
