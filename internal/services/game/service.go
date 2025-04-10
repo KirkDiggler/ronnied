@@ -177,6 +177,24 @@ func (s *service) StartGame(ctx context.Context, input *StartGameInput) (*StartG
 		return nil, err
 	}
 
+	// Check if the game is ready to complete (all players have rolled and assigned drinks)
+	if game.IsReadyToComplete() {
+		log.Printf("Game %s is ready to complete immediately after starting", game.ID)
+		
+		// Try to end the game
+		endGameOutput, err := s.EndGame(ctx, &EndGameInput{
+			GameID: input.GameID,
+		})
+		
+		if err != nil {
+			// Log the error but don't fail the start game operation
+			log.Printf("Error ending game after start: %v", err)
+		} else if endGameOutput.NeedsRollOff {
+			// A roll-off is needed, log this information
+			log.Printf("Game %s needs a roll-off after immediate completion", game.ID)
+		}
+	}
+
 	return &StartGameOutput{
 		Success: true,
 	}, nil

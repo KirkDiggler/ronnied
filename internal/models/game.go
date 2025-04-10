@@ -127,3 +127,28 @@ func (g *Game) GetParticipant(playerID string) *Participant {
 
 	return nil
 }
+
+// IsReadyToComplete checks if all players have completed their actions
+// and the game is ready to be completed
+func (g *Game) IsReadyToComplete() bool {
+	// If there are no participants, the game is not ready to complete
+	if len(g.Participants) == 0 {
+		return false
+	}
+
+	// Check if all participants have completed their actions
+	for _, participant := range g.Participants {
+		// Check if everyone has rolled
+		if participant.RollTime == nil {
+			return false
+		}
+
+		// Check if anyone still needs to assign a drink
+		if participant.Status == ParticipantStatusNeedsToAssign {
+			return false
+		}
+	}
+
+	// All checks passed, the game is ready to complete
+	return true
+}
