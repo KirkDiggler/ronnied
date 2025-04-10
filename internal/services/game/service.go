@@ -774,6 +774,19 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 			return nil, fmt.Errorf("failed to create roll-off game for highest rollers: %w", err)
 		}
 
+		// Update the parent game with the roll-off game ID
+		game.RollOffGameID = rollOffGameOutput.Game.ID
+		game.UpdatedAt = s.clock.Now()
+		
+		// Save the updated parent game
+		err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
+			Game: game,
+		})
+		if err != nil {
+			log.Printf("Error updating parent game with roll-off game ID: %v", err)
+			// Don't return the error, continue with the roll-off
+		}
+
 		// Update the players' current game ID
 		for _, playerID := range highestRollPlayerIDs {
 			player, err := s.playerRepo.GetPlayer(ctx, &playerRepo.GetPlayerInput{
@@ -843,6 +856,19 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to create roll-off game: %w", err)
+		}
+
+		// Update the parent game with the roll-off game ID
+		game.RollOffGameID = rollOffGameOutput.Game.ID
+		game.UpdatedAt = s.clock.Now()
+		
+		// Save the updated parent game
+		err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
+			Game: game,
+		})
+		if err != nil {
+			log.Printf("Error updating parent game with roll-off game ID: %v", err)
+			// Don't return the error, continue with the roll-off
 		}
 
 		// Update the players' current game ID
