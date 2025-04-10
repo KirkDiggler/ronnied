@@ -702,28 +702,35 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 	highestRoll := 0
 	highestRollPlayerIDs := []string{}
 
-	// First pass: find the lowest and highest roll values
+	// First pass: find the highest and lowest roll values
 	for _, participant := range game.Participants {
+		// Track highest rolls
+		if participant.RollValue > highestRoll {
+			highestRoll = participant.RollValue
+		}
+
 		// Track lowest rolls
 		if participant.RollValue < lowestRoll {
 			lowestRoll = participant.RollValue
-			lowestRollPlayerIDs = []string{participant.PlayerID}
-		} else if participant.RollValue == lowestRoll {
+		}
+	}
+
+	// Second pass: find the players with the lowest and highest roll values
+	for _, participant := range game.Participants {
+		// Track lowest rolls
+		if participant.RollValue == lowestRoll {
 			lowestRollPlayerIDs = append(lowestRollPlayerIDs, participant.PlayerID)
 		}
 
 		// Track highest rolls
-		if participant.RollValue > highestRoll {
-			highestRoll = participant.RollValue
-			highestRollPlayerIDs = []string{participant.PlayerID}
-		} else if participant.RollValue == highestRoll {
+		if participant.RollValue == highestRoll {
 			highestRollPlayerIDs = append(highestRollPlayerIDs, participant.PlayerID)
 		}
 	}
 
 	// Check for ties with the highest roll (critical hits)
-	if len(highestRollPlayerIDs) > 1 && highestRoll == s.criticalHitValue {
-		// Multiple players tied for highest roll with critical hits, create a roll-off game
+	if len(highestRollPlayerIDs) > 1 {
+		// Multiple players tied for highest roll, create a roll-off game
 
 		// Create a map of player IDs to names for the roll-off game
 		playerNames := make(map[string]string)
@@ -779,7 +786,7 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 	}
 
 	// If there's only one player with the lowest roll, assign them a drink
-	if len(lowestRollPlayerIDs) == 1 && lowestRoll < s.diceSides {
+	if len(lowestRollPlayerIDs) == 1 {
 		lowestPlayerID := lowestRollPlayerIDs[0]
 
 		// Create a drink record for the player with the lowest roll using the repository
