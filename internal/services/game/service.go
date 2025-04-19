@@ -180,12 +180,12 @@ func (s *service) StartGame(ctx context.Context, input *StartGameInput) (*StartG
 	// Check if the game is ready to complete (all players have rolled and assigned drinks)
 	if game.IsReadyToComplete() {
 		log.Printf("Game %s is ready to complete immediately after starting", game.ID)
-		
+
 		// Try to end the game
 		endGameOutput, err := s.EndGame(ctx, &EndGameInput{
-			GameID: input.GameID,
+			Game: game,
 		})
-		
+
 		if err != nil {
 			// Log the error but don't fail the start game operation
 			log.Printf("Error ending game after start: %v", err)
@@ -325,28 +325,32 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		return nil, errors.New("player ID cannot be empty")
 	}
 
-	// Check if the player should roll in a roll-off game instead
-	rollOffGame, err := s.FindActiveRollOffGame(ctx, input.PlayerID, input.GameID)
-	if err != nil && !errors.Is(err, ErrRollOffGameNotFound) {
-		return nil, err
-	}
-
-	// If a roll-off game was found, update the input to use that game instead
-	if rollOffGame != nil {
-		input.GameID = rollOffGame.ID
-	}
-
 	// Get the game
 	game, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
 		GameID: input.GameID,
 	})
 	if err != nil {
-		return nil, ErrGameNotFound
+		// Return the actual error instead of swallowing it
+		return nil, fmt.Errorf("failed to get game: %w", err)
 	}
 
-	// Check if game is active or in roll-off or waiting
-	if game.Status != models.GameStatusActive && game.Status != models.GameStatusRollOff && game.Status != models.GameStatusWaiting {
-		return nil, ErrInvalidGameState
+	// If this is a roll-off game, check if there's a nested roll-off the player should be in
+	if game.Status == models.GameStatusRollOff {
+		rollOffGame, err := s.FindActiveRollOffGame(ctx, input.PlayerID, input.GameID)
+		if err != nil && !errors.Is(err, ErrRollOffGameNotFound) {
+			return nil, fmt.Errorf("failed to check for nested roll-off games: %w", err)
+		}
+
+		// If a nested roll-off game was found, use that instead
+		if rollOffGame != nil {
+			input.GameID = rollOffGame.ID
+			game = rollOffGame
+		}
+	}
+
+	// Check if game is in a valid state for rolling
+	if !isValidGameStateForRolling(game.Status) {
+		return nil, fmt.Errorf("%w: game status is %s", ErrInvalidGameState, game.Status)
 	}
 
 	// Find the participant in the game
@@ -401,7 +405,7 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		Game: game,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to save game: %w", err)
 	}
 
 	// Check if all players have rolled
@@ -432,7 +436,7 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		// Only try to end the game if all drinks are assigned
 		if allDrinksAssigned {
 			endGameOutput, err = s.EndGame(ctx, &EndGameInput{
-				GameID: input.GameID,
+				Game: game,
 			})
 
 			if err == nil {
@@ -471,12 +475,12 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		// Get eligible players for drink assignment
 		for _, p := range game.Participants {
 			isCurrentPlayer := p.PlayerID == input.PlayerID
-			
+
 			// For critical hits, include all players except the current player initially
 			if !isCurrentPlayer {
 				eligiblePlayers = append(eligiblePlayers, PlayerOption{
-					PlayerID:       p.PlayerID,
-					PlayerName:     p.PlayerName,
+					PlayerID:        p.PlayerID,
+					PlayerName:      p.PlayerName,
 					IsCurrentPlayer: false,
 				})
 			}
@@ -488,8 +492,8 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 			for _, p := range game.Participants {
 				if p.PlayerID == input.PlayerID {
 					eligiblePlayers = append(eligiblePlayers, PlayerOption{
-						PlayerID:       p.PlayerID,
-						PlayerName:     p.PlayerName + " (You)",
+						PlayerID:        p.PlayerID,
+						PlayerName:      p.PlayerName + " (You)",
 						IsCurrentPlayer: true,
 					})
 					break
@@ -506,14 +510,14 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 	}
 
 	// Check if the player should be redirected to a roll-off game
-	if rollOffGame != nil && rollOffGame.ID != input.GameID {
-		activeRollOffGameID = rollOffGame.ID
+	if game.Status == models.GameStatusRollOff && game.ParentGameID != "" {
+		activeRollOffGameID = game.ID
 	}
 
 	return &RollDiceOutput{
 		// Basic roll information
 		Value:            rollValue,
-		RollValue:        rollValue,  // Alias for Value to maintain compatibility
+		RollValue:        rollValue, // Alias for Value to maintain compatibility
 		PlayerID:         input.PlayerID,
 		PlayerName:       playerName,
 		IsCriticalHit:    isCriticalHit,
@@ -522,14 +526,21 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		NeedsRollOff:     needsRollOff,
 		RollOffType:      RollOffType(rollOffType),
 		RollOffGameID:    rollOffGameID,
-		
+
 		// Domain result information
-		Result:             result,
-		Details:            details,
+		Result:              result,
+		Details:             details,
 		ActiveRollOffGameID: activeRollOffGameID,
-		EligiblePlayers:    eligiblePlayers,
-		Game:               game,
+		EligiblePlayers:     eligiblePlayers,
+		Game:                game,
 	}, nil
+}
+
+// isValidGameStateForRolling checks if a game state allows dice rolling
+func isValidGameStateForRolling(status models.GameStatus) bool {
+	return status == models.GameStatusActive ||
+		status == models.GameStatusRollOff ||
+		status == models.GameStatusWaiting
 }
 
 // AssignDrink records that one player has assigned a drink to another
@@ -623,7 +634,7 @@ func (s *service) AssignDrink(ctx context.Context, input *AssignDrinkInput) (*As
 	var endGameOutput *EndGameOutput
 	if allPlayersRolled && allDrinksAssigned {
 		endGameOutput, err = s.EndGame(ctx, &EndGameInput{
-			GameID: input.GameID,
+			Game: game,
 		})
 		if err == nil {
 		} else {
@@ -642,12 +653,7 @@ func (s *service) AssignDrink(ctx context.Context, input *AssignDrinkInput) (*As
 // EndGame concludes a game session
 func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOutput, error) {
 	// Get the game
-	game, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
-		GameID: input.GameID,
-	})
-	if err != nil {
-		return nil, ErrGameNotFound
-	}
+	game := input.Game
 
 	// Check if game is active
 	if game.Status != models.GameStatusActive && game.Status != models.GameStatusRollOff {
@@ -669,7 +675,7 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 
 	// Get drink records for this game
 	drinkRecords, err := s.drinkLedgerRepo.GetDrinkRecordsForGame(ctx, &ledgerRepo.GetDrinkRecordsForGameInput{
-		GameID: input.GameID,
+		GameID: game.ID,
 	})
 	if err != nil {
 		return nil, err
@@ -765,7 +771,7 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 		rollOffGameOutput, err := s.gameRepo.CreateRollOffGame(ctx, &gameRepo.CreateRollOffGameInput{
 			ChannelID:    game.ChannelID,
 			CreatorID:    game.CreatorID,
-			ParentGameID: input.GameID,
+			ParentGameID: game.ID,
 			PlayerIDs:    highestRollPlayerIDs,
 			PlayerNames:  playerNames,
 		})
@@ -777,7 +783,7 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 		// Update the parent game with the roll-off game ID
 		game.RollOffGameID = rollOffGameOutput.Game.ID
 		game.UpdatedAt = s.clock.Now()
-		
+
 		// Save the updated parent game
 		err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
 			Game: game,
@@ -822,7 +828,7 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 
 		// Create a drink record for the player with the lowest roll using the repository
 		_, err = s.drinkLedgerRepo.CreateDrinkRecord(ctx, &ledgerRepo.CreateDrinkRecordInput{
-			GameID:     input.GameID,
+			GameID:     game.ID,
 			ToPlayerID: lowestPlayerID,
 			Reason:     models.DrinkReasonLowestRoll,
 		})
@@ -849,7 +855,7 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 		rollOffGameOutput, err := s.gameRepo.CreateRollOffGame(ctx, &gameRepo.CreateRollOffGameInput{
 			ChannelID:    game.ChannelID,
 			CreatorID:    game.CreatorID,
-			ParentGameID: input.GameID,
+			ParentGameID: game.ID,
 			PlayerIDs:    lowestRollPlayerIDs,
 			PlayerNames:  playerNames,
 		})
@@ -861,7 +867,7 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 		// Update the parent game with the roll-off game ID
 		game.RollOffGameID = rollOffGameOutput.Game.ID
 		game.UpdatedAt = s.clock.Now()
-		
+
 		// Save the updated parent game
 		err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
 			Game: game,

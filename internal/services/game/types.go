@@ -159,13 +159,13 @@ type PlayerOption struct {
 type RollDiceOutput struct {
 	// Value is the result of the dice roll
 	Value int
-	
+
 	// RollValue is an alias for Value to maintain compatibility
 	RollValue int
-	
+
 	// PlayerID is the ID of the player who rolled
 	PlayerID string
-	
+
 	// PlayerName is the name of the player who rolled
 	PlayerName string
 
@@ -260,8 +260,8 @@ type PlayerStats struct {
 
 // EndGameInput contains parameters for ending a game
 type EndGameInput struct {
-	// GameID is the unique identifier for the game
-	GameID string
+	// Game is the game to end
+	Game *models.Game
 }
 
 // EndGameOutput contains the result of ending a game
@@ -375,7 +375,7 @@ type AbandonGameOutput struct {
 type UpdateGameMessageInput struct {
 	// GameID is the unique identifier for the game
 	GameID string
-	
+
 	// MessageID is the Discord message ID to associate with the game
 	MessageID string
 }

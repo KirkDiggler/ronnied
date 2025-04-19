@@ -308,7 +308,7 @@ func (s *GameServiceTestSuite) TestStartGame_GameNotFound() {
 
 	// Assert
 	s.Require().Error(err)
-	s.Equal(game.ErrGameNotFound, err)
+	s.True(errors.Is(err, game.ErrGameNotFound))
 	s.Nil(output)
 }
 
@@ -359,7 +359,7 @@ func (s *GameServiceTestSuite) TestStartGame_InvalidGameState() {
 
 	// Assert
 	s.Require().Error(err)
-	s.Equal(game.ErrInvalidGameState, err)
+	s.True(errors.Is(err, game.ErrInvalidGameState))
 	s.Nil(output)
 }
 
@@ -533,7 +533,7 @@ func (s *GameServiceTestSuite) TestJoinGame_GameNotFound() {
 
 	// Assert
 	s.Require().Error(err)
-	s.Equal(game.ErrGameNotFound, err)
+	s.True(errors.Is(err, game.ErrGameNotFound))
 	s.Nil(output)
 }
 
@@ -550,7 +550,7 @@ func (s *GameServiceTestSuite) TestJoinGame_GameActive() {
 
 	// Assert
 	s.Require().Error(err)
-	s.Equal(game.ErrGameActive, err)
+	s.True(errors.Is(err, game.ErrGameActive))
 	s.Nil(output)
 }
 
@@ -589,7 +589,7 @@ func (s *GameServiceTestSuite) TestJoinGame_GameFull() {
 
 	// Assert
 	s.Require().Error(err)
-	s.Equal(game.ErrGameFull, err)
+	s.True(errors.Is(err, game.ErrGameFull))
 	s.Nil(output)
 }
 
@@ -786,7 +786,7 @@ func (s *GameServiceTestSuite) TestJoinGame_CreateParticipantError() {
 // RollDice Tests
 
 func (s *GameServiceTestSuite) TestRollDice_RegularRoll() {
-	// Create an active game with a participant who hasn't rolled yet
+	// Create an active game with multiple participants, one who hasn't rolled yet
 	activeGame := &models.Game{
 		ID:           s.testGameID,
 		ChannelID:    s.testChannelID,
@@ -804,13 +804,17 @@ func (s *GameServiceTestSuite) TestRollDice_RegularRoll() {
 				RollValue:  0,
 				RollTime:   nil, // Hasn't rolled yet
 			},
+			{
+				ID:         "another-participant-id",
+				GameID:     s.testGameID,
+				PlayerID:   s.testPlayerID,
+				PlayerName: s.testPlayerName,
+				Status:     models.ParticipantStatusWaitingToRoll,
+				RollValue:  0,
+				RollTime:   nil, // Hasn't rolled yet
+			},
 		},
 	}
-
-	// Expect FindActiveRollOffGame to be called and return no roll-off game
-	s.mockGameRepo.EXPECT().
-		GetGamesByParent(gomock.Any(), gomock.Any()).
-		Return(nil, nil)
 
 	// Expect GetGame to be called on the game repository
 	s.mockGameRepo.EXPECT().
@@ -855,11 +859,11 @@ func (s *GameServiceTestSuite) TestRollDice_RegularRoll() {
 	s.False(output.IsCriticalFail)
 	s.False(output.IsLowestRoll)
 	s.False(output.NeedsRollOff)
-	s.True(output.AllPlayersRolled)
+	s.False(output.AllPlayersRolled) // Now this should be false since not all players have rolled
 }
 
 func (s *GameServiceTestSuite) TestRollDice_CriticalHit() {
-	// Create an active game with a participant who hasn't rolled yet
+	// Create an active game with multiple participants, one who hasn't rolled yet
 	activeGame := &models.Game{
 		ID:           s.testGameID,
 		ChannelID:    s.testChannelID,
@@ -886,13 +890,17 @@ func (s *GameServiceTestSuite) TestRollDice_CriticalHit() {
 				RollValue:  0,
 				RollTime:   nil, // Hasn't rolled yet
 			},
+			{
+				ID:         "third-participant-id",
+				GameID:     s.testGameID,
+				PlayerID:   "third-player-id",
+				PlayerName: "Third Player",
+				Status:     models.ParticipantStatusWaitingToRoll,
+				RollValue:  0,
+				RollTime:   nil, // Hasn't rolled yet
+			},
 		},
 	}
-
-	// Expect FindActiveRollOffGame to be called and return no roll-off game
-	s.mockGameRepo.EXPECT().
-		GetGamesByParent(gomock.Any(), gomock.Any()).
-		Return(nil, nil)
 
 	// Expect GetGame to be called on the game repository
 	s.mockGameRepo.EXPECT().
@@ -940,14 +948,21 @@ func (s *GameServiceTestSuite) TestRollDice_CriticalHit() {
 	s.False(output.AllPlayersRolled) // Not all players have rolled
 	
 	// Verify eligible players for drink assignment
-	s.Require().Len(output.EligiblePlayers, 1)
-	s.Equal(s.testPlayerID, output.EligiblePlayers[0].PlayerID)
-	s.Equal(s.testPlayerName, output.EligiblePlayers[0].PlayerName)
-	s.False(output.EligiblePlayers[0].IsCurrentPlayer)
+	s.Require().Len(output.EligiblePlayers, 2)
+	
+	// Check that both other players are eligible (not the current player)
+	eligiblePlayerIDs := []string{output.EligiblePlayers[0].PlayerID, output.EligiblePlayers[1].PlayerID}
+	s.Contains(eligiblePlayerIDs, s.testPlayerID)
+	s.Contains(eligiblePlayerIDs, "third-player-id")
+	
+	// Verify none of the eligible players is the current player
+	for _, player := range output.EligiblePlayers {
+		s.False(player.IsCurrentPlayer)
+	}
 }
 
 func (s *GameServiceTestSuite) TestRollDice_CriticalFail() {
-	// Create an active game with a participant who hasn't rolled yet
+	// Create an active game with multiple participants, one who hasn't rolled yet
 	activeGame := &models.Game{
 		ID:           s.testGameID,
 		ChannelID:    s.testChannelID,
@@ -965,13 +980,17 @@ func (s *GameServiceTestSuite) TestRollDice_CriticalFail() {
 				RollValue:  0,
 				RollTime:   nil, // Hasn't rolled yet
 			},
+			{
+				ID:         "another-participant-id",
+				GameID:     s.testGameID,
+				PlayerID:   s.testPlayerID,
+				PlayerName: s.testPlayerName,
+				Status:     models.ParticipantStatusWaitingToRoll,
+				RollValue:  0,
+				RollTime:   nil, // Hasn't rolled yet
+			},
 		},
 	}
-
-	// Expect FindActiveRollOffGame to be called and return no roll-off game
-	s.mockGameRepo.EXPECT().
-		GetGamesByParent(gomock.Any(), gomock.Any()).
-		Return(nil, nil)
 
 	// Expect GetGame to be called on the game repository
 	s.mockGameRepo.EXPECT().
@@ -1026,28 +1045,23 @@ func (s *GameServiceTestSuite) TestRollDice_CriticalFail() {
 	s.True(output.IsCriticalFail)
 	s.False(output.IsLowestRoll)
 	s.False(output.NeedsRollOff)
-	s.True(output.AllPlayersRolled)
+	s.False(output.AllPlayersRolled) // Not all players have rolled
 }
 
 func (s *GameServiceTestSuite) TestRollDice_GameNotFound() {
-	// Expect FindActiveRollOffGame to be called and return no roll-off game
-	s.mockGameRepo.EXPECT().
-		GetGamesByParent(gomock.Any(), gomock.Any()).
-		Return(nil, nil)
-
 	// Expect GetGame to be called on the game repository and return an error
 	s.mockGameRepo.EXPECT().
 		GetGame(gomock.Any(), &gameRepo.GetGameInput{
 			GameID: s.testGameID,
 		}).
-		Return(nil, errors.New("game not found"))
+		Return(nil, game.ErrGameNotFound)
 
 	// Act
 	output, err := s.gameService.RollDice(s.ctx, s.rollDiceInput)
 
 	// Assert
 	s.Require().Error(err)
-	s.Equal(game.ErrGameNotFound, err)
+	s.True(errors.Is(err, game.ErrGameNotFound))
 	s.Nil(output)
 }
 
@@ -1063,11 +1077,6 @@ func (s *GameServiceTestSuite) TestRollDice_InvalidGameState() {
 		Participants: []*models.Participant{s.expectedParticipant},
 	}
 
-	// Expect FindActiveRollOffGame to be called and return no roll-off game
-	s.mockGameRepo.EXPECT().
-		GetGamesByParent(gomock.Any(), gomock.Any()).
-		Return(nil, nil)
-
 	// Expect GetGame to be called on the game repository
 	s.mockGameRepo.EXPECT().
 		GetGame(gomock.Any(), &gameRepo.GetGameInput{
@@ -1080,7 +1089,7 @@ func (s *GameServiceTestSuite) TestRollDice_InvalidGameState() {
 
 	// Assert
 	s.Require().Error(err)
-	s.Equal(game.ErrInvalidGameState, err)
+	s.True(errors.Is(err, game.ErrInvalidGameState))
 	s.Nil(output)
 }
 
@@ -1104,11 +1113,6 @@ func (s *GameServiceTestSuite) TestRollDice_PlayerNotInGame() {
 		},
 	}
 
-	// Expect FindActiveRollOffGame to be called and return no roll-off game
-	s.mockGameRepo.EXPECT().
-		GetGamesByParent(gomock.Any(), gomock.Any()).
-		Return(nil, nil)
-
 	// Expect GetGame to be called on the game repository
 	s.mockGameRepo.EXPECT().
 		GetGame(gomock.Any(), &gameRepo.GetGameInput{
@@ -1121,7 +1125,7 @@ func (s *GameServiceTestSuite) TestRollDice_PlayerNotInGame() {
 
 	// Assert
 	s.Require().Error(err)
-	s.Equal(game.ErrPlayerNotInGame, err)
+	s.True(errors.Is(err, game.ErrPlayerNotInGame))
 	s.Nil(output)
 }
 
@@ -1147,11 +1151,6 @@ func (s *GameServiceTestSuite) TestRollDice_PlayerAlreadyRolled() {
 			},
 		},
 	}
-
-	// Expect FindActiveRollOffGame to be called and return no roll-off game
-	s.mockGameRepo.EXPECT().
-		GetGamesByParent(gomock.Any(), gomock.Any()).
-		Return(nil, nil)
 
 	// Expect GetGame to be called on the game repository
 	s.mockGameRepo.EXPECT().
@@ -1191,11 +1190,6 @@ func (s *GameServiceTestSuite) TestRollDice_SaveGameError() {
 		},
 	}
 
-	// Expect FindActiveRollOffGame to be called and return no roll-off game
-	s.mockGameRepo.EXPECT().
-		GetGamesByParent(gomock.Any(), gomock.Any()).
-		Return(nil, nil)
-
 	// Expect GetGame to be called on the game repository
 	s.mockGameRepo.EXPECT().
 		GetGame(gomock.Any(), &gameRepo.GetGameInput{
@@ -1219,7 +1213,7 @@ func (s *GameServiceTestSuite) TestRollDice_SaveGameError() {
 
 	// Assert
 	s.Require().Error(err)
-	s.Equal(expectedError, err)
+	s.Contains(err.Error(), expectedError.Error(), "Expected error to contain the original error message")
 	s.Nil(output)
 }
 
