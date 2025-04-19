@@ -158,6 +158,135 @@ func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate
 	}
 }
 
+// renderRollDiceResponseEdit renders the response for a roll dice action by editing the deferred message
+func renderRollDiceResponseEdit(s *discordgo.Session, i *discordgo.InteractionCreate, output *game.RollDiceOutput, messagingService messaging.Service) error {
+	var components []discordgo.MessageComponent
+
+	// Build components based on the roll result
+	if output.IsCriticalHit {
+		// Create player selection dropdown for critical hits
+		if len(output.EligiblePlayers) > 0 {
+			var playerOptions []discordgo.SelectMenuOption
+
+			for _, player := range output.EligiblePlayers {
+				playerOptions = append(playerOptions, discordgo.SelectMenuOption{
+					Label:       player.PlayerName,
+					Value:       player.PlayerID,
+					Description: "Assign a drink to this player",
+					Emoji: &discordgo.ComponentEmoji{
+						Name: "🍺",
+					},
+				})
+			}
+
+			playerSelect := discordgo.SelectMenu{
+				CustomID:    SelectAssignDrink,
+				Placeholder: "Select a player to drink",
+				Options:     playerOptions,
+			}
+
+			components = append(components, discordgo.SelectMenu(playerSelect))
+		}
+	} else {
+		// Create roll again button for non-critical hits
+		rollButton := discordgo.Button{
+			Label:    "Roll Again",
+			Style:    discordgo.PrimaryButton,
+			CustomID: ButtonRollDice,
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "🎲",
+			},
+		}
+
+		components = append(components, rollButton)
+	}
+
+	// Create action row for components if we have any
+	var messageComponents []discordgo.MessageComponent
+	if len(components) > 0 {
+		messageComponents = append(messageComponents, discordgo.ActionsRow{
+			Components: components,
+		})
+	}
+
+	// Get a dynamic roll result message from the messaging service
+	ctx := context.Background()
+
+	// Determine color based on roll result
+	var embedColor int
+	if output.IsCriticalHit {
+		embedColor = 0x2ecc71 // Green for critical hits
+	} else if output.RollValue == 1 {
+		embedColor = 0xe74c3c // Red for critical fails
+	} else {
+		embedColor = 0x3498db // Blue for normal rolls
+	}
+
+	rollResultOutput, err := messagingService.GetRollResultMessage(ctx, &messaging.GetRollResultMessageInput{
+		PlayerName:       output.PlayerName,
+		RollValue:        output.RollValue,
+		IsCriticalHit:    output.IsCriticalHit,
+		IsCriticalFail:   output.RollValue == 1, // Assuming 1 is critical fail
+		IsPersonalMessage: true, // This is an ephemeral message to the player
+	})
+
+	// Get a supportive whisper message from Ronnie
+	rollWhisperOutput, whisperErr := messagingService.GetRollWhisperMessage(ctx, &messaging.GetRollWhisperMessageInput{
+		PlayerName:     output.PlayerName,
+		RollValue:      output.RollValue,
+		IsCriticalHit:  output.IsCriticalHit,
+		IsCriticalFail: output.RollValue == 1, // Assuming 1 is critical fail
+	})
+
+	// Create embeds - either with messaging service output or fallback to static content
+	var embeds []*discordgo.MessageEmbed
+	var contentText string
+
+	if err != nil {
+		log.Printf("Failed to get roll result message: %v", err)
+		// Fallback to static description if messaging service fails
+		embeds = []*discordgo.MessageEmbed{
+			{
+				Title:       output.Result,
+				Description: output.Details,
+				Color:       embedColor,
+			},
+		}
+		contentText = output.Result
+	} else {
+		embeds = []*discordgo.MessageEmbed{
+			{
+				Title:       rollResultOutput.Title,
+				Description: rollResultOutput.Message,
+				Color:       embedColor,
+			},
+		}
+		contentText = rollResultOutput.Title
+	}
+
+	// Add the whisper message as a second embed if available
+	if whisperErr == nil {
+		whisperEmbed := &discordgo.MessageEmbed{
+			Title:       "Ronnie whispers...",
+			Description: rollWhisperOutput.Message,
+			Color:       0x95a5a6, // Gray color for whispers
+			Footer: &discordgo.MessageEmbedFooter{
+				Text: "Just between us...",
+				IconURL: "https://cdn.discordapp.com/emojis/839903382661799966.png", // Optional: Add a whisper emoji
+			},
+		}
+		embeds = append(embeds, whisperEmbed)
+	}
+
+	// Edit the deferred message
+	_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+		Content:    &contentText,
+		Embeds:     &embeds,
+		Components: &messageComponents,
+	})
+	return err
+}
+
 // renderGameMessage renders the game message based on the current game state
 func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkLedger, leaderboardEntries []game.LeaderboardEntry, rollOffGame *models.Game, parentGame *models.Game) (*discordgo.MessageEdit, error) {
 	ctx := context.Background()

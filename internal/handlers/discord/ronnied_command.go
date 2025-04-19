@@ -53,6 +53,11 @@ func NewRonniedCommand(gameService game.Service) *RonniedCommand {
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "reset",
+					Description: "Reset the drink tabs for the current game",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "abandon",
 					Description: "Abandon the current game (for debugging)",
 				},
@@ -94,6 +99,8 @@ func (c *RonniedCommand) Handle(s *discordgo.Session, i *discordgo.InteractionCr
 		return c.handleRoll(s, i, channelID, userID)
 	case "leaderboard":
 		return c.handleLeaderboard(s, i, channelID)
+	case "reset":
+		return c.handleReset(s, i, channelID, userID)
 	case "abandon":
 		return c.handleAbandon(s, i, channelID, userID)
 	default:
@@ -503,6 +510,81 @@ func (c *RonniedCommand) handleLeaderboard(s *discordgo.Session, i *discordgo.In
 
 	// Respond with the leaderboard
 	return RespondWithEmbed(s, i, "Leaderboard", description.String(), nil)
+}
+
+// handleReset handles the reset subcommand
+func (c *RonniedCommand) handleReset(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID string) error {
+	ctx := context.Background()
+
+	// Get the game in this channel
+	existingGame, err := c.gameService.GetGameByChannel(ctx, &game.GetGameByChannelInput{
+		ChannelID: channelID,
+	})
+
+	// Handle errors or missing game
+	if err != nil {
+		if errors.Is(err, game.ErrGameNotFound) {
+			return RespondWithError(s, i, "No game found in this channel. Use `/ronnied start` to create a new game.")
+		}
+		log.Printf("Error getting game: %v", err)
+		return RespondWithError(s, i, fmt.Sprintf("Error getting game: %v", err))
+	}
+
+	// Check if the user is the game creator or an admin
+	isCreator := existingGame.Game.CreatorID == userID
+	if !isCreator {
+		return RespondWithError(s, i, "Only the game creator can reset the drink tabs.")
+	}
+
+	// Create a message asking for confirmation with buttons
+	confirmMessage := "Are you sure you want to reset all drink tabs for this game? This action cannot be undone."
+	
+	// Create buttons for confirmation
+	archiveButton := discordgo.Button{
+		Label:    "Archive Records",
+		Style:    discordgo.SuccessButton,
+		CustomID: "reset_archive",
+		Emoji: &discordgo.ComponentEmoji{
+			Name: "📁",
+		},
+	}
+	
+	deleteButton := discordgo.Button{
+		Label:    "Delete Records",
+		Style:    discordgo.DangerButton,
+		CustomID: "reset_delete",
+		Emoji: &discordgo.ComponentEmoji{
+			Name: "🗑️",
+		},
+	}
+	
+	cancelButton := discordgo.Button{
+		Label:    "Cancel",
+		Style:    discordgo.SecondaryButton,
+		CustomID: "reset_cancel",
+		Emoji: &discordgo.ComponentEmoji{
+			Name: "❌",
+		},
+	}
+	
+	// Create action row with buttons
+	actionRow := discordgo.ActionsRow{
+		Components: []discordgo.MessageComponent{
+			archiveButton,
+			deleteButton,
+			cancelButton,
+		},
+	}
+	
+	// Send the confirmation message with buttons
+	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content:    confirmMessage,
+			Components: []discordgo.MessageComponent{actionRow},
+			Flags:      discordgo.MessageFlagsEphemeral, // Make it ephemeral so only the user sees it
+		},
+	})
 }
 
 // handleAbandon handles the abandon subcommand

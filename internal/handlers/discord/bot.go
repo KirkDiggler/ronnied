@@ -162,10 +162,11 @@ const (
 	ButtonJoinGame     = "join_game"
 	ButtonBeginGame    = "begin_game"
 	ButtonRollDice     = "roll_dice"
+	SelectAssignDrink  = "assign_drink"
 	ButtonStartNewGame = "start_new_game"
-
-	// Select menu custom IDs
-	SelectAssignDrink = "assign_drink"
+	ButtonResetArchive = "reset_archive"
+	ButtonResetDelete  = "reset_delete"
+	ButtonResetCancel  = "reset_cancel"
 )
 
 // handleInteraction handles Discord interactions
@@ -217,6 +218,15 @@ func (b *Bot) handleComponentInteraction(s *discordgo.Session, i *discordgo.Inte
 	case ButtonStartNewGame:
 		// Handle start new game button
 		return b.handleStartNewGameButton(s, i, channelID, userID, username)
+	case ButtonResetArchive:
+		// Handle reset archive button
+		return b.handleResetArchiveButton(s, i, channelID, userID)
+	case ButtonResetDelete:
+		// Handle reset delete button
+		return b.handleResetDeleteButton(s, i, channelID, userID)
+	case ButtonResetCancel:
+		// Handle reset cancel button
+		return b.handleResetCancelButton(s, i)
 	default:
 		return RespondWithError(s, i, fmt.Sprintf("Unknown button: %s", customID))
 	}
@@ -394,6 +404,18 @@ func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.Interacti
 func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID string) error {
 	ctx := context.Background()
 
+	// Acknowledge the interaction immediately to prevent timeout
+	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Flags: discordgo.MessageFlagsEphemeral,
+		},
+	})
+	if err != nil {
+		log.Printf("Error acknowledging interaction: %v", err)
+		return err
+	}
+
 	// Get the game in this channel
 	existingGame, err := b.gameService.GetGameByChannel(ctx, &game.GetGameByChannelInput{
 		ChannelID: channelID,
@@ -402,11 +424,16 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 	// Handle errors or missing game
 	if err != nil {
 		if errors.Is(err, game.ErrGameNotFound) {
-			return RespondWithEphemeralMessage(s, i, "No active game found in this channel. Use `/ronnied start` to create a new game.")
+			_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+				Content: stringPtr("No active game found in this channel. Use `/ronnied start` to create a new game."),
+			})
+			return err
 		}
 		log.Printf("Error getting game: %v", err)
-
-		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("%v", err))
+		_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Content: stringPtr(fmt.Sprintf("%v", err)),
+		})
+		return err
 	}
 
 	// Check if the game is in a state where players can roll
@@ -419,7 +446,10 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		// Check if this player is part of the roll-off
 		participant := existingGame.Game.GetParticipant(userID)
 		if participant == nil {
-			return RespondWithEphemeralMessage(s, i, "You are not part of the current roll-off.")
+			_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+				Content: stringPtr("You are not part of the current roll-off."),
+			})
+			return err
 		}
 	}
 
@@ -430,9 +460,15 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 			ErrorType: "game_completed",
 		})
 		if msgErr != nil {
-			return RespondWithEphemeralMessage(s, i, "This game is already completed. Start a new game to roll again.")
+			_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+				Content: stringPtr("This game is already completed. Start a new game to roll again."),
+			})
+			return err
 		}
-		return RespondWithEphemeralMessage(s, i, errorMsgOutput.Message)
+		_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Content: stringPtr(errorMsgOutput.Message),
+		})
+		return err
 	}
 
 	// Roll the dice
@@ -456,7 +492,10 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 				})
 
 				if err == nil && rollOffGameOutput.Game != nil {
-					return RespondWithEphemeralMessage(s, i, "You need to roll in the roll-off game. Check the game message for details.")
+					_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+						Content: stringPtr("You need to roll in the roll-off game. Check the game message for details."),
+					})
+					return err
 				}
 			}
 		}
@@ -473,10 +512,16 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		case game.ErrInvalidGameState:
 			errorType = "invalid_game_state"
 		case game.ErrPlayerNotInGame:
-			return RespondWithEphemeralMessage(s, i, "You are not part of this game.")
+			_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+				Content: stringPtr("You are not part of this game."),
+			})
+			return err
 		default:
 			// For any other error, just return the error message
-			return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to roll dice: %v", err))
+			_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+				Content: stringPtr(fmt.Sprintf("Failed to roll dice: %v", err)),
+			})
+			return err
 		}
 
 		// Get a friendly error message from the messaging service
@@ -485,9 +530,15 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		})
 		if msgErr != nil {
 			// If messaging service fails, use a generic message
-			return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to roll dice: %v", err))
+			_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+				Content: stringPtr(fmt.Sprintf("Failed to roll dice: %v", err)),
+			})
+			return err
 		}
-		return RespondWithEphemeralMessage(s, i, errorMsgOutput.Message)
+		_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Content: stringPtr(errorMsgOutput.Message),
+		})
+		return err
 	}
 
 	// Update the game message in the channel
@@ -495,11 +546,14 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 
 	// Check if the player should be redirected to a roll-off game
 	if rollOutput.ActiveRollOffGameID != "" {
-		return RespondWithEphemeralMessage(s, i, "You need to roll in the roll-off game. Check the game message for details.")
+		_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Content: stringPtr("You need to roll in the roll-off game. Check the game message for details."),
+		})
+		return err
 	}
 
 	// Render the roll response
-	return renderRollDiceResponse(s, i, rollOutput, b.messagingService)
+	return renderRollDiceResponseEdit(s, i, rollOutput, b.messagingService)
 }
 
 // handleAssignDrinkSelect handles the assign drink dropdown selection
@@ -767,4 +821,91 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 	if err != nil {
 		log.Printf("Error updating game message: %v", err)
 	}
+}
+
+// Helper function to create a string pointer
+func stringPtr(s string) *string {
+	return &s
+}
+
+// handleResetArchiveButton handles the reset archive button click
+func (b *Bot) handleResetArchiveButton(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID string) error {
+	ctx := context.Background()
+
+	// Get the game in this channel
+	existingGame, err := b.gameService.GetGameByChannel(ctx, &game.GetGameByChannelInput{
+		ChannelID: channelID,
+	})
+	if err != nil {
+		log.Printf("Error getting game: %v", err)
+		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Error getting game: %v", err))
+	}
+
+	// Check if the user is the game creator
+	if existingGame.Game.CreatorID != userID {
+		return RespondWithEphemeralMessage(s, i, "Only the game creator can reset the drink tabs.")
+	}
+
+	// Reset the game with archive=true
+	resetOutput, err := b.gameService.ResetGame(ctx, &game.ResetGameInput{
+		GameID:  existingGame.Game.ID,
+		Archive: true,
+	})
+	if err != nil {
+		log.Printf("Error resetting game: %v", err)
+		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to reset game: %v", err))
+	}
+
+	// Update the game message
+	b.updateGameMessage(s, channelID, existingGame.Game.ID)
+
+	// Respond with success message
+	return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Successfully archived %d drink records. The leaderboard has been reset.", resetOutput.RecordsAffected))
+}
+
+// handleResetDeleteButton handles the reset delete button click
+func (b *Bot) handleResetDeleteButton(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID string) error {
+	ctx := context.Background()
+
+	// Get the game in this channel
+	existingGame, err := b.gameService.GetGameByChannel(ctx, &game.GetGameByChannelInput{
+		ChannelID: channelID,
+	})
+	if err != nil {
+		log.Printf("Error getting game: %v", err)
+		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Error getting game: %v", err))
+	}
+
+	// Check if the user is the game creator
+	if existingGame.Game.CreatorID != userID {
+		return RespondWithEphemeralMessage(s, i, "Only the game creator can reset the drink tabs.")
+	}
+
+	// Reset the game with archive=false (delete)
+	resetOutput, err := b.gameService.ResetGame(ctx, &game.ResetGameInput{
+		GameID:  existingGame.Game.ID,
+		Archive: false,
+	})
+	if err != nil {
+		log.Printf("Error resetting game: %v", err)
+		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to reset game: %v", err))
+	}
+
+	// Update the game message
+	b.updateGameMessage(s, channelID, existingGame.Game.ID)
+
+	// Respond with success message
+	return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Successfully deleted %d drink records. The leaderboard has been reset.", resetOutput.RecordsAffected))
+}
+
+// handleResetCancelButton handles the reset cancel button click
+func (b *Bot) handleResetCancelButton(s *discordgo.Session, i *discordgo.InteractionCreate) error {
+	// Just acknowledge the interaction and update the message
+	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseUpdateMessage,
+		Data: &discordgo.InteractionResponseData{
+			Content:    "Reset operation cancelled.",
+			Components: []discordgo.MessageComponent{},
+		},
+	})
 }

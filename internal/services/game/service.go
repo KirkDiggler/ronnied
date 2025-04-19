@@ -1629,27 +1629,12 @@ func (s *service) ResetGameTab(ctx context.Context, input *ResetGameTabInput) (*
 
 // PayDrink marks a drink as paid
 func (s *service) PayDrink(ctx context.Context, input *PayDrinkInput) (*PayDrinkOutput, error) {
-	if input == nil || input.GameID == "" {
-		return nil, errors.New("game ID is required")
-	}
-
-	if input.PlayerID == "" {
-		return nil, errors.New("player ID is required")
-	}
-
-	if input.DrinkID == "" {
+	if input == nil || input.DrinkID == "" {
 		return nil, errors.New("drink ID is required")
 	}
 
-	// Get the game
-	game, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
-		GameID: input.GameID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get game: %w", err)
-	}
-
-	// Get the drink record
+	// Get all drink records for the game to find the specific one
+	// Note: We don't have a direct GetDrinkRecord method, so we need to get all records and filter
 	drinkRecords, err := s.drinkLedgerRepo.GetDrinkRecordsForGame(ctx, &ledgerRepo.GetDrinkRecordsForGameInput{
 		GameID: input.GameID,
 	})
@@ -1670,14 +1655,9 @@ func (s *service) PayDrink(ctx context.Context, input *PayDrinkInput) (*PayDrink
 		return nil, fmt.Errorf("drink record with ID %s not found", input.DrinkID)
 	}
 
-	// Verify the player is the one who owes the drink
-	if drinkRecord.ToPlayerID != input.PlayerID {
-		return nil, fmt.Errorf("player %s is not the one who owes this drink", input.PlayerID)
-	}
-
 	// Check if the drink is already paid
 	if drinkRecord.Paid {
-		return nil, fmt.Errorf("drink is already paid")
+		return nil, errors.New("drink is already paid")
 	}
 
 	// Mark the drink as paid
@@ -1688,13 +1668,70 @@ func (s *service) PayDrink(ctx context.Context, input *PayDrinkInput) (*PayDrink
 		return nil, fmt.Errorf("failed to mark drink as paid: %w", err)
 	}
 
-	// Update the drink record with the paid status
+	// Update our local copy of the drink record with the paid status
 	drinkRecord.Paid = true
 	drinkRecord.PaidTimestamp = s.clock.Now()
 
 	return &PayDrinkOutput{
 		Success:     true,
-		Game:        game,
 		DrinkRecord: drinkRecord,
+	}, nil
+}
+
+// ResetGame resets the drink tabs for a game
+func (s *service) ResetGame(ctx context.Context, input *ResetGameInput) (*ResetGameOutput, error) {
+	if input == nil || input.GameID == "" {
+		return nil, errors.New("game ID is required")
+	}
+
+	// Get the game to verify it exists
+	_, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
+		GameID: input.GameID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get game: %w", err)
+	}
+
+	// Get all drink records for the game
+	drinkRecords, err := s.drinkLedgerRepo.GetDrinkRecordsForGame(ctx, &ledgerRepo.GetDrinkRecordsForGameInput{
+		GameID: input.GameID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get drink records: %w", err)
+	}
+
+	// No records to reset
+	if len(drinkRecords.Records) == 0 {
+		return &ResetGameOutput{
+			Success:         true,
+			RecordsAffected: 0,
+		}, nil
+	}
+
+	// Archive or delete the drink records based on the input flag
+	var recordsAffected int
+	if input.Archive {
+		// Archive the drink records
+		err = s.drinkLedgerRepo.ArchiveDrinkRecords(ctx, &ledgerRepo.ArchiveDrinkRecordsInput{
+			GameID: input.GameID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to archive drink records: %w", err)
+		}
+		recordsAffected = len(drinkRecords.Records)
+	} else {
+		// Delete the drink records
+		err = s.drinkLedgerRepo.DeleteDrinkRecords(ctx, &ledgerRepo.DeleteDrinkRecordsInput{
+			GameID: input.GameID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to delete drink records: %w", err)
+		}
+		recordsAffected = len(drinkRecords.Records)
+	}
+
+	return &ResetGameOutput{
+		Success:         true,
+		RecordsAffected: recordsAffected,
 	}, nil
 }

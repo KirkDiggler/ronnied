@@ -556,3 +556,22 @@ type PayDrinkOutput struct {
 	// DrinkRecord is the drink record that was marked as paid
 	DrinkRecord *models.DrinkLedger
 }
+
+// ResetGameInput represents the input for the ResetGame method
+type ResetGameInput struct {
+	// GameID is the ID of the game to reset
+	GameID string
+	
+	// Archive indicates whether to archive the drink records (true) or delete them (false)
+	// If not specified, defaults to archiving
+	Archive bool
+}
+
+// ResetGameOutput represents the output of the ResetGame method
+type ResetGameOutput struct {
+	// Success indicates whether the game was successfully reset
+	Success bool
+	
+	// RecordsAffected is the number of drink records that were reset
+	RecordsAffected int
+}

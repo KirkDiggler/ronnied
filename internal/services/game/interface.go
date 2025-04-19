@@ -51,4 +51,7 @@ type Service interface {
 	
 	// PayDrink marks a drink as paid
 	PayDrink(ctx context.Context, input *PayDrinkInput) (*PayDrinkOutput, error)
+
+	// ResetGame resets the drink tabs for a game
+	ResetGame(ctx context.Context, input *ResetGameInput) (*ResetGameOutput, error)
 }
