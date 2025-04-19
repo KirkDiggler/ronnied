@@ -1296,6 +1296,100 @@ func (s *GameServiceTestSuite) TestRollDice_SaveGameError() {
 	s.Nil(output)
 }
 
+// RollOff Tests
+
+func (s *GameServiceTestSuite) TestRollDice_RollOffGame() {
+	// Create a roll-off game with participants who haven't rolled yet
+	rollOffGame := &models.Game{
+		ID:           "roll-off-game-id",
+		ChannelID:    s.testChannelID,
+		CreatorID:    s.testCreatorID,
+		ParentGameID: s.testGameID, // This is a roll-off game
+		Status:       models.GameStatusRollOff,
+		CreatedAt:    s.testTime,
+		UpdatedAt:    s.testTime,
+		Participants: []*models.Participant{
+			{
+				ID:         s.testParticipantID,
+				GameID:     "roll-off-game-id",
+				PlayerID:   s.testCreatorID,
+				PlayerName: s.testCreatorName,
+				Status:     models.ParticipantStatusWaitingToRoll,
+				// No roll value or time yet
+			},
+			{
+				ID:         "another-participant-id",
+				GameID:     "roll-off-game-id",
+				PlayerID:   s.testPlayerID,
+				PlayerName: s.testPlayerName,
+				Status:     models.ParticipantStatusWaitingToRoll,
+				// No roll value or time yet
+			},
+		},
+	}
+
+	// Set up input for RollDice
+	rollDiceInput := &RollDiceInput{
+		GameID:   "roll-off-game-id",
+		PlayerID: s.testCreatorID,
+	}
+
+	// Expect GetGame to be called
+	s.mockGameRepo.EXPECT().
+		GetGame(gomock.Any(), &gameRepo.GetGameInput{
+			GameID: "roll-off-game-id",
+		}).
+		Return(rollOffGame, nil)
+
+	// Expect GetGamesByParent to be called to check for nested roll-offs
+	s.mockGameRepo.EXPECT().
+		GetGamesByParent(gomock.Any(), &gameRepo.GetGamesByParentInput{
+			ParentGameID: "roll-off-game-id",
+		}).
+		Return([]*models.Game{}, nil)
+
+	// Expect the dice to be rolled (use 6 as the default sides for testing)
+	s.mockDiceRoller.EXPECT().
+		Roll(6).
+		Return(4) // Regular roll, not critical
+
+	// Expect SaveGame to be called with updated participant roll
+	s.mockGameRepo.EXPECT().
+		SaveGame(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, input *gameRepo.SaveGameInput) error {
+			// Verify the game has been updated with the participant's roll
+			s.Equal("roll-off-game-id", input.Game.ID)
+			s.Equal(models.GameStatusRollOff, input.Game.Status)
+			
+			// Find the participant who rolled
+			var rolledParticipant *models.Participant
+			for _, p := range input.Game.Participants {
+				if p.PlayerID == s.testCreatorID {
+					rolledParticipant = p
+					break
+				}
+			}
+			
+			// Verify participant roll was updated
+			s.NotNil(rolledParticipant)
+			s.Equal(4, rolledParticipant.RollValue)
+			s.NotNil(rolledParticipant.RollTime)
+			s.Equal(models.ParticipantStatusActive, rolledParticipant.Status)
+			
+			return nil
+		})
+
+	// Act
+	output, err := s.gameService.RollDice(s.ctx, rollDiceInput)
+
+	// Assert
+	s.Require().NoError(err)
+	s.Require().NotNil(output)
+	s.Equal(4, output.RollValue)
+	s.False(output.IsCriticalHit)
+	s.False(output.IsCriticalFail)
+}
+
 // EndGame Tests
 
 func (s *GameServiceTestSuite) TestEndGame_HighestRollTie() {
@@ -1777,6 +1871,138 @@ func (s *GameServiceTestSuite) TestEndGame_BothHighestAndLowestRollTies() {
 	// Note: In the current implementation, we expect only the highest roll-off to be created
 	// The lowest roll-off should be created after the highest roll-off is resolved
 	// This test verifies that the highest roll-off takes precedence
+}
+
+func (s *GameServiceTestSuite) TestRollDice_NestedRollOffGame() {
+	// Create a parent roll-off game
+	parentRollOffGame := &models.Game{
+		ID:           "parent-roll-off-id",
+		ChannelID:    s.testChannelID,
+		CreatorID:    s.testCreatorID,
+		ParentGameID: s.testGameID,
+		Status:       models.GameStatusRollOff,
+		CreatedAt:    s.testTime,
+		UpdatedAt:    s.testTime,
+		Participants: []*models.Participant{
+			{
+				ID:         s.testParticipantID,
+				GameID:     "parent-roll-off-id",
+				PlayerID:   s.testCreatorID,
+				PlayerName: s.testCreatorName,
+				Status:     models.ParticipantStatusActive,
+				RollValue:  6, // Already rolled
+				RollTime:   &s.testTime,
+			},
+			{
+				ID:         "another-participant-id",
+				GameID:     "parent-roll-off-id",
+				PlayerID:   s.testPlayerID,
+				PlayerName: s.testPlayerName,
+				Status:     models.ParticipantStatusActive,
+				RollValue:  6, // Already rolled, tied with creator
+				RollTime:   &s.testTime,
+			},
+			{
+				ID:         "third-participant-id",
+				GameID:     "parent-roll-off-id",
+				PlayerID:   "third-player-id",
+				PlayerName: "Third Player",
+				Status:     models.ParticipantStatusActive,
+				RollValue:  3, // Lower roll
+				RollTime:   &s.testTime,
+			},
+		},
+	}
+
+	// Create a nested roll-off game for the tied players
+	nestedRollOffGame := &models.Game{
+		ID:           "nested-roll-off-id",
+		ChannelID:    s.testChannelID,
+		CreatorID:    s.testCreatorID,
+		ParentGameID: "parent-roll-off-id", // This is a nested roll-off
+		Status:       models.GameStatusRollOff,
+		CreatedAt:    s.testTime,
+		UpdatedAt:    s.testTime,
+		Participants: []*models.Participant{
+			{
+				ID:         "nested-participant-1",
+				GameID:     "nested-roll-off-id",
+				PlayerID:   s.testCreatorID,
+				PlayerName: s.testCreatorName,
+				Status:     models.ParticipantStatusWaitingToRoll,
+				// No roll value or time yet
+			},
+			{
+				ID:         "nested-participant-2",
+				GameID:     "nested-roll-off-id",
+				PlayerID:   s.testPlayerID,
+				PlayerName: s.testPlayerName,
+				Status:     models.ParticipantStatusWaitingToRoll,
+				// No roll value or time yet
+			},
+		},
+	}
+
+	// Set up input for RollDice - note we're targeting the parent roll-off
+	rollDiceInput := &RollDiceInput{
+		GameID:   "parent-roll-off-id",
+		PlayerID: s.testCreatorID,
+	}
+
+	// Expect GetGame to be called for the parent roll-off
+	s.mockGameRepo.EXPECT().
+		GetGame(gomock.Any(), &gameRepo.GetGameInput{
+			GameID: "parent-roll-off-id",
+		}).
+		Return(parentRollOffGame, nil)
+
+	// Expect GetGamesByParent to be called to find nested roll-offs
+	s.mockGameRepo.EXPECT().
+		GetGamesByParent(gomock.Any(), &gameRepo.GetGamesByParentInput{
+			ParentGameID: "parent-roll-off-id",
+		}).
+		Return([]*models.Game{nestedRollOffGame}, nil)
+
+	// Expect the dice to be rolled (use 6 as the default sides for testing)
+	s.mockDiceRoller.EXPECT().
+		Roll(6).
+		Return(5) // Regular roll, not critical
+
+	// Expect SaveGame to be called with updated participant roll in the NESTED game
+	s.mockGameRepo.EXPECT().
+		SaveGame(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, input *gameRepo.SaveGameInput) error {
+			// Verify the NESTED game has been updated with the participant's roll
+			s.Equal("nested-roll-off-id", input.Game.ID)
+			s.Equal(models.GameStatusRollOff, input.Game.Status)
+			
+			// Find the participant who rolled
+			var rolledParticipant *models.Participant
+			for _, p := range input.Game.Participants {
+				if p.PlayerID == s.testCreatorID {
+					rolledParticipant = p
+					break
+				}
+			}
+			
+			// Verify participant roll was updated in the nested game
+			s.NotNil(rolledParticipant)
+			s.Equal(5, rolledParticipant.RollValue)
+			s.NotNil(rolledParticipant.RollTime)
+			s.Equal(models.ParticipantStatusActive, rolledParticipant.Status)
+			
+			return nil
+		})
+
+	// Act
+	output, err := s.gameService.RollDice(s.ctx, rollDiceInput)
+
+	// Assert
+	s.Require().NoError(err)
+	s.Require().NotNil(output)
+	s.Equal(5, output.RollValue)
+	s.False(output.IsCriticalHit)
+	s.False(output.IsCriticalFail)
 }
 
 func TestGameServiceSuite(t *testing.T) {
