@@ -1,4 +1,4 @@
-package game_test
+package game
 
 import (
 	"context"
@@ -17,7 +17,6 @@ import (
 	gameMocks "github.com/KirkDiggler/ronnied/internal/repositories/game/mocks"
 	playerRepo "github.com/KirkDiggler/ronnied/internal/repositories/player"
 	playerMocks "github.com/KirkDiggler/ronnied/internal/repositories/player/mocks"
-	"github.com/KirkDiggler/ronnied/internal/services/game"
 	"go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/suite"
 )
@@ -31,7 +30,7 @@ type GameServiceTestSuite struct {
 	mockDiceRoller    *diceMocks.MockRoller
 	mockClock         *mocks.MockClock
 	mockUUID          *uuidMocks.MockUUID
-	gameService       game.Service
+	gameService       Service
 	ctx               context.Context
 	
 	// Test data
@@ -52,10 +51,10 @@ type GameServiceTestSuite struct {
 	expectedPlayer         *models.Player
 	
 	// Reusable test inputs
-	createGameInput *game.CreateGameInput
-	startGameInput  *game.StartGameInput
-	joinGameInput   *game.JoinGameInput
-	rollDiceInput   *game.RollDiceInput
+	createGameInput *CreateGameInput
+	startGameInput  *StartGameInput
+	joinGameInput   *JoinGameInput
+	rollDiceInput   *RollDiceInput
 }
 
 func (s *GameServiceTestSuite) SetupTest() {
@@ -134,30 +133,30 @@ func (s *GameServiceTestSuite) SetupTest() {
 	}
 	
 	// Initialize reusable test inputs
-	s.createGameInput = &game.CreateGameInput{
+	s.createGameInput = &CreateGameInput{
 		ChannelID:   s.testChannelID,
 		CreatorID:   s.testCreatorID,
 		CreatorName: s.testCreatorName,
 	}
 	
-	s.startGameInput = &game.StartGameInput{
+	s.startGameInput = &StartGameInput{
 		GameID:   s.testGameID,
 		PlayerID: s.testCreatorID,
 	}
 	
-	s.joinGameInput = &game.JoinGameInput{
+	s.joinGameInput = &JoinGameInput{
 		GameID:     s.testGameID,
 		PlayerID:   s.testPlayerID,
 		PlayerName: s.testPlayerName,
 	}
 	
-	s.rollDiceInput = &game.RollDiceInput{
+	s.rollDiceInput = &RollDiceInput{
 		GameID:   s.testGameID,
 		PlayerID: s.testCreatorID,
 	}
 
 	// Create the service with mocked dependencies
-	cfg := &game.Config{
+	cfg := &Config{
 		GameRepo:        s.mockGameRepo,
 		PlayerRepo:      s.mockPlayerRepo,
 		DrinkLedgerRepo: s.mockDrinkRepo,
@@ -171,7 +170,7 @@ func (s *GameServiceTestSuite) SetupTest() {
 	}
 
 	var err error
-	svc, err := game.New(cfg)
+	svc, err := New(cfg)
 	s.Require().NoError(err)
 	s.gameService = svc
 }
@@ -308,13 +307,13 @@ func (s *GameServiceTestSuite) TestStartGame_GameNotFound() {
 
 	// Assert
 	s.Require().Error(err)
-	s.True(errors.Is(err, game.ErrGameNotFound))
+	s.True(errors.Is(err, ErrGameNotFound))
 	s.Nil(output)
 }
 
 func (s *GameServiceTestSuite) TestStartGame_NotCreator() {
 	// Create a different player ID for this test
-	notCreatorInput := &game.StartGameInput{
+	notCreatorInput := &StartGameInput{
 		GameID:   s.testGameID,
 		PlayerID: "not-creator-id",
 	}
@@ -331,7 +330,7 @@ func (s *GameServiceTestSuite) TestStartGame_NotCreator() {
 
 	// Assert
 	s.Require().Error(err)
-	s.Equal(game.ErrNotCreator, err)
+	s.Equal(ErrNotCreator, err)
 	s.Nil(output)
 }
 
@@ -359,7 +358,7 @@ func (s *GameServiceTestSuite) TestStartGame_InvalidGameState() {
 
 	// Assert
 	s.Require().Error(err)
-	s.True(errors.Is(err, game.ErrInvalidGameState))
+	s.True(errors.Is(err, ErrInvalidGameState))
 	s.Nil(output)
 }
 
@@ -387,7 +386,7 @@ func (s *GameServiceTestSuite) TestStartGame_NoPlayers() {
 
 	// Assert
 	s.Require().Error(err)
-	s.Equal(game.ErrNotEnoughPlayers, err)
+	s.Equal(ErrNotEnoughPlayers, err)
 	s.Nil(output)
 }
 
@@ -533,7 +532,7 @@ func (s *GameServiceTestSuite) TestJoinGame_GameNotFound() {
 
 	// Assert
 	s.Require().Error(err)
-	s.True(errors.Is(err, game.ErrGameNotFound))
+	s.True(errors.Is(err, ErrGameNotFound))
 	s.Nil(output)
 }
 
@@ -550,7 +549,7 @@ func (s *GameServiceTestSuite) TestJoinGame_GameActive() {
 
 	// Assert
 	s.Require().Error(err)
-	s.True(errors.Is(err, game.ErrGameActive))
+	s.True(errors.Is(err, ErrGameActive))
 	s.Nil(output)
 }
 
@@ -589,7 +588,7 @@ func (s *GameServiceTestSuite) TestJoinGame_GameFull() {
 
 	// Assert
 	s.Require().Error(err)
-	s.True(errors.Is(err, game.ErrGameFull))
+	s.True(errors.Is(err, ErrGameFull))
 	s.Nil(output)
 }
 
@@ -830,20 +829,37 @@ func (s *GameServiceTestSuite) TestRollDice_RegularRoll() {
 
 	// Expect SaveGame to be called with the updated game
 	s.mockGameRepo.EXPECT().
-		SaveGame(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, input *gameRepo.SaveGameInput) error {
-			// Verify the game has been updated correctly
-			s.Equal(s.testTime, input.Game.UpdatedAt)
-			
-			// Verify the participant has been updated correctly
-			participant := input.Game.GetParticipant(s.testCreatorID)
-			s.Require().NotNil(participant)
-			s.Equal(3, participant.RollValue)
-			s.Equal(s.testTime, *participant.RollTime)
-			s.Equal(models.ParticipantStatusActive, participant.Status)
-			
-			return nil
-		})
+		SaveGame(gomock.Any(), &gameRepo.SaveGameInput{
+			Game: &models.Game{
+				ID:           s.testGameID,
+				ChannelID:    s.testChannelID,
+				CreatorID:    s.testCreatorID,
+				Status:       models.GameStatusActive,
+				CreatedAt:    s.testTime,
+				UpdatedAt:    s.testTime,
+				Participants: []*models.Participant{
+					{
+						ID:         s.testParticipantID,
+						GameID:     s.testGameID,
+						PlayerID:   s.testCreatorID,
+						PlayerName: s.testCreatorName,
+						Status:     models.ParticipantStatusActive,
+						RollValue:  3,
+						RollTime:   &s.testTime,
+					},
+					{
+						ID:         "another-participant-id",
+						GameID:     s.testGameID,
+						PlayerID:   s.testPlayerID,
+						PlayerName: s.testPlayerName,
+						Status:     models.ParticipantStatusWaitingToRoll,
+						RollValue:  0,
+						RollTime:   nil,
+					},
+				},
+			},
+		}).
+		Return(nil)
 
 	// Act
 	output, err := s.gameService.RollDice(s.ctx, s.rollDiceInput)
@@ -916,20 +932,46 @@ func (s *GameServiceTestSuite) TestRollDice_CriticalHit() {
 
 	// Expect SaveGame to be called with the updated game
 	s.mockGameRepo.EXPECT().
-		SaveGame(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, input *gameRepo.SaveGameInput) error {
-			// Verify the game has been updated correctly
-			s.Equal(s.testTime, input.Game.UpdatedAt)
-			
-			// Verify the participant has been updated correctly
-			participant := input.Game.GetParticipant(s.testCreatorID)
-			s.Require().NotNil(participant)
-			s.Equal(6, participant.RollValue)
-			s.Equal(s.testTime, *participant.RollTime)
-			s.Equal(models.ParticipantStatusNeedsToAssign, participant.Status)
-			
-			return nil
-		})
+		SaveGame(gomock.Any(), &gameRepo.SaveGameInput{
+			Game: &models.Game{
+				ID:           s.testGameID,
+				ChannelID:    s.testChannelID,
+				CreatorID:    s.testCreatorID,
+				Status:       models.GameStatusActive,
+				CreatedAt:    s.testTime,
+				UpdatedAt:    s.testTime,
+				Participants: []*models.Participant{
+					{
+						ID:         s.testParticipantID,
+						GameID:     s.testGameID,
+						PlayerID:   s.testCreatorID,
+						PlayerName: s.testCreatorName,
+						Status:     models.ParticipantStatusNeedsToAssign,
+						RollValue:  6,
+						RollTime:   &s.testTime,
+					},
+					{
+						ID:         "another-participant-id",
+						GameID:     s.testGameID,
+						PlayerID:   s.testPlayerID,
+						PlayerName: s.testPlayerName,
+						Status:     models.ParticipantStatusWaitingToRoll,
+						RollValue:  0,
+						RollTime:   nil,
+					},
+					{
+						ID:         "third-participant-id",
+						GameID:     s.testGameID,
+						PlayerID:   "third-player-id",
+						PlayerName: "Third Player",
+						Status:     models.ParticipantStatusWaitingToRoll,
+						RollValue:  0,
+						RollTime:   nil,
+					},
+				},
+			},
+		}).
+		Return(nil)
 
 	// Act
 	output, err := s.gameService.RollDice(s.ctx, s.rollDiceInput)
@@ -1016,20 +1058,37 @@ func (s *GameServiceTestSuite) TestRollDice_CriticalFail() {
 
 	// Expect SaveGame to be called with the updated game
 	s.mockGameRepo.EXPECT().
-		SaveGame(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, input *gameRepo.SaveGameInput) error {
-			// Verify the game has been updated correctly
-			s.Equal(s.testTime, input.Game.UpdatedAt)
-			
-			// Verify the participant has been updated correctly
-			participant := input.Game.GetParticipant(s.testCreatorID)
-			s.Require().NotNil(participant)
-			s.Equal(1, participant.RollValue)
-			s.Equal(s.testTime, *participant.RollTime)
-			s.Equal(models.ParticipantStatusActive, participant.Status)
-			
-			return nil
-		})
+		SaveGame(gomock.Any(), &gameRepo.SaveGameInput{
+			Game: &models.Game{
+				ID:           s.testGameID,
+				ChannelID:    s.testChannelID,
+				CreatorID:    s.testCreatorID,
+				Status:       models.GameStatusActive,
+				CreatedAt:    s.testTime,
+				UpdatedAt:    s.testTime,
+				Participants: []*models.Participant{
+					{
+						ID:         s.testParticipantID,
+						GameID:     s.testGameID,
+						PlayerID:   s.testCreatorID,
+						PlayerName: s.testCreatorName,
+						Status:     models.ParticipantStatusActive,
+						RollValue:  1,
+						RollTime:   &s.testTime,
+					},
+					{
+						ID:         "another-participant-id",
+						GameID:     s.testGameID,
+						PlayerID:   s.testPlayerID,
+						PlayerName: s.testPlayerName,
+						Status:     models.ParticipantStatusWaitingToRoll,
+						RollValue:  0,
+						RollTime:   nil,
+					},
+				},
+			},
+		}).
+		Return(nil)
 
 	// Act
 	output, err := s.gameService.RollDice(s.ctx, s.rollDiceInput)
@@ -1054,14 +1113,14 @@ func (s *GameServiceTestSuite) TestRollDice_GameNotFound() {
 		GetGame(gomock.Any(), &gameRepo.GetGameInput{
 			GameID: s.testGameID,
 		}).
-		Return(nil, game.ErrGameNotFound)
+		Return(nil, ErrGameNotFound)
 
 	// Act
 	output, err := s.gameService.RollDice(s.ctx, s.rollDiceInput)
 
 	// Assert
 	s.Require().Error(err)
-	s.True(errors.Is(err, game.ErrGameNotFound))
+	s.True(errors.Is(err, ErrGameNotFound))
 	s.Nil(output)
 }
 
@@ -1089,7 +1148,7 @@ func (s *GameServiceTestSuite) TestRollDice_InvalidGameState() {
 
 	// Assert
 	s.Require().Error(err)
-	s.True(errors.Is(err, game.ErrInvalidGameState))
+	s.True(errors.Is(err, ErrInvalidGameState))
 	s.Nil(output)
 }
 
@@ -1125,7 +1184,7 @@ func (s *GameServiceTestSuite) TestRollDice_PlayerNotInGame() {
 
 	// Assert
 	s.Require().Error(err)
-	s.True(errors.Is(err, game.ErrPlayerNotInGame))
+	s.True(errors.Is(err, ErrPlayerNotInGame))
 	s.Nil(output)
 }
 
@@ -1205,7 +1264,27 @@ func (s *GameServiceTestSuite) TestRollDice_SaveGameError() {
 	// Expect SaveGame to be called and return an error
 	expectedError := errors.New("failed to save game")
 	s.mockGameRepo.EXPECT().
-		SaveGame(gomock.Any(), gomock.Any()).
+		SaveGame(gomock.Any(), &gameRepo.SaveGameInput{
+			Game: &models.Game{
+				ID:           s.testGameID,
+				ChannelID:    s.testChannelID,
+				CreatorID:    s.testCreatorID,
+				Status:       models.GameStatusActive,
+				CreatedAt:    s.testTime,
+				UpdatedAt:    s.testTime,
+				Participants: []*models.Participant{
+					{
+						ID:         s.testParticipantID,
+						GameID:     s.testGameID,
+						PlayerID:   s.testCreatorID,
+						PlayerName: s.testCreatorName,
+						Status:     models.ParticipantStatusActive,
+						RollValue:  3,
+						RollTime:   &s.testTime,
+					},
+				},
+			},
+		}).
 		Return(expectedError)
 
 	// Act
@@ -1215,6 +1294,489 @@ func (s *GameServiceTestSuite) TestRollDice_SaveGameError() {
 	s.Require().Error(err)
 	s.Contains(err.Error(), expectedError.Error(), "Expected error to contain the original error message")
 	s.Nil(output)
+}
+
+// EndGame Tests
+
+func (s *GameServiceTestSuite) TestEndGame_HighestRollTie() {
+	// Create a game where multiple players have tied for the highest roll
+	game := &models.Game{
+		ID:           s.testGameID,
+		ChannelID:    s.testChannelID,
+		CreatorID:    s.testCreatorID,
+		Status:       models.GameStatusActive,
+		CreatedAt:    s.testTime,
+		UpdatedAt:    s.testTime,
+		Participants: []*models.Participant{
+			{
+				ID:         s.testParticipantID,
+				GameID:     s.testGameID,
+				PlayerID:   s.testCreatorID,
+				PlayerName: s.testCreatorName,
+				Status:     models.ParticipantStatusActive,
+				RollValue:  6, // Tied for highest roll (creator)
+				RollTime:   &s.testTime,
+			},
+			{
+				ID:         "another-participant-id",
+				GameID:     s.testGameID,
+				PlayerID:   s.testPlayerID,
+				PlayerName: s.testPlayerName,
+				Status:     models.ParticipantStatusActive,
+				RollValue:  6, // Tied for highest roll
+				RollTime:   &s.testTime,
+			},
+			{
+				ID:         "third-participant-id",
+				GameID:     s.testGameID,
+				PlayerID:   "third-player-id",
+				PlayerName: "Third Player",
+				Status:     models.ParticipantStatusActive,
+				RollValue:  3, // Lower roll
+				RollTime:   &s.testTime,
+			},
+		},
+	}
+
+	// Set up mock for creating a roll-off game
+	rollOffGame := &models.Game{
+		ID:           "roll-off-game-id",
+		ChannelID:    s.testChannelID,
+		CreatorID:    s.testCreatorID,
+		ParentGameID: s.testGameID,
+		Status:       models.GameStatusRollOff,
+		CreatedAt:    s.testTime,
+		UpdatedAt:    s.testTime,
+	}
+
+	// Expect GetDrinkRecordsForGame to be called
+	s.mockDrinkRepo.EXPECT().
+		GetDrinkRecordsForGame(gomock.Any(), &ledgerRepo.GetDrinkRecordsForGameInput{
+			GameID: s.testGameID,
+		}).
+		Return(&ledgerRepo.GetDrinkRecordsForGameOutput{
+			Records: []*models.DrinkLedger{},
+		}, nil)
+
+	// Create player names map for the roll-off game
+	playerNames := map[string]string{
+		s.testCreatorID: s.testCreatorName,
+		s.testPlayerID:  s.testPlayerName,
+	}
+
+	// Expect CreateRollOffGame to be called with both tied players, including the creator
+	s.mockGameRepo.EXPECT().
+		CreateRollOffGame(gomock.Any(), &gameRepo.CreateRollOffGameInput{
+			ChannelID:    s.testChannelID,
+			CreatorID:    s.testCreatorID,
+			ParentGameID: s.testGameID,
+			PlayerIDs:    []string{s.testCreatorID, s.testPlayerID},
+			PlayerNames:  playerNames,
+		}).
+		Return(&gameRepo.CreateRollOffGameOutput{
+			Game: rollOffGame,
+		}, nil)
+
+	// Expect SaveGame to be called to update the parent game
+	s.mockGameRepo.EXPECT().
+		SaveGame(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, input *gameRepo.SaveGameInput) error {
+			// Verify the game has been updated with the roll-off game ID
+			s.Equal(rollOffGame.ID, input.Game.RollOffGameID)
+			// The game status should be updated to RollOff when a roll-off is needed
+			s.Equal(models.GameStatusRollOff, input.Game.Status)
+			return nil
+		})
+
+	// Expect GetPlayer to be called for ALL participants
+	// First participant (creator) - may be called multiple times
+	s.mockPlayerRepo.EXPECT().
+		GetPlayer(gomock.Any(), &playerRepo.GetPlayerInput{
+			PlayerID: s.testCreatorID,
+		}).
+		Return(&models.Player{
+			ID:            s.testCreatorID,
+			Name:          s.testCreatorName,
+			CurrentGameID: s.testGameID,
+		}, nil).
+		MinTimes(1)
+
+	// Second participant - may be called multiple times
+	s.mockPlayerRepo.EXPECT().
+		GetPlayer(gomock.Any(), &playerRepo.GetPlayerInput{
+			PlayerID: s.testPlayerID,
+		}).
+		Return(&models.Player{
+			ID:            s.testPlayerID,
+			Name:          s.testPlayerName,
+			CurrentGameID: s.testGameID,
+		}, nil).
+		MinTimes(1)
+
+	// Third participant - may be called multiple times
+	s.mockPlayerRepo.EXPECT().
+		GetPlayer(gomock.Any(), &playerRepo.GetPlayerInput{
+			PlayerID: "third-player-id",
+		}).
+		Return(&models.Player{
+			ID:            "third-player-id",
+			Name:          "Third Player",
+			CurrentGameID: s.testGameID,
+		}, nil).
+		MinTimes(1)
+
+	// Expect SavePlayer to be called for each tied player (only the highest rollers)
+	s.mockPlayerRepo.EXPECT().
+		SavePlayer(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, input *playerRepo.SavePlayerInput) error {
+			// Verify the player's current game ID is updated to the roll-off game
+			s.Equal(rollOffGame.ID, input.Player.CurrentGameID)
+			return nil
+		}).Times(2)
+
+	// Act
+	output, err := s.gameService.EndGame(s.ctx, &EndGameInput{
+		Game: game,
+	})
+
+	// Assert
+	s.Require().NoError(err)
+	s.Require().NotNil(output)
+	s.True(output.NeedsRollOff)
+	s.Equal(RollOffTypeHighest, output.RollOffType)
+	s.Equal(rollOffGame.ID, output.RollOffGameID)
+	s.Equal(2, len(output.RollOffPlayerIDs))
+	s.Contains(output.RollOffPlayerIDs, s.testCreatorID) // Creator should be included
+	s.Contains(output.RollOffPlayerIDs, s.testPlayerID)
+}
+
+func (s *GameServiceTestSuite) TestEndGame_LowestRollTie() {
+	// Create a game where multiple players have tied for the lowest roll
+	game := &models.Game{
+		ID:           s.testGameID,
+		ChannelID:    s.testChannelID,
+		CreatorID:    s.testCreatorID,
+		Status:       models.GameStatusActive,
+		CreatedAt:    s.testTime,
+		UpdatedAt:    s.testTime,
+		Participants: []*models.Participant{
+			{
+				ID:         s.testParticipantID,
+				GameID:     s.testGameID,
+				PlayerID:   s.testCreatorID,
+				PlayerName: s.testCreatorName,
+				Status:     models.ParticipantStatusActive,
+				RollValue:  1, // Tied for lowest roll (creator)
+				RollTime:   &s.testTime,
+			},
+			{
+				ID:         "another-participant-id",
+				GameID:     s.testGameID,
+				PlayerID:   s.testPlayerID,
+				PlayerName: s.testPlayerName,
+				Status:     models.ParticipantStatusActive,
+				RollValue:  1, // Tied for lowest roll
+				RollTime:   &s.testTime,
+			},
+			{
+				ID:         "third-participant-id",
+				GameID:     s.testGameID,
+				PlayerID:   "third-player-id",
+				PlayerName: "Third Player",
+				Status:     models.ParticipantStatusActive,
+				RollValue:  5, // Higher roll
+				RollTime:   &s.testTime,
+			},
+		},
+	}
+
+	// Set up mock for creating a roll-off game
+	rollOffGame := &models.Game{
+		ID:           "roll-off-game-id",
+		ChannelID:    s.testChannelID,
+		CreatorID:    s.testCreatorID,
+		ParentGameID: s.testGameID,
+		Status:       models.GameStatusRollOff,
+		CreatedAt:    s.testTime,
+		UpdatedAt:    s.testTime,
+	}
+
+	// Expect GetDrinkRecordsForGame to be called
+	s.mockDrinkRepo.EXPECT().
+		GetDrinkRecordsForGame(gomock.Any(), &ledgerRepo.GetDrinkRecordsForGameInput{
+			GameID: s.testGameID,
+		}).
+		Return(&ledgerRepo.GetDrinkRecordsForGameOutput{
+			Records: []*models.DrinkLedger{},
+		}, nil)
+
+	// Create player names map for the roll-off game
+	playerNames := map[string]string{
+		s.testCreatorID: s.testCreatorName,
+		s.testPlayerID:  s.testPlayerName,
+	}
+
+	// Expect CreateRollOffGame to be called with both tied players, including the creator
+	s.mockGameRepo.EXPECT().
+		CreateRollOffGame(gomock.Any(), &gameRepo.CreateRollOffGameInput{
+			ChannelID:    s.testChannelID,
+			CreatorID:    s.testCreatorID,
+			ParentGameID: s.testGameID,
+			PlayerIDs:    []string{s.testCreatorID, s.testPlayerID},
+			PlayerNames:  playerNames,
+		}).
+		Return(&gameRepo.CreateRollOffGameOutput{
+			Game: rollOffGame,
+		}, nil)
+
+	// Expect SaveGame to be called to update the parent game
+	s.mockGameRepo.EXPECT().
+		SaveGame(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, input *gameRepo.SaveGameInput) error {
+			// Verify the game has been updated with the roll-off game ID
+			s.Equal(rollOffGame.ID, input.Game.RollOffGameID)
+			// The game status should be updated to RollOff when a roll-off is needed
+			s.Equal(models.GameStatusRollOff, input.Game.Status)
+			return nil
+		})
+
+	// Expect GetPlayer to be called for ALL participants
+	// First participant (creator) - may be called multiple times
+	s.mockPlayerRepo.EXPECT().
+		GetPlayer(gomock.Any(), &playerRepo.GetPlayerInput{
+			PlayerID: s.testCreatorID,
+		}).
+		Return(&models.Player{
+			ID:            s.testCreatorID,
+			Name:          s.testCreatorName,
+			CurrentGameID: s.testGameID,
+		}, nil).
+		MinTimes(1)
+
+	// Second participant - may be called multiple times
+	s.mockPlayerRepo.EXPECT().
+		GetPlayer(gomock.Any(), &playerRepo.GetPlayerInput{
+			PlayerID: s.testPlayerID,
+		}).
+		Return(&models.Player{
+			ID:            s.testPlayerID,
+			Name:          s.testPlayerName,
+			CurrentGameID: s.testGameID,
+		}, nil).
+		MinTimes(1)
+
+	// Third participant - may be called multiple times
+	s.mockPlayerRepo.EXPECT().
+		GetPlayer(gomock.Any(), &playerRepo.GetPlayerInput{
+			PlayerID: "third-player-id",
+		}).
+		Return(&models.Player{
+			ID:            "third-player-id",
+			Name:          "Third Player",
+			CurrentGameID: s.testGameID,
+		}, nil).
+		MinTimes(1)
+
+	// Expect SavePlayer to be called for each tied player (only the lowest rollers)
+	s.mockPlayerRepo.EXPECT().
+		SavePlayer(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, input *playerRepo.SavePlayerInput) error {
+			// Verify the player's current game ID is updated to the roll-off game
+			s.Equal(rollOffGame.ID, input.Player.CurrentGameID)
+			return nil
+		}).Times(2)
+
+	// Act
+	output, err := s.gameService.EndGame(s.ctx, &EndGameInput{
+		Game: game,
+	})
+
+	// Assert
+	s.Require().NoError(err)
+	s.Require().NotNil(output)
+	s.True(output.NeedsRollOff)
+	s.Equal(RollOffTypeLowest, output.RollOffType)
+	s.Equal(rollOffGame.ID, output.RollOffGameID)
+	s.Equal(2, len(output.RollOffPlayerIDs))
+	s.Contains(output.RollOffPlayerIDs, s.testCreatorID) // Creator should be included
+	s.Contains(output.RollOffPlayerIDs, s.testPlayerID)
+}
+
+func (s *GameServiceTestSuite) TestEndGame_BothHighestAndLowestRollTies() {
+	// Create a game where there are ties for both highest and lowest rolls
+	game := &models.Game{
+		ID:           s.testGameID,
+		ChannelID:    s.testChannelID,
+		CreatorID:    s.testCreatorID,
+		Status:       models.GameStatusActive,
+		CreatedAt:    s.testTime,
+		UpdatedAt:    s.testTime,
+		Participants: []*models.Participant{
+			{
+				ID:         s.testParticipantID,
+				GameID:     s.testGameID,
+				PlayerID:   s.testCreatorID,
+				PlayerName: s.testCreatorName,
+				Status:     models.ParticipantStatusActive,
+				RollValue:  6, // Tied for highest roll (creator)
+				RollTime:   &s.testTime,
+			},
+			{
+				ID:         "another-participant-id",
+				GameID:     s.testGameID,
+				PlayerID:   s.testPlayerID,
+				PlayerName: s.testPlayerName,
+				Status:     models.ParticipantStatusActive,
+				RollValue:  6, // Tied for highest roll
+				RollTime:   &s.testTime,
+			},
+			{
+				ID:         "third-participant-id",
+				GameID:     s.testGameID,
+				PlayerID:   "third-player-id",
+				PlayerName: "Third Player",
+				Status:     models.ParticipantStatusActive,
+				RollValue:  1, // Tied for lowest roll
+				RollTime:   &s.testTime,
+			},
+			{
+				ID:         "fourth-participant-id",
+				GameID:     s.testGameID,
+				PlayerID:   "fourth-player-id",
+				PlayerName: "Fourth Player",
+				Status:     models.ParticipantStatusActive,
+				RollValue:  1, // Tied for lowest roll
+				RollTime:   &s.testTime,
+			},
+		},
+	}
+
+	// Set up mock for creating a roll-off game for highest rollers
+	highestRollOffGame := &models.Game{
+		ID:           "highest-roll-off-game-id",
+		ChannelID:    s.testChannelID,
+		CreatorID:    s.testCreatorID,
+		ParentGameID: s.testGameID,
+		Status:       models.GameStatusRollOff,
+		CreatedAt:    s.testTime,
+		UpdatedAt:    s.testTime,
+	}
+
+	// Expect GetDrinkRecordsForGame to be called
+	s.mockDrinkRepo.EXPECT().
+		GetDrinkRecordsForGame(gomock.Any(), &ledgerRepo.GetDrinkRecordsForGameInput{
+			GameID: s.testGameID,
+		}).
+		Return(&ledgerRepo.GetDrinkRecordsForGameOutput{
+			Records: []*models.DrinkLedger{},
+		}, nil)
+
+	// Create player names map for the roll-off game
+	playerNames := map[string]string{
+		s.testCreatorID: s.testCreatorName,
+		s.testPlayerID:  s.testPlayerName,
+	}
+
+	// Expect CreateRollOffGame to be called for highest rollers
+	s.mockGameRepo.EXPECT().
+		CreateRollOffGame(gomock.Any(), &gameRepo.CreateRollOffGameInput{
+			ChannelID:    s.testChannelID,
+			CreatorID:    s.testCreatorID,
+			ParentGameID: s.testGameID,
+			PlayerIDs:    []string{s.testCreatorID, s.testPlayerID},
+			PlayerNames:  playerNames,
+		}).
+		Return(&gameRepo.CreateRollOffGameOutput{
+			Game: highestRollOffGame,
+		}, nil)
+
+	// Expect SaveGame to be called to update the parent game
+	s.mockGameRepo.EXPECT().
+		SaveGame(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, input *gameRepo.SaveGameInput) error {
+			// Verify the game has been updated with the roll-off game ID
+			s.Equal(highestRollOffGame.ID, input.Game.RollOffGameID)
+			// The game status should be updated to RollOff when a roll-off is needed
+			s.Equal(models.GameStatusRollOff, input.Game.Status)
+			return nil
+		})
+
+	// Expect GetPlayer to be called for ALL participants
+	// First participant (creator) - may be called multiple times
+	s.mockPlayerRepo.EXPECT().
+		GetPlayer(gomock.Any(), &playerRepo.GetPlayerInput{
+			PlayerID: s.testCreatorID,
+		}).
+		Return(&models.Player{
+			ID:            s.testCreatorID,
+			Name:          s.testCreatorName,
+			CurrentGameID: s.testGameID,
+		}, nil).
+		MinTimes(1)
+
+	// Second participant - may be called multiple times
+	s.mockPlayerRepo.EXPECT().
+		GetPlayer(gomock.Any(), &playerRepo.GetPlayerInput{
+			PlayerID: s.testPlayerID,
+		}).
+		Return(&models.Player{
+			ID:            s.testPlayerID,
+			Name:          s.testPlayerName,
+			CurrentGameID: s.testGameID,
+		}, nil).
+		MinTimes(1)
+
+	// Third participant - may be called multiple times
+	s.mockPlayerRepo.EXPECT().
+		GetPlayer(gomock.Any(), &playerRepo.GetPlayerInput{
+			PlayerID: "third-player-id",
+		}).
+		Return(&models.Player{
+			ID:            "third-player-id",
+			Name:          "Third Player",
+			CurrentGameID: s.testGameID,
+		}, nil).
+		MinTimes(1)
+
+	// Fourth participant - may be called multiple times
+	s.mockPlayerRepo.EXPECT().
+		GetPlayer(gomock.Any(), &playerRepo.GetPlayerInput{
+			PlayerID: "fourth-player-id",
+		}).
+		Return(&models.Player{
+			ID:            "fourth-player-id",
+			Name:          "Fourth Player",
+			CurrentGameID: s.testGameID,
+		}, nil).
+		MinTimes(1)
+
+	// Expect SavePlayer to be called for each highest roller
+	s.mockPlayerRepo.EXPECT().
+		SavePlayer(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, input *playerRepo.SavePlayerInput) error {
+			// Verify the player's current game ID is updated to the roll-off game
+			s.Equal(highestRollOffGame.ID, input.Player.CurrentGameID)
+			return nil
+		}).Times(2)
+
+	// Act
+	output, err := s.gameService.EndGame(s.ctx, &EndGameInput{
+		Game: game,
+	})
+
+	// Assert
+	s.Require().NoError(err)
+	s.Require().NotNil(output)
+	s.True(output.NeedsRollOff)
+	s.Equal(RollOffTypeHighest, output.RollOffType) // Should prioritize highest roll-off
+	s.Equal(highestRollOffGame.ID, output.RollOffGameID)
+	s.Equal(2, len(output.RollOffPlayerIDs))
+	s.Contains(output.RollOffPlayerIDs, s.testCreatorID) // Creator should be included
+	s.Contains(output.RollOffPlayerIDs, s.testPlayerID)
+	
+	// Note: In the current implementation, we expect only the highest roll-off to be created
+	// The lowest roll-off should be created after the highest roll-off is resolved
+	// This test verifies that the highest roll-off takes precedence
 }
 
 func TestGameServiceSuite(t *testing.T) {

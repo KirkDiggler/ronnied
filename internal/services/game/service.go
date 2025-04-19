@@ -782,6 +782,7 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 
 		// Update the parent game with the roll-off game ID
 		game.RollOffGameID = rollOffGameOutput.Game.ID
+		game.Status = models.GameStatusRollOff
 		game.UpdatedAt = s.clock.Now()
 
 		// Save the updated parent game
@@ -866,6 +867,7 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 
 		// Update the parent game with the roll-off game ID
 		game.RollOffGameID = rollOffGameOutput.Game.ID
+		game.Status = models.GameStatusRollOff
 		game.UpdatedAt = s.clock.Now()
 
 		// Save the updated parent game
