@@ -53,6 +53,20 @@ func (mr *MockRepositoryMockRecorder) AddDrinkRecord(arg0, arg1 any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddDrinkRecord", reflect.TypeOf((*MockRepository)(nil).AddDrinkRecord), arg0, arg1)
 }
 
+// ArchiveDrinkRecords mocks base method.
+func (m *MockRepository) ArchiveDrinkRecords(arg0 context.Context, arg1 *drink_ledger.ArchiveDrinkRecordsInput) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ArchiveDrinkRecords", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ArchiveDrinkRecords indicates an expected call of ArchiveDrinkRecords.
+func (mr *MockRepositoryMockRecorder) ArchiveDrinkRecords(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ArchiveDrinkRecords", reflect.TypeOf((*MockRepository)(nil).ArchiveDrinkRecords), arg0, arg1)
+}
+
 // CreateDrinkRecord mocks base method.
 func (m *MockRepository) CreateDrinkRecord(arg0 context.Context, arg1 *drink_ledger.CreateDrinkRecordInput) (*drink_ledger.CreateDrinkRecordOutput, error) {
 	m.ctrl.T.Helper()
@@ -66,6 +80,20 @@ func (m *MockRepository) CreateDrinkRecord(arg0 context.Context, arg1 *drink_led
 func (mr *MockRepositoryMockRecorder) CreateDrinkRecord(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDrinkRecord", reflect.TypeOf((*MockRepository)(nil).CreateDrinkRecord), arg0, arg1)
+}
+
+// DeleteDrinkRecords mocks base method.
+func (m *MockRepository) DeleteDrinkRecords(arg0 context.Context, arg1 *drink_ledger.DeleteDrinkRecordsInput) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteDrinkRecords", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteDrinkRecords indicates an expected call of DeleteDrinkRecords.
+func (mr *MockRepositoryMockRecorder) DeleteDrinkRecords(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDrinkRecords", reflect.TypeOf((*MockRepository)(nil).DeleteDrinkRecords), arg0, arg1)
 }
 
 // GetDrinkRecordsForGame mocks base method.

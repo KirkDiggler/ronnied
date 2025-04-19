@@ -42,4 +42,13 @@ type Service interface {
 	
 	// GetDrinkRecords retrieves all drink records for a game
 	GetDrinkRecords(ctx context.Context, input *GetDrinkRecordsInput) (*GetDrinkRecordsOutput, error)
+
+	// GetPlayerTab retrieves a player's current tab (drinks owed and received)
+	GetPlayerTab(ctx context.Context, input *GetPlayerTabInput) (*GetPlayerTabOutput, error)
+
+	// ResetGameTab resets the drink ledger for a game and returns the previous leaderboard
+	ResetGameTab(ctx context.Context, input *ResetGameTabInput) (*ResetGameTabOutput, error)
+	
+	// PayDrink marks a drink as paid
+	PayDrink(ctx context.Context, input *PayDrinkInput) (*PayDrinkOutput, error)
 }

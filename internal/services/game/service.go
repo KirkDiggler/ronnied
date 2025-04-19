@@ -686,18 +686,10 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 
 	// Initialize stats for all participants
 	for _, participant := range game.Participants {
-		// Get player info
-		player, err := s.playerRepo.GetPlayer(ctx, &playerRepo.GetPlayerInput{
-			PlayerID: participant.PlayerID,
-		})
-		if err != nil {
-			return nil, err
-		}
-
 		// Initialize player stats
 		playerStatsMap[participant.PlayerID] = &PlayerStats{
 			PlayerID:       participant.PlayerID,
-			PlayerName:     player.Name,
+			PlayerName:     participant.PlayerName,
 			DrinksAssigned: 0,
 			DrinksReceived: 0,
 			LastRoll:       participant.RollValue,
@@ -1213,37 +1205,79 @@ func (s *service) GetLeaderboard(ctx context.Context, input *GetLeaderboardInput
 		return nil, errors.New("game ID is required")
 	}
 
+	// Get the game to access participant information
+	game, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
+		GameID: input.GameID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get game: %w", err)
+	}
+
 	// Get the drink ledger for this game
 	drinkRecords, err := s.drinkLedgerRepo.GetDrinkRecordsForGame(ctx, &ledgerRepo.GetDrinkRecordsForGameInput{
 		GameID: input.GameID,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get drink records: %w", err)
 	}
 
-	// Build a map of player ID to drink count
-	drinkCounts := make(map[string]int)
+	// Build maps to track drinks and payment status
+	drinkCounts := make(map[string]int)      // Total drinks owed
+	paidCounts := make(map[string]int)       // Drinks paid
+	
+	// Process all drink records
 	for _, record := range drinkRecords.Records {
 		drinkCounts[record.ToPlayerID]++
+		if record.Paid {
+			paidCounts[record.ToPlayerID]++
+		}
 	}
 
-	// Create leaderboard entries
-	var entries []LeaderboardEntry
-	for playerID, count := range drinkCounts {
-		// Get player name
-		player, err := s.playerRepo.GetPlayer(ctx, &playerRepo.GetPlayerInput{
-			PlayerID: playerID,
-		})
-		if err != nil {
-			// Skip players we can't find
-			continue
+	// Create a map of player IDs to their information
+	playerMap := make(map[string]*LeaderboardEntry)
+	
+	// First, add all participants from the game
+	for _, participant := range game.Participants {
+		totalDrinks := drinkCounts[participant.PlayerID]
+		paidDrinks := paidCounts[participant.PlayerID]
+		
+		playerMap[participant.PlayerID] = &LeaderboardEntry{
+			PlayerID:   participant.PlayerID,
+			PlayerName: participant.PlayerName,
+			DrinkCount: totalDrinks,
+			PaidCount:  paidDrinks,
 		}
+	}
+	
+	// Then add any players who have drinks but aren't in the game anymore
+	for playerID := range drinkCounts {
+		if _, exists := playerMap[playerID]; !exists {
+			// Get player name
+			player, err := s.playerRepo.GetPlayer(ctx, &playerRepo.GetPlayerInput{
+				PlayerID: playerID,
+			})
+			
+			totalDrinks := drinkCounts[playerID]
+			paidDrinks := paidCounts[playerID]
+			
+			playerName := "Unknown Player"
+			if err == nil {
+				playerName = player.Name
+			}
+			
+			playerMap[playerID] = &LeaderboardEntry{
+				PlayerID:   playerID,
+				PlayerName: playerName,
+				DrinkCount: totalDrinks,
+				PaidCount:  paidDrinks,
+			}
+		}
+	}
 
-		entries = append(entries, LeaderboardEntry{
-			PlayerID:   playerID,
-			PlayerName: player.Name,
-			DrinkCount: count,
-		})
+	// Convert the map to a slice
+	var entries []LeaderboardEntry
+	for _, entry := range playerMap {
+		entries = append(entries, *entry)
 	}
 
 	return &GetLeaderboardOutput{
@@ -1377,5 +1411,290 @@ func (s *service) GetDrinkRecords(ctx context.Context, input *GetDrinkRecordsInp
 
 	return &GetDrinkRecordsOutput{
 		Records: records.Records,
+	}, nil
+}
+
+// GetPlayerTab retrieves a player's current tab (drinks owed and received)
+func (s *service) GetPlayerTab(ctx context.Context, input *GetPlayerTabInput) (*GetPlayerTabOutput, error) {
+	if input == nil || input.GameID == "" {
+		return nil, errors.New("game ID is required")
+	}
+
+	if input.PlayerID == "" {
+		return nil, errors.New("player ID is required")
+	}
+
+	// Get the game
+	game, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
+		GameID: input.GameID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get game: %w", err)
+	}
+
+	// Get the player
+	player, err := s.playerRepo.GetPlayer(ctx, &playerRepo.GetPlayerInput{
+		PlayerID: input.PlayerID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get player: %w", err)
+	}
+
+	// Get all drink records for the game
+	drinkRecords, err := s.drinkLedgerRepo.GetDrinkRecordsForGame(ctx, &ledgerRepo.GetDrinkRecordsForGameInput{
+		GameID: input.GameID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get drink records: %w", err)
+	}
+
+	// Create the player tab
+	tab := &PlayerTab{
+		PlayerID:   player.ID,
+		PlayerName: player.Name,
+		DrinksOwed: []*PlayerTabEntry{},
+		DrinksAssigned: []*PlayerTabEntry{},
+	}
+
+	// Process all drink records
+	for _, record := range drinkRecords.Records {
+		// Get the from player name
+		var fromPlayerName string
+		if record.FromPlayerID == player.ID {
+			fromPlayerName = player.Name
+		} else {
+			// Find the player in the game participants
+			for _, participant := range game.Participants {
+				if participant.PlayerID == record.FromPlayerID {
+					fromPlayerName = participant.PlayerName
+					break
+				}
+			}
+			
+			// If not found in participants, try to get from repository
+			if fromPlayerName == "" {
+				fromPlayer, err := s.playerRepo.GetPlayer(ctx, &playerRepo.GetPlayerInput{
+					PlayerID: record.FromPlayerID,
+				})
+				if err != nil {
+					fromPlayerName = "Unknown Player"
+				} else {
+					fromPlayerName = fromPlayer.Name
+				}
+			}
+		}
+
+		// Get the to player name
+		var toPlayerName string
+		if record.ToPlayerID == player.ID {
+			toPlayerName = player.Name
+		} else {
+			// Find the player in the game participants
+			for _, participant := range game.Participants {
+				if participant.PlayerID == record.ToPlayerID {
+					toPlayerName = participant.PlayerName
+					break
+				}
+			}
+			
+			// If not found in participants, try to get from repository
+			if toPlayerName == "" {
+				toPlayer, err := s.playerRepo.GetPlayer(ctx, &playerRepo.GetPlayerInput{
+					PlayerID: record.ToPlayerID,
+				})
+				if err != nil {
+					toPlayerName = "Unknown Player"
+				} else {
+					toPlayerName = toPlayer.Name
+				}
+			}
+		}
+
+		// Create a tab entry for this drink record
+		entry := &PlayerTabEntry{
+			FromPlayerID:   record.FromPlayerID,
+			FromPlayerName: fromPlayerName,
+			ToPlayerID:     record.ToPlayerID,
+			ToPlayerName:   toPlayerName,
+			Reason:         record.Reason,
+			Timestamp:      record.Timestamp,
+			Paid:           record.Paid,
+		}
+
+		// Add to the appropriate list
+		if record.ToPlayerID == player.ID {
+			tab.DrinksOwed = append(tab.DrinksOwed, entry)
+			if !record.Paid {
+				tab.TotalOwed++
+			}
+		}
+
+		if record.FromPlayerID == player.ID {
+			tab.DrinksAssigned = append(tab.DrinksAssigned, entry)
+			if !record.Paid {
+				tab.TotalAssigned++
+			}
+		}
+	}
+
+	// Calculate net drinks
+	tab.NetDrinks = tab.TotalOwed - tab.TotalAssigned
+
+	return &GetPlayerTabOutput{
+		Tab:  tab,
+		Game: game,
+	}, nil
+}
+
+// ResetGameTab resets the drink ledger for a game and returns the previous leaderboard
+func (s *service) ResetGameTab(ctx context.Context, input *ResetGameTabInput) (*ResetGameTabOutput, error) {
+	if input == nil || input.GameID == "" {
+		return nil, errors.New("game ID is required")
+	}
+
+	if input.ResetterID == "" {
+		return nil, errors.New("resetter ID is required")
+	}
+
+	// Get the game
+	game, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
+		GameID: input.GameID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get game: %w", err)
+	}
+
+	// Get the resetter's name
+	resetter, err := s.playerRepo.GetPlayer(ctx, &playerRepo.GetPlayerInput{
+		PlayerID: input.ResetterID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get resetter: %w", err)
+	}
+
+	// Get the current leaderboard before resetting
+	leaderboardOutput, err := s.GetLeaderboard(ctx, &GetLeaderboardInput{
+		GameID: input.GameID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get leaderboard: %w", err)
+	}
+
+	// Get all drink records for the game
+	drinkRecords, err := s.drinkLedgerRepo.GetDrinkRecordsForGame(ctx, &ledgerRepo.GetDrinkRecordsForGameInput{
+		GameID: input.GameID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get drink records: %w", err)
+	}
+
+	// Count total drinks
+	totalDrinks := len(drinkRecords.Records)
+
+	// Create a summary of the game's drink ledger before reset
+	tabSummary := &GameTabSummary{
+		GameID:       input.GameID,
+		ResetTime:    s.clock.Now(),
+		ResetterID:   input.ResetterID,
+		ResetterName: resetter.Name,
+		Leaderboard:  leaderboardOutput.Entries,
+		TotalDrinks:  totalDrinks,
+	}
+
+	// Reset the drink ledger
+	if input.ArchiveRecords {
+		// Archive the records
+		err = s.drinkLedgerRepo.ArchiveDrinkRecords(ctx, &ledgerRepo.ArchiveDrinkRecordsInput{
+			GameID: input.GameID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to archive drink records: %w", err)
+		}
+	} else {
+		// Delete the records
+		err = s.drinkLedgerRepo.DeleteDrinkRecords(ctx, &ledgerRepo.DeleteDrinkRecordsInput{
+			GameID: input.GameID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to delete drink records: %w", err)
+		}
+	}
+
+	return &ResetGameTabOutput{
+		Success:     true,
+		PreviousTab: tabSummary,
+		Game:        game,
+	}, nil
+}
+
+// PayDrink marks a drink as paid
+func (s *service) PayDrink(ctx context.Context, input *PayDrinkInput) (*PayDrinkOutput, error) {
+	if input == nil || input.GameID == "" {
+		return nil, errors.New("game ID is required")
+	}
+
+	if input.PlayerID == "" {
+		return nil, errors.New("player ID is required")
+	}
+
+	if input.DrinkID == "" {
+		return nil, errors.New("drink ID is required")
+	}
+
+	// Get the game
+	game, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
+		GameID: input.GameID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get game: %w", err)
+	}
+
+	// Get the drink record
+	drinkRecords, err := s.drinkLedgerRepo.GetDrinkRecordsForGame(ctx, &ledgerRepo.GetDrinkRecordsForGameInput{
+		GameID: input.GameID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get drink records: %w", err)
+	}
+
+	// Find the specific drink record
+	var drinkRecord *models.DrinkLedger
+	for _, record := range drinkRecords.Records {
+		if record.ID == input.DrinkID {
+			drinkRecord = record
+			break
+		}
+	}
+
+	if drinkRecord == nil {
+		return nil, fmt.Errorf("drink record with ID %s not found", input.DrinkID)
+	}
+
+	// Verify the player is the one who owes the drink
+	if drinkRecord.ToPlayerID != input.PlayerID {
+		return nil, fmt.Errorf("player %s is not the one who owes this drink", input.PlayerID)
+	}
+
+	// Check if the drink is already paid
+	if drinkRecord.Paid {
+		return nil, fmt.Errorf("drink is already paid")
+	}
+
+	// Mark the drink as paid
+	err = s.drinkLedgerRepo.MarkDrinkPaid(ctx, &ledgerRepo.MarkDrinkPaidInput{
+		DrinkID: input.DrinkID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to mark drink as paid: %w", err)
+	}
+
+	// Update the drink record with the paid status
+	drinkRecord.Paid = true
+	drinkRecord.PaidTimestamp = s.clock.Now()
+
+	return &PayDrinkOutput{
+		Success:     true,
+		Game:        game,
+		DrinkRecord: drinkRecord,
 	}, nil
 }

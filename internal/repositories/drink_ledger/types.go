@@ -48,3 +48,15 @@ type CreateDrinkRecordInput struct {
 type CreateDrinkRecordOutput struct {
 	Record *models.DrinkLedger
 }
+
+// ArchiveDrinkRecordsInput contains parameters for archiving drink records
+type ArchiveDrinkRecordsInput struct {
+	// GameID is the ID of the game to archive drink records for
+	GameID string
+}
+
+// DeleteDrinkRecordsInput contains parameters for deleting drink records
+type DeleteDrinkRecordsInput struct {
+	// GameID is the ID of the game to delete drink records for
+	GameID string
+}

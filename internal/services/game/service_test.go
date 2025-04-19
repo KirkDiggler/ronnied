@@ -17,22 +17,22 @@ import (
 	gameMocks "github.com/KirkDiggler/ronnied/internal/repositories/game/mocks"
 	playerRepo "github.com/KirkDiggler/ronnied/internal/repositories/player"
 	playerMocks "github.com/KirkDiggler/ronnied/internal/repositories/player/mocks"
-	"go.uber.org/mock/gomock"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/mock/gomock"
 )
 
 type GameServiceTestSuite struct {
 	suite.Suite
-	mockCtrl          *gomock.Controller
-	mockGameRepo      *gameMocks.MockRepository
-	mockPlayerRepo    *playerMocks.MockRepository
-	mockDrinkRepo     *ledgerMocks.MockRepository
-	mockDiceRoller    *diceMocks.MockRoller
-	mockClock         *mocks.MockClock
-	mockUUID          *uuidMocks.MockUUID
-	gameService       Service
-	ctx               context.Context
-	
+	mockCtrl       *gomock.Controller
+	mockGameRepo   *gameMocks.MockRepository
+	mockPlayerRepo *playerMocks.MockRepository
+	mockDrinkRepo  *ledgerMocks.MockRepository
+	mockDiceRoller *diceMocks.MockRoller
+	mockClock      *mocks.MockClock
+	mockUUID       *uuidMocks.MockUUID
+	gameService    Service
+	ctx            context.Context
+
 	// Test data
 	testTime          time.Time
 	testGameID        string
@@ -42,14 +42,14 @@ type GameServiceTestSuite struct {
 	testParticipantID string
 	testPlayerID      string
 	testPlayerName    string
-	
+
 	// Reusable test fixtures
 	expectedGame           *models.Game
 	expectedParticipant    *models.Participant
 	expectedActiveGame     *models.Game
 	expectedGameWithPlayer *models.Game
 	expectedPlayer         *models.Player
-	
+
 	// Reusable test inputs
 	createGameInput *CreateGameInput
 	startGameInput  *StartGameInput
@@ -67,7 +67,7 @@ func (s *GameServiceTestSuite) SetupTest() {
 	s.mockUUID = uuidMocks.NewMockUUID(s.mockCtrl)
 
 	s.ctx = context.Background()
-	
+
 	// Initialize test data
 	s.testTime = time.Date(2025, 4, 19, 12, 0, 0, 0, time.UTC)
 	s.testGameID = "test-game-id"
@@ -89,7 +89,7 @@ func (s *GameServiceTestSuite) SetupTest() {
 		PlayerName: s.testCreatorName,
 		Status:     models.ParticipantStatusWaitingToRoll,
 	}
-	
+
 	// Basic game with no participants
 	s.expectedGame = &models.Game{
 		ID:           s.testGameID,
@@ -100,7 +100,7 @@ func (s *GameServiceTestSuite) SetupTest() {
 		UpdatedAt:    s.testTime,
 		Participants: []*models.Participant{},
 	}
-	
+
 	// Game with creator as participant
 	s.expectedGameWithPlayer = &models.Game{
 		ID:           s.testGameID,
@@ -111,7 +111,7 @@ func (s *GameServiceTestSuite) SetupTest() {
 		UpdatedAt:    s.testTime,
 		Participants: []*models.Participant{s.expectedParticipant},
 	}
-	
+
 	// Game in active state
 	s.expectedActiveGame = &models.Game{
 		ID:           s.testGameID,
@@ -122,7 +122,7 @@ func (s *GameServiceTestSuite) SetupTest() {
 		UpdatedAt:    s.testTime,
 		Participants: []*models.Participant{s.expectedParticipant},
 	}
-	
+
 	// Player model
 	s.expectedPlayer = &models.Player{
 		ID:            s.testPlayerID,
@@ -131,25 +131,25 @@ func (s *GameServiceTestSuite) SetupTest() {
 		LastRoll:      0,
 		LastRollTime:  s.testTime,
 	}
-	
+
 	// Initialize reusable test inputs
 	s.createGameInput = &CreateGameInput{
 		ChannelID:   s.testChannelID,
 		CreatorID:   s.testCreatorID,
 		CreatorName: s.testCreatorName,
 	}
-	
+
 	s.startGameInput = &StartGameInput{
 		GameID:   s.testGameID,
 		PlayerID: s.testCreatorID,
 	}
-	
+
 	s.joinGameInput = &JoinGameInput{
 		GameID:     s.testGameID,
 		PlayerID:   s.testPlayerID,
 		PlayerName: s.testPlayerName,
 	}
-	
+
 	s.rollDiceInput = &RollDiceInput{
 		GameID:   s.testGameID,
 		PlayerID: s.testCreatorID,
@@ -157,16 +157,16 @@ func (s *GameServiceTestSuite) SetupTest() {
 
 	// Create the service with mocked dependencies
 	cfg := &Config{
-		GameRepo:        s.mockGameRepo,
-		PlayerRepo:      s.mockPlayerRepo,
-		DrinkLedgerRepo: s.mockDrinkRepo,
-		DiceRoller:      s.mockDiceRoller,
-		Clock:           s.mockClock,
-		UUIDGenerator:   s.mockUUID,
-		MaxPlayers:      10, // Set a max players value for testing
-		DiceSides:       6,  // Standard dice
-		CriticalHitValue: 6, // Critical hit on 6
-		CriticalFailValue: 1, // Critical fail on 1
+		GameRepo:          s.mockGameRepo,
+		PlayerRepo:        s.mockPlayerRepo,
+		DrinkLedgerRepo:   s.mockDrinkRepo,
+		DiceRoller:        s.mockDiceRoller,
+		Clock:             s.mockClock,
+		UUIDGenerator:     s.mockUUID,
+		MaxPlayers:        10, // Set a max players value for testing
+		DiceSides:         6,  // Standard dice
+		CriticalHitValue:  6,  // Critical hit on 6
+		CriticalFailValue: 1,  // Critical fail on 1
 	}
 
 	var err error
@@ -485,12 +485,12 @@ func (s *GameServiceTestSuite) TestJoinGame_HappyPath() {
 func (s *GameServiceTestSuite) TestJoinGame_PlayerAlreadyInGame() {
 	// Create a game with the test player already in it
 	gameWithPlayer := &models.Game{
-		ID:           s.testGameID,
-		ChannelID:    s.testChannelID,
-		CreatorID:    s.testCreatorID,
-		Status:       models.GameStatusWaiting,
-		CreatedAt:    s.testTime,
-		UpdatedAt:    s.testTime,
+		ID:        s.testGameID,
+		ChannelID: s.testChannelID,
+		CreatorID: s.testCreatorID,
+		Status:    models.GameStatusWaiting,
+		CreatedAt: s.testTime,
+		UpdatedAt: s.testTime,
 		Participants: []*models.Participant{
 			{
 				ID:         "existing-participant-id",
@@ -787,12 +787,12 @@ func (s *GameServiceTestSuite) TestJoinGame_CreateParticipantError() {
 func (s *GameServiceTestSuite) TestRollDice_RegularRoll() {
 	// Create an active game with multiple participants, one who hasn't rolled yet
 	activeGame := &models.Game{
-		ID:           s.testGameID,
-		ChannelID:    s.testChannelID,
-		CreatorID:    s.testCreatorID,
-		Status:       models.GameStatusActive,
-		CreatedAt:    s.testTime,
-		UpdatedAt:    s.testTime,
+		ID:        s.testGameID,
+		ChannelID: s.testChannelID,
+		CreatorID: s.testCreatorID,
+		Status:    models.GameStatusActive,
+		CreatedAt: s.testTime,
+		UpdatedAt: s.testTime,
 		Participants: []*models.Participant{
 			{
 				ID:         s.testParticipantID,
@@ -831,12 +831,12 @@ func (s *GameServiceTestSuite) TestRollDice_RegularRoll() {
 	s.mockGameRepo.EXPECT().
 		SaveGame(gomock.Any(), &gameRepo.SaveGameInput{
 			Game: &models.Game{
-				ID:           s.testGameID,
-				ChannelID:    s.testChannelID,
-				CreatorID:    s.testCreatorID,
-				Status:       models.GameStatusActive,
-				CreatedAt:    s.testTime,
-				UpdatedAt:    s.testTime,
+				ID:        s.testGameID,
+				ChannelID: s.testChannelID,
+				CreatorID: s.testCreatorID,
+				Status:    models.GameStatusActive,
+				CreatedAt: s.testTime,
+				UpdatedAt: s.testTime,
 				Participants: []*models.Participant{
 					{
 						ID:         s.testParticipantID,
@@ -881,12 +881,12 @@ func (s *GameServiceTestSuite) TestRollDice_RegularRoll() {
 func (s *GameServiceTestSuite) TestRollDice_CriticalHit() {
 	// Create an active game with multiple participants, one who hasn't rolled yet
 	activeGame := &models.Game{
-		ID:           s.testGameID,
-		ChannelID:    s.testChannelID,
-		CreatorID:    s.testCreatorID,
-		Status:       models.GameStatusActive,
-		CreatedAt:    s.testTime,
-		UpdatedAt:    s.testTime,
+		ID:        s.testGameID,
+		ChannelID: s.testChannelID,
+		CreatorID: s.testCreatorID,
+		Status:    models.GameStatusActive,
+		CreatedAt: s.testTime,
+		UpdatedAt: s.testTime,
 		Participants: []*models.Participant{
 			{
 				ID:         s.testParticipantID,
@@ -934,12 +934,12 @@ func (s *GameServiceTestSuite) TestRollDice_CriticalHit() {
 	s.mockGameRepo.EXPECT().
 		SaveGame(gomock.Any(), &gameRepo.SaveGameInput{
 			Game: &models.Game{
-				ID:           s.testGameID,
-				ChannelID:    s.testChannelID,
-				CreatorID:    s.testCreatorID,
-				Status:       models.GameStatusActive,
-				CreatedAt:    s.testTime,
-				UpdatedAt:    s.testTime,
+				ID:        s.testGameID,
+				ChannelID: s.testChannelID,
+				CreatorID: s.testCreatorID,
+				Status:    models.GameStatusActive,
+				CreatedAt: s.testTime,
+				UpdatedAt: s.testTime,
 				Participants: []*models.Participant{
 					{
 						ID:         s.testParticipantID,
@@ -988,15 +988,15 @@ func (s *GameServiceTestSuite) TestRollDice_CriticalHit() {
 	s.False(output.IsLowestRoll)
 	s.False(output.NeedsRollOff)
 	s.False(output.AllPlayersRolled) // Not all players have rolled
-	
+
 	// Verify eligible players for drink assignment
 	s.Require().Len(output.EligiblePlayers, 2)
-	
+
 	// Check that both other players are eligible (not the current player)
 	eligiblePlayerIDs := []string{output.EligiblePlayers[0].PlayerID, output.EligiblePlayers[1].PlayerID}
 	s.Contains(eligiblePlayerIDs, s.testPlayerID)
 	s.Contains(eligiblePlayerIDs, "third-player-id")
-	
+
 	// Verify none of the eligible players is the current player
 	for _, player := range output.EligiblePlayers {
 		s.False(player.IsCurrentPlayer)
@@ -1006,12 +1006,12 @@ func (s *GameServiceTestSuite) TestRollDice_CriticalHit() {
 func (s *GameServiceTestSuite) TestRollDice_CriticalFail() {
 	// Create an active game with multiple participants, one who hasn't rolled yet
 	activeGame := &models.Game{
-		ID:           s.testGameID,
-		ChannelID:    s.testChannelID,
-		CreatorID:    s.testCreatorID,
-		Status:       models.GameStatusActive,
-		CreatedAt:    s.testTime,
-		UpdatedAt:    s.testTime,
+		ID:        s.testGameID,
+		ChannelID: s.testChannelID,
+		CreatorID: s.testCreatorID,
+		Status:    models.GameStatusActive,
+		CreatedAt: s.testTime,
+		UpdatedAt: s.testTime,
 		Participants: []*models.Participant{
 			{
 				ID:         s.testParticipantID,
@@ -1060,12 +1060,12 @@ func (s *GameServiceTestSuite) TestRollDice_CriticalFail() {
 	s.mockGameRepo.EXPECT().
 		SaveGame(gomock.Any(), &gameRepo.SaveGameInput{
 			Game: &models.Game{
-				ID:           s.testGameID,
-				ChannelID:    s.testChannelID,
-				CreatorID:    s.testCreatorID,
-				Status:       models.GameStatusActive,
-				CreatedAt:    s.testTime,
-				UpdatedAt:    s.testTime,
+				ID:        s.testGameID,
+				ChannelID: s.testChannelID,
+				CreatorID: s.testCreatorID,
+				Status:    models.GameStatusActive,
+				CreatedAt: s.testTime,
+				UpdatedAt: s.testTime,
 				Participants: []*models.Participant{
 					{
 						ID:         s.testParticipantID,
@@ -1155,12 +1155,12 @@ func (s *GameServiceTestSuite) TestRollDice_InvalidGameState() {
 func (s *GameServiceTestSuite) TestRollDice_PlayerNotInGame() {
 	// Create an active game with a different player
 	activeGame := &models.Game{
-		ID:           s.testGameID,
-		ChannelID:    s.testChannelID,
-		CreatorID:    s.testCreatorID,
-		Status:       models.GameStatusActive,
-		CreatedAt:    s.testTime,
-		UpdatedAt:    s.testTime,
+		ID:        s.testGameID,
+		ChannelID: s.testChannelID,
+		CreatorID: s.testCreatorID,
+		Status:    models.GameStatusActive,
+		CreatedAt: s.testTime,
+		UpdatedAt: s.testTime,
 		Participants: []*models.Participant{
 			{
 				ID:         "different-participant-id",
@@ -1192,12 +1192,12 @@ func (s *GameServiceTestSuite) TestRollDice_PlayerAlreadyRolled() {
 	// Create a game with a participant who has already rolled
 	rollTime := s.testTime.Add(-time.Hour) // Rolled an hour ago
 	activeGame := &models.Game{
-		ID:           s.testGameID,
-		ChannelID:    s.testChannelID,
-		CreatorID:    s.testCreatorID,
-		Status:       models.GameStatusActive,
-		CreatedAt:    s.testTime,
-		UpdatedAt:    s.testTime,
+		ID:        s.testGameID,
+		ChannelID: s.testChannelID,
+		CreatorID: s.testCreatorID,
+		Status:    models.GameStatusActive,
+		CreatedAt: s.testTime,
+		UpdatedAt: s.testTime,
 		Participants: []*models.Participant{
 			{
 				ID:         s.testParticipantID,
@@ -1230,12 +1230,12 @@ func (s *GameServiceTestSuite) TestRollDice_PlayerAlreadyRolled() {
 func (s *GameServiceTestSuite) TestRollDice_SaveGameError() {
 	// Create an active game with a participant who hasn't rolled yet
 	activeGame := &models.Game{
-		ID:           s.testGameID,
-		ChannelID:    s.testChannelID,
-		CreatorID:    s.testCreatorID,
-		Status:       models.GameStatusActive,
-		CreatedAt:    s.testTime,
-		UpdatedAt:    s.testTime,
+		ID:        s.testGameID,
+		ChannelID: s.testChannelID,
+		CreatorID: s.testCreatorID,
+		Status:    models.GameStatusActive,
+		CreatedAt: s.testTime,
+		UpdatedAt: s.testTime,
 		Participants: []*models.Participant{
 			{
 				ID:         s.testParticipantID,
@@ -1266,12 +1266,12 @@ func (s *GameServiceTestSuite) TestRollDice_SaveGameError() {
 	s.mockGameRepo.EXPECT().
 		SaveGame(gomock.Any(), &gameRepo.SaveGameInput{
 			Game: &models.Game{
-				ID:           s.testGameID,
-				ChannelID:    s.testChannelID,
-				CreatorID:    s.testCreatorID,
-				Status:       models.GameStatusActive,
-				CreatedAt:    s.testTime,
-				UpdatedAt:    s.testTime,
+				ID:        s.testGameID,
+				ChannelID: s.testChannelID,
+				CreatorID: s.testCreatorID,
+				Status:    models.GameStatusActive,
+				CreatedAt: s.testTime,
+				UpdatedAt: s.testTime,
 				Participants: []*models.Participant{
 					{
 						ID:         s.testParticipantID,
@@ -1360,7 +1360,7 @@ func (s *GameServiceTestSuite) TestRollDice_RollOffGame() {
 			// Verify the game has been updated with the participant's roll
 			s.Equal("roll-off-game-id", input.Game.ID)
 			s.Equal(models.GameStatusRollOff, input.Game.Status)
-			
+
 			// Find the participant who rolled
 			var rolledParticipant *models.Participant
 			for _, p := range input.Game.Participants {
@@ -1369,13 +1369,13 @@ func (s *GameServiceTestSuite) TestRollDice_RollOffGame() {
 					break
 				}
 			}
-			
+
 			// Verify participant roll was updated
 			s.NotNil(rolledParticipant)
 			s.Equal(4, rolledParticipant.RollValue)
 			s.NotNil(rolledParticipant.RollTime)
 			s.Equal(models.ParticipantStatusActive, rolledParticipant.Status)
-			
+
 			return nil
 		})
 
@@ -1395,12 +1395,12 @@ func (s *GameServiceTestSuite) TestRollDice_RollOffGame() {
 func (s *GameServiceTestSuite) TestEndGame_HighestRollTie() {
 	// Create a game where multiple players have tied for the highest roll
 	game := &models.Game{
-		ID:           s.testGameID,
-		ChannelID:    s.testChannelID,
-		CreatorID:    s.testCreatorID,
-		Status:       models.GameStatusActive,
-		CreatedAt:    s.testTime,
-		UpdatedAt:    s.testTime,
+		ID:        s.testGameID,
+		ChannelID: s.testChannelID,
+		CreatorID: s.testCreatorID,
+		Status:    models.GameStatusActive,
+		CreatedAt: s.testTime,
+		UpdatedAt: s.testTime,
 		Participants: []*models.Participant{
 			{
 				ID:         s.testParticipantID,
@@ -1547,12 +1547,12 @@ func (s *GameServiceTestSuite) TestEndGame_HighestRollTie() {
 func (s *GameServiceTestSuite) TestEndGame_LowestRollTie() {
 	// Create a game where multiple players have tied for the lowest roll
 	game := &models.Game{
-		ID:           s.testGameID,
-		ChannelID:    s.testChannelID,
-		CreatorID:    s.testCreatorID,
-		Status:       models.GameStatusActive,
-		CreatedAt:    s.testTime,
-		UpdatedAt:    s.testTime,
+		ID:        s.testGameID,
+		ChannelID: s.testChannelID,
+		CreatorID: s.testCreatorID,
+		Status:    models.GameStatusActive,
+		CreatedAt: s.testTime,
+		UpdatedAt: s.testTime,
 		Participants: []*models.Participant{
 			{
 				ID:         s.testParticipantID,
@@ -1699,12 +1699,12 @@ func (s *GameServiceTestSuite) TestEndGame_LowestRollTie() {
 func (s *GameServiceTestSuite) TestEndGame_BothHighestAndLowestRollTies() {
 	// Create a game where there are ties for both highest and lowest rolls
 	game := &models.Game{
-		ID:           s.testGameID,
-		ChannelID:    s.testChannelID,
-		CreatorID:    s.testCreatorID,
-		Status:       models.GameStatusActive,
-		CreatedAt:    s.testTime,
-		UpdatedAt:    s.testTime,
+		ID:        s.testGameID,
+		ChannelID: s.testChannelID,
+		CreatorID: s.testCreatorID,
+		Status:    models.GameStatusActive,
+		CreatedAt: s.testTime,
+		UpdatedAt: s.testTime,
 		Participants: []*models.Participant{
 			{
 				ID:         s.testParticipantID,
@@ -1867,7 +1867,7 @@ func (s *GameServiceTestSuite) TestEndGame_BothHighestAndLowestRollTies() {
 	s.Equal(2, len(output.RollOffPlayerIDs))
 	s.Contains(output.RollOffPlayerIDs, s.testCreatorID) // Creator should be included
 	s.Contains(output.RollOffPlayerIDs, s.testPlayerID)
-	
+
 	// Note: In the current implementation, we expect only the highest roll-off to be created
 	// The lowest roll-off should be created after the highest roll-off is resolved
 	// This test verifies that the highest roll-off takes precedence
@@ -1975,7 +1975,7 @@ func (s *GameServiceTestSuite) TestRollDice_NestedRollOffGame() {
 			// Verify the NESTED game has been updated with the participant's roll
 			s.Equal("nested-roll-off-id", input.Game.ID)
 			s.Equal(models.GameStatusRollOff, input.Game.Status)
-			
+
 			// Find the participant who rolled
 			var rolledParticipant *models.Participant
 			for _, p := range input.Game.Participants {
@@ -1984,13 +1984,13 @@ func (s *GameServiceTestSuite) TestRollDice_NestedRollOffGame() {
 					break
 				}
 			}
-			
+
 			// Verify participant roll was updated in the nested game
 			s.NotNil(rolledParticipant)
 			s.Equal(5, rolledParticipant.RollValue)
 			s.NotNil(rolledParticipant.RollTime)
 			s.Equal(models.ParticipantStatusActive, rolledParticipant.Status)
-			
+
 			return nil
 		})
 

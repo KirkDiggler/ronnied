@@ -350,7 +350,8 @@ type GetLeaderboardInput struct {
 type LeaderboardEntry struct {
 	PlayerID   string
 	PlayerName string
-	DrinkCount int
+	DrinkCount int // Total drinks this player owes
+	PaidCount  int // Number of drinks this player has paid
 }
 
 // GetLeaderboardOutput defines the output for retrieving a game's leaderboard
@@ -417,4 +418,141 @@ type GetGameLeaderboardInput struct {
 type GetGameLeaderboardOutput struct {
 	GameID  string
 	Entries []LeaderboardEntry
+}
+
+// GetPlayerTabInput contains parameters for retrieving a player's current tab
+type GetPlayerTabInput struct {
+	// GameID is the ID of the game to get the tab for
+	GameID string
+
+	// PlayerID is the ID of the player to get the tab for
+	PlayerID string
+}
+
+// PlayerTabEntry represents a single drink in a player's tab
+type PlayerTabEntry struct {
+	// FromPlayerID is the ID of the player who assigned the drink
+	FromPlayerID string
+
+	// FromPlayerName is the name of the player who assigned the drink
+	FromPlayerName string
+
+	// ToPlayerID is the ID of the player who received the drink
+	ToPlayerID string
+
+	// ToPlayerName is the name of the player who received the drink
+	ToPlayerName string
+
+	// Reason is why the drink was assigned
+	Reason models.DrinkReason
+
+	// Timestamp is when the drink was assigned
+	Timestamp time.Time
+
+	// Paid indicates whether the drink has been paid (taken)
+	Paid bool
+}
+
+// PlayerTab contains information about a player's drinks
+type PlayerTab struct {
+	// PlayerID is the ID of the player
+	PlayerID string
+
+	// PlayerName is the name of the player
+	PlayerName string
+
+	// DrinksOwed are drinks the player needs to take
+	DrinksOwed []*PlayerTabEntry
+
+	// DrinksAssigned are drinks the player has assigned to others
+	DrinksAssigned []*PlayerTabEntry
+
+	// TotalOwed is the total number of drinks the player needs to take
+	TotalOwed int
+
+	// TotalAssigned is the total number of drinks the player has assigned
+	TotalAssigned int
+
+	// NetDrinks is the net number of drinks (owed - assigned)
+	NetDrinks int
+}
+
+// GetPlayerTabOutput contains the result of retrieving a player's tab
+type GetPlayerTabOutput struct {
+	// Tab is the player's tab information
+	Tab *PlayerTab
+
+	// Game is the game the tab is for
+	Game *models.Game
+}
+
+// ResetGameTabInput contains parameters for resetting a game's drink ledger
+type ResetGameTabInput struct {
+	// GameID is the ID of the game to reset the tab for
+	GameID string
+
+	// ResetterID is the ID of the player who is resetting the tab
+	ResetterID string
+
+	// ArchiveRecords determines whether to archive the drink records or delete them
+	// If true, records will be marked as archived but kept in the database
+	// If false, records will be deleted
+	ArchiveRecords bool
+}
+
+// GameTabSummary contains a summary of a game's drink ledger before reset
+type GameTabSummary struct {
+	// GameID is the ID of the game
+	GameID string
+
+	// ResetTime is when the tab was reset
+	ResetTime time.Time
+
+	// ResetterID is the ID of the player who reset the tab
+	ResetterID string
+
+	// ResetterName is the name of the player who reset the tab
+	ResetterName string
+
+	// Leaderboard is the leaderboard at the time of reset
+	Leaderboard []LeaderboardEntry
+
+	// TotalDrinks is the total number of drinks assigned in the game
+	TotalDrinks int
+}
+
+// ResetGameTabOutput contains the result of resetting a game's drink ledger
+type ResetGameTabOutput struct {
+	// Success indicates whether the reset was successful
+	Success bool
+
+	// PreviousTab is a summary of the game's drink ledger before reset
+	PreviousTab *GameTabSummary
+
+	// Game is the game with the reset tab
+	Game *models.Game
+}
+
+// PayDrinkInput contains parameters for marking a drink as paid
+type PayDrinkInput struct {
+	// GameID is the ID of the game the drink belongs to
+	GameID string
+
+	// PlayerID is the ID of the player paying the drink
+	PlayerID string
+
+	// DrinkID is the ID of the drink to mark as paid
+	DrinkID string
+}
+
+// PayDrinkOutput contains the result of marking a drink as paid
+type PayDrinkOutput struct {
+	// Success indicates if the drink was successfully marked as paid
+	Success bool
+
+	// Game is the game the drink belongs to
+	Game *models.Game
+
+	// DrinkRecord is the drink record that was marked as paid
+	DrinkRecord *models.DrinkLedger
 }

@@ -43,4 +43,10 @@ type DrinkLedger struct {
 	
 	// PaidTimestamp is when the drink was paid
 	PaidTimestamp time.Time
+	
+	// Archived indicates if the drink record has been archived
+	Archived bool
+	
+	// ArchivedTimestamp is when the drink was archived
+	ArchivedTimestamp time.Time
 }
