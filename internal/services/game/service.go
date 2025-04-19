@@ -152,7 +152,7 @@ func (s *service) StartGame(ctx context.Context, input *StartGameInput) (*StartG
 
 	// Verify the player is the game creator
 	if game.CreatorID != input.PlayerID {
-		return nil, errors.New("only the game creator can start the game")
+		return nil, ErrNotCreator
 	}
 
 	// Ensure the game is in waiting status
@@ -162,7 +162,7 @@ func (s *service) StartGame(ctx context.Context, input *StartGameInput) (*StartG
 
 	// Ensure there is at least 1 player (the creator)
 	if len(game.Participants) < 1 {
-		return nil, errors.New("at least 1 player is required to start a game")
+		return nil, ErrNotEnoughPlayers
 	}
 
 	// Update game status to active
