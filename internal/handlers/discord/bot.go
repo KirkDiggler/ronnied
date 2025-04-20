@@ -757,7 +757,7 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 	// Get related data needed for rendering
 	var rollOffGame, parentGame *models.Game
 	var drinkRecords []*models.DrinkLedger
-	var leaderboardEntries []game.LeaderboardEntry
+	var leaderboardEntries, sessionLeaderboardEntries []game.LeaderboardEntry
 
 	// Check if this is a roll-off game
 	if gameOutput.Game.Status.IsRollOff() && gameOutput.Game.ParentGameID != "" {
@@ -797,10 +797,18 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 		if err == nil && leaderboardOutput != nil {
 			leaderboardEntries = leaderboardOutput.Entries
 		}
+
+		// Get session leaderboard for completed games
+		sessionOutput, err := b.gameService.GetSessionLeaderboard(ctx, &game.GetSessionLeaderboardInput{
+			ChannelID: channelID,
+		})
+		if err == nil && sessionOutput != nil {
+			sessionLeaderboardEntries = sessionOutput.Entries
+		}
 	}
 
 	// Render the game message
-	messageEdit, err := b.renderGameMessage(gameOutput.Game, drinkRecords, leaderboardEntries, rollOffGame, parentGame)
+	messageEdit, err := b.renderGameMessage(gameOutput.Game, drinkRecords, leaderboardEntries, sessionLeaderboardEntries, rollOffGame, parentGame)
 	if err != nil {
 		log.Printf("Error rendering game message: %v", err)
 		return

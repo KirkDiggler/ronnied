@@ -288,7 +288,7 @@ func renderRollDiceResponseEdit(s *discordgo.Session, i *discordgo.InteractionCr
 }
 
 // renderGameMessage renders the game message based on the current game state
-func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkLedger, leaderboardEntries []game.LeaderboardEntry, rollOffGame *models.Game, parentGame *models.Game) (*discordgo.MessageEdit, error) {
+func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkLedger, leaderboardEntries []game.LeaderboardEntry, sessionLeaderboardEntries []game.LeaderboardEntry, rollOffGame *models.Game, parentGame *models.Game) (*discordgo.MessageEdit, error) {
 	ctx := context.Background()
 
 	// Create a slice to hold all embeds
@@ -624,6 +624,49 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 				}
 
 				embeds = append(embeds, leaderboardEmbed)
+			}
+
+			// Add session leaderboard if available
+			if len(sessionLeaderboardEntries) > 0 {
+				sessionDrinkTotals := ""
+
+				// Sort the session leaderboard entries by drink count (descending)
+				sort.Slice(sessionLeaderboardEntries, func(i, j int) bool {
+					return sessionLeaderboardEntries[i].DrinkCount > sessionLeaderboardEntries[j].DrinkCount
+				})
+
+				for i, entry := range sessionLeaderboardEntries {
+					// Add rank emoji
+					var prefix string
+					switch i {
+					case 0:
+						prefix = "🥇"
+					case 1:
+						prefix = "🥈"
+					case 2:
+						prefix = "🥉"
+					default:
+						prefix = "🍺"
+					}
+
+					// Show both total drinks and paid drinks
+					sessionDrinkTotals += fmt.Sprintf("%s **%s**: %d drink(s) owed, %d paid\n",
+						prefix, entry.PlayerName, entry.DrinkCount, entry.PaidCount)
+				}
+
+				if sessionDrinkTotals != "" {
+					// Create a session leaderboard embed
+					sessionLeaderboardEmbed := &discordgo.MessageEmbed{
+						Title:       "🏆 Session Leaderboard",
+						Description: "Drinks across all games in this session:\n\n" + sessionDrinkTotals,
+						Color:       0xf1c40f, // Gold for session stats
+						Footer: &discordgo.MessageEmbedFooter{
+							Text: "Use /ronnied newsession to start a new drinking session",
+						},
+					}
+
+					embeds = append(embeds, sessionLeaderboardEmbed)
+				}
 			}
 		}
 	}
