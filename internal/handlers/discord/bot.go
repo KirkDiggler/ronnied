@@ -962,7 +962,7 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 						statusEmoji, entry.DrinkCount, entry.PaidCount, remainingDrinks)
 
 					// Create a visual progress bar
-					progressBar = createDrinkProgressBar(entry.PaidCount, entry.DrinkCount)
+					progressBar = createProgressBar(entry.PaidCount, entry.DrinkCount)
 				}
 				break
 			}
@@ -1166,50 +1166,4 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 // Helper function to create a string pointer
 func stringPtr(s string) *string {
 	return &s
-}
-
-// createDrinkProgressBar creates a visual progress bar for drink payments
-func createDrinkProgressBar(paidCount int, totalDrinks int) string {
-	// Handle edge cases
-	if totalDrinks == 0 {
-		return "No drinks to pay"
-	}
-
-	// Calculate progress
-	progress := float64(paidCount) / float64(totalDrinks)
-
-	// Select appropriate bar characters based on Discord's rendering
-	filledChar := "🟩" // Green square for paid drinks
-	emptyChar := "⬜"  // White square for unpaid drinks
-
-	// For small numbers of drinks (≤ 10), show one character per drink
-	if totalDrinks <= 10 {
-		var progressBar string
-		for i := 0; i < totalDrinks; i++ {
-			if i < paidCount {
-				progressBar += filledChar
-			} else {
-				progressBar += emptyChar
-			}
-		}
-		return progressBar
-	}
-
-	// For larger numbers, create a 10-segment bar
-	const segments = 10
-	filledSegments := int(progress * segments)
-
-	var progressBar string
-	for i := 0; i < segments; i++ {
-		if i < filledSegments {
-			progressBar += filledChar
-		} else {
-			progressBar += emptyChar
-		}
-	}
-
-	// Add percentage to the progress bar
-	progressBar += fmt.Sprintf(" (%.0f%%)", progress*100)
-
-	return progressBar
 }
