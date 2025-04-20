@@ -765,10 +765,16 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 	// Handle errors or missing game
 	if err != nil {
 		if errors.Is(err, game.ErrGameNotFound) {
-			return RespondWithEphemeralMessage(s, i, "No active game found in this channel.")
+			_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+				Content: stringPtr("No active game found in this channel."),
+			})
+			return err
 		}
 		log.Printf("Error getting game: %v", err)
-		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Error getting game: %v", err))
+		_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Content: stringPtr(fmt.Sprintf("Error getting game: %v", err)),
+		})
+		return err
 	}
 
 	// Get player info
@@ -787,7 +793,10 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 	})
 	if err != nil {
 		log.Printf("Error paying drink: %v", err)
-		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to pay drink: %v", err))
+		_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Content: stringPtr(fmt.Sprintf("Failed to pay drink: %v", err)),
+		})
+		return err
 	}
 
 	// Update the game message in the channel to show the drink payment
@@ -840,22 +849,24 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 		embeds = append(embeds, embed)
 	}
 
-	// Update the current message with a confirmation and a roll button
-	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseUpdateMessage,
-		Data: &discordgo.InteractionResponseData{
-			Content:    contentText,
-			Embeds:     embeds,
+	// Create message components
+	messageComponents := []discordgo.MessageComponent{
+		discordgo.ActionsRow{
 			Components: []discordgo.MessageComponent{
-				discordgo.ActionsRow{
-					Components: []discordgo.MessageComponent{
-						rollButton,
-						payDrinkButton,
-					},
-				},
+				rollButton,
+				payDrinkButton,
 			},
 		},
+	}
+
+	// Update the ephemeral message with the drink payment confirmation
+	_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+		Content:    &contentText,
+		Embeds:     &embeds,
+		Components: &messageComponents,
 	})
+	
+	return err
 }
 
 // updateGameMessage updates the main game message in the channel
