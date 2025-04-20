@@ -335,7 +335,7 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 	}
 
 	// If this is a roll-off game, check if there's a nested roll-off the player should be in
-	if game.Status == models.GameStatusRollOff {
+	if game.Status == models.GameStatusRollOff && game.ParentGameID != "" {
 		rollOffGame, err := s.FindActiveRollOffGame(ctx, input.PlayerID, input.GameID)
 		if err != nil && !errors.Is(err, ErrRollOffGameNotFound) {
 			return nil, fmt.Errorf("failed to check for nested roll-off games: %w", err)
@@ -920,15 +920,6 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 		lowestRollOffPlayerIDs = lowestRollPlayerIDs
 	}
 
-	// Save the updated parent game
-	err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
-		Game: game,
-	})
-	if err != nil {
-		log.Printf("Error updating parent game with roll-off game ID: %v", err)
-		// Don't return the error, continue with the roll-off
-	}
-
 	// Convert map to slice for output
 	playerStats := make([]*PlayerStats, 0, len(playerStatsMap))
 	for _, stats := range playerStatsMap {
@@ -952,7 +943,7 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 		if isRollOffGame && parentGame != nil {
 			// Check if the parent game has any other active roll-offs
 			hasOtherActiveRollOffs := false
-			
+
 			// If the parent game has a highest roll-off that's not this game
 			if parentGame.HighestRollOffGameID != "" && parentGame.HighestRollOffGameID != game.ID {
 				// Check if that roll-off is still active
@@ -963,7 +954,7 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 					hasOtherActiveRollOffs = true
 				}
 			}
-			
+
 			// If the parent game has a lowest roll-off that's not this game
 			if parentGame.LowestRollOffGameID != "" && parentGame.LowestRollOffGameID != game.ID {
 				// Check if that roll-off is still active
@@ -974,12 +965,12 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 					hasOtherActiveRollOffs = true
 				}
 			}
-			
+
 			// If there are no other active roll-offs, mark the parent game as completed
 			if !hasOtherActiveRollOffs {
 				parentGame.Status = models.GameStatusCompleted
 				parentGame.UpdatedAt = s.clock.Now()
-				
+
 				// Save the updated parent game
 				err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
 					Game: parentGame,
@@ -989,6 +980,18 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 					// Don't return the error, continue with ending the game
 				}
 			}
+		}
+	} else {
+		// If there are roll-offs, mark the game as roll-off
+		game.Status = models.GameStatusRollOff
+		game.UpdatedAt = s.clock.Now()
+
+		// Save the updated game
+		err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
+			Game: game,
+		})
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -1015,6 +1018,21 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 		output.RollOffType = RollOffTypeLowest
 		output.RollOffGameID = lowestRollOffGameID
 		output.RollOffPlayerIDs = lowestRollOffPlayerIDs
+	}
+
+	// Get the session ID for the channel
+	sessionID := s.getSessionIDForChannel(ctx, game.ChannelID)
+	output.SessionID = sessionID
+
+	// Only fetch the session leaderboard if the game is actually ending (no roll-offs needed)
+	if !needsHighestRollOff && !needsLowestRollOff {
+		// Get the session leaderboard
+		sessionLeaderboardOutput, err := s.GetSessionLeaderboard(ctx, &GetSessionLeaderboardInput{
+			SessionID: sessionID,
+		})
+		if err == nil && sessionLeaderboardOutput != nil {
+			output.SessionLeaderboard = sessionLeaderboardOutput.Entries
+		}
 	}
 
 	return output, nil

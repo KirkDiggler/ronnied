@@ -294,14 +294,20 @@ type EndGameOutput struct {
 	// NeedsRollOff indicates if a roll-off is needed (either highest or lowest)
 	NeedsRollOff bool
 
-	// RollOffGameID is the ID of the roll-off game (either highest or lowest)
-	RollOffGameID string
-
-	// RollOffType indicates the type of roll-off (highest or lowest)
+	// RollOffType indicates the type of roll-off needed (highest or lowest)
 	RollOffType RollOffType
 
-	// RollOffPlayerIDs contains the IDs of players in the roll-off (either highest or lowest)
+	// RollOffGameID is the ID of the roll-off game
+	RollOffGameID string
+
+	// RollOffPlayerIDs contains the IDs of players in the roll-off
 	RollOffPlayerIDs []string
+
+	// SessionID is the ID of the session this game belongs to
+	SessionID string
+
+	// SessionLeaderboard contains the current session leaderboard
+	SessionLeaderboard []LeaderboardEntry
 }
 
 // StartGameInput contains parameters for starting a game
