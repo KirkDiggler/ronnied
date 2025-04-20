@@ -5,13 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strings"
-
-	"github.com/bwmarrin/discordgo"
 
 	"github.com/KirkDiggler/ronnied/internal/models"
 	"github.com/KirkDiggler/ronnied/internal/services/game"
 	"github.com/KirkDiggler/ronnied/internal/services/messaging"
+	"github.com/bwmarrin/discordgo"
 )
 
 // Bot represents the Discord bot instance
@@ -398,12 +396,9 @@ func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.Interacti
 func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID string) error {
 	ctx := context.Background()
 
-	// Acknowledge the interaction immediately to prevent timeout
+	// First, acknowledge the interaction with a deferred update
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Flags: discordgo.MessageFlagsEphemeral,
-		},
+		Type: discordgo.InteractionResponseDeferredMessageUpdate,
 	})
 	if err != nil {
 		log.Printf("Error acknowledging interaction: %v", err)
@@ -418,49 +413,16 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 	// Handle errors or missing game
 	if err != nil {
 		if errors.Is(err, game.ErrGameNotFound) {
-			_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-				Content: stringPtr("No active game found in this channel. Use `/ronnied start` to create a new game."),
+			_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+				Content: "No active game found in this channel.",
+				Flags:   discordgo.MessageFlagsEphemeral,
 			})
 			return err
 		}
 		log.Printf("Error getting game: %v", err)
-		_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-			Content: stringPtr(fmt.Sprintf("%v", err)),
-		})
-		return err
-	}
-
-	// Check if the game is in a state where players can roll
-	if existingGame.Game.Status == models.GameStatusWaiting {
-		log.Printf("Player %s is rolling in waiting state for game %s", userID, existingGame.Game.ID)
-	}
-
-	// For roll-offs, check if this player is eligible to roll
-	if existingGame.Game.Status == models.GameStatusRollOff {
-		// Check if this player is part of the roll-off
-		participant := existingGame.Game.GetParticipant(userID)
-		if participant == nil {
-			_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-				Content: stringPtr("You are not part of the current roll-off."),
-			})
-			return err
-		}
-	}
-
-	// If the game is completed, return a specific message
-	if existingGame.Game.Status == models.GameStatusCompleted {
-		// Get a friendly error message from the messaging service
-		errorMsgOutput, msgErr := b.messagingService.GetErrorMessage(ctx, &messaging.GetErrorMessageInput{
-			ErrorType: "game_completed",
-		})
-		if msgErr != nil {
-			_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-				Content: stringPtr("This game is already completed. Start a new game to roll again."),
-			})
-			return err
-		}
-		_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-			Content: stringPtr(errorMsgOutput.Message),
+		_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+			Content: fmt.Sprintf("Error getting game: %v", err),
+			Flags:   discordgo.MessageFlagsEphemeral,
 		})
 		return err
 	}
@@ -470,26 +432,33 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		GameID:   existingGame.Game.ID,
 		PlayerID: userID,
 	})
+
+	// Handle errors
 	if err != nil {
-		log.Printf("Error rolling dice: %v", err)
-
-		// Check if the error is about being in a roll-off game
-		if strings.Contains(err.Error(), "roll-off game") {
-			// Extract the roll-off game ID from the error message
-			parts := strings.Split(err.Error(), ":")
-			if len(parts) > 1 {
-				rollOffGameID := strings.TrimSpace(parts[1])
-
-				// Get the roll-off game
+		// Special handling for roll-off games
+		if errors.Is(err, game.ErrPlayerAlreadyRolled) {
+			// Check if there's a roll-off game where the player hasn't rolled yet
+			if existingGame.Game.RollOffGameID != "" {
 				rollOffGameOutput, err := b.gameService.GetGame(ctx, &game.GetGameInput{
-					GameID: rollOffGameID,
+					GameID: existingGame.Game.RollOffGameID,
 				})
-
-				if err == nil && rollOffGameOutput.Game != nil {
-					_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-						Content: stringPtr("You need to roll in the roll-off game. Check the game message for details."),
-					})
-					return err
+				if err == nil && rollOffGameOutput != nil {
+					// Check if the player has already rolled in the roll-off game
+					playerRolled := false
+					for _, p := range rollOffGameOutput.Game.Participants {
+						if p.PlayerID == userID && p.RollValue > 0 {
+							playerRolled = true
+							break
+						}
+					}
+					if !playerRolled {
+						// Player hasn't rolled in the roll-off game, redirect them
+						_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+							Content: "You need to roll in the roll-off game. Check the game message for details.",
+							Flags:   discordgo.MessageFlagsEphemeral,
+						})
+						return err
+					}
 				}
 			}
 		}
@@ -506,14 +475,16 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		case game.ErrInvalidGameState:
 			errorType = "invalid_game_state"
 		case game.ErrPlayerNotInGame:
-			_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-				Content: stringPtr("You are not part of this game."),
+			_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+				Content: "You are not part of this game.",
+				Flags:   discordgo.MessageFlagsEphemeral,
 			})
 			return err
 		default:
 			// For any other error, just return the error message
-			_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-				Content: stringPtr(fmt.Sprintf("Failed to roll dice: %v", err)),
+			_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+				Content: fmt.Sprintf("Failed to roll dice: %v", err),
+				Flags:   discordgo.MessageFlagsEphemeral,
 			})
 			return err
 		}
@@ -524,13 +495,15 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		})
 		if msgErr != nil {
 			// If messaging service fails, use a generic message
-			_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-				Content: stringPtr(fmt.Sprintf("Failed to roll dice: %v", err)),
+			_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+				Content: fmt.Sprintf("Failed to roll dice: %v", err),
+				Flags:   discordgo.MessageFlagsEphemeral,
 			})
 			return err
 		}
-		_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-			Content: stringPtr(errorMsgOutput.Message),
+		_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+			Content: errorMsgOutput.Message,
+			Flags:   discordgo.MessageFlagsEphemeral,
 		})
 		return err
 	}
@@ -540,14 +513,146 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 
 	// Check if the player should be redirected to a roll-off game
 	if rollOutput.ActiveRollOffGameID != "" {
-		_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-			Content: stringPtr("You need to roll in the roll-off game. Check the game message for details."),
+		_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+			Content: "You need to roll in the roll-off game. Check the game message for details.",
+			Flags:   discordgo.MessageFlagsEphemeral,
 		})
 		return err
 	}
 
-	// Render the roll response
-	return renderRollDiceResponseEdit(s, i, rollOutput, b.messagingService)
+	// Determine color based on roll result
+	var embedColor int
+	if rollOutput.IsCriticalHit {
+		embedColor = 0x2ecc71 // Green for critical hits
+	} else if rollOutput.RollValue == 1 {
+		embedColor = 0xe74c3c // Red for critical fails
+	} else {
+		embedColor = 0x3498db // Blue for normal rolls
+	}
+
+	// Get a dynamic roll result message from the messaging service
+	rollResultOutput, err := b.messagingService.GetRollResultMessage(ctx, &messaging.GetRollResultMessageInput{
+		PlayerName:        rollOutput.PlayerName,
+		RollValue:         rollOutput.RollValue,
+		IsCriticalHit:     rollOutput.IsCriticalHit,
+		IsCriticalFail:    rollOutput.RollValue == 1, // Assuming 1 is critical fail
+		IsPersonalMessage: true,                     // This is an ephemeral message to the player
+	})
+
+	// Get a supportive whisper message from Ronnie
+	rollWhisperOutput, whisperErr := b.messagingService.GetRollWhisperMessage(ctx, &messaging.GetRollWhisperMessageInput{
+		PlayerName:     rollOutput.PlayerName,
+		RollValue:      rollOutput.RollValue,
+		IsCriticalHit:  rollOutput.IsCriticalHit,
+		IsCriticalFail: rollOutput.RollValue == 1, // Assuming 1 is critical fail
+	})
+
+	// Create embeds - either with messaging service output or fallback to static content
+	var embeds []*discordgo.MessageEmbed
+	var contentText string
+
+	if err != nil {
+		// Fallback to static description if messaging service fails
+		embeds = []*discordgo.MessageEmbed{
+			{
+				Title:       rollOutput.Result,
+				Description: rollOutput.Details,
+				Color:       embedColor,
+			},
+		}
+		contentText = rollOutput.Result
+	} else {
+		embeds = []*discordgo.MessageEmbed{
+			{
+				Title:       rollResultOutput.Title,
+				Description: rollResultOutput.Message,
+				Color:       embedColor,
+			},
+		}
+		contentText = rollResultOutput.Title
+	}
+
+	// Add the whisper message as a second embed if available
+	if whisperErr == nil {
+		whisperEmbed := &discordgo.MessageEmbed{
+			Title:       "Ronnie whispers...",
+			Description: rollWhisperOutput.Message,
+			Color:       0x95a5a6, // Gray color for whispers
+			Footer: &discordgo.MessageEmbedFooter{
+				Text:    "Just between us...",
+				IconURL: "https://cdn.discordapp.com/emojis/839903382661799966.png", // Optional: Add a whisper emoji
+			},
+		}
+		embeds = append(embeds, whisperEmbed)
+	}
+
+	// Build components based on the roll result
+	var components []discordgo.MessageComponent
+	if rollOutput.IsCriticalHit {
+		// Create player selection dropdown for critical hits
+		if len(rollOutput.EligiblePlayers) > 0 {
+			var playerOptions []discordgo.SelectMenuOption
+
+			for _, player := range rollOutput.EligiblePlayers {
+				playerOptions = append(playerOptions, discordgo.SelectMenuOption{
+					Label:       player.PlayerName,
+					Value:       player.PlayerID,
+					Description: "Assign a drink to this player",
+					Emoji: &discordgo.ComponentEmoji{
+						Name: "🍺",
+					},
+				})
+			}
+
+			playerSelect := discordgo.SelectMenu{
+				CustomID:    SelectAssignDrink,
+				Placeholder: "Select a player to drink",
+				Options:     playerOptions,
+			}
+
+			components = append(components, playerSelect)
+		}
+	} else {
+		// Create roll again button for non-critical hits
+		rollButton := discordgo.Button{
+			Label:    "Roll Again",
+			Style:    discordgo.PrimaryButton,
+			CustomID: ButtonRollDice,
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "🎲",
+			},
+		}
+
+		// Add Pay Drink button
+		payDrinkButton := discordgo.Button{
+			Label:    "Pay Drink",
+			Style:    discordgo.SuccessButton,
+			CustomID: ButtonPayDrink,
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "💸",
+			},
+		}
+
+		// Add both buttons
+		components = append(components, rollButton, payDrinkButton)
+	}
+
+	// Create action row for components if we have any
+	var messageComponents []discordgo.MessageComponent
+	if len(components) > 0 {
+		messageComponents = append(messageComponents, discordgo.ActionsRow{
+			Components: components,
+		})
+	}
+
+	// Edit the original message with the updated content
+	_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+		Content:    &contentText,
+		Embeds:     &embeds,
+		Components: &messageComponents,
+	})
+	
+	return err
 }
 
 // handleAssignDrinkSelect handles the assign drink dropdown selection
@@ -757,6 +862,15 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 	channelID := i.ChannelID
 	ctx := context.Background()
 
+	// First, acknowledge the interaction with a deferred update
+	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredMessageUpdate,
+	})
+	if err != nil {
+		log.Printf("Error acknowledging interaction: %v", err)
+		return err
+	}
+
 	// Get the game in this channel
 	existingGame, err := b.gameService.GetGameByChannel(ctx, &game.GetGameByChannelInput{
 		ChannelID: channelID,
@@ -765,14 +879,16 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 	// Handle errors or missing game
 	if err != nil {
 		if errors.Is(err, game.ErrGameNotFound) {
-			_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-				Content: stringPtr("No active game found in this channel."),
+			_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+				Content: "No active game found in this channel.",
+				Flags:   discordgo.MessageFlagsEphemeral,
 			})
 			return err
 		}
 		log.Printf("Error getting game: %v", err)
-		_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-			Content: stringPtr(fmt.Sprintf("Error getting game: %v", err)),
+		_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+			Content: fmt.Sprintf("Error getting game: %v", err),
+			Flags:   discordgo.MessageFlagsEphemeral,
 		})
 		return err
 	}
@@ -793,8 +909,9 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 	})
 	if err != nil {
 		log.Printf("Error paying drink: %v", err)
-		_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-			Content: stringPtr(fmt.Sprintf("Failed to pay drink: %v", err)),
+		_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+			Content: fmt.Sprintf("Failed to pay drink: %v", err),
+			Flags:   discordgo.MessageFlagsEphemeral,
 		})
 		return err
 	}
@@ -859,7 +976,7 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 		},
 	}
 
-	// Update the ephemeral message with the drink payment confirmation
+	// Edit the original message with the updated content
 	_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 		Content:    &contentText,
 		Embeds:     &embeds,
