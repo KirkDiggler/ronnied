@@ -289,7 +289,6 @@ func (c *RonniedCommand) handleSessionboard(s *discordgo.Session, i *discordgo.I
 				description.WriteString("\n\n")
 			}
 		}
-	}
 	
 	if len(sessionboard.Entries) == 0 {
 		description.WriteString("🏜️ **The Sahara is less dry than this session!** No drinks have been assigned yet.")
