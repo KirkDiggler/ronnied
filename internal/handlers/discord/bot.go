@@ -284,7 +284,7 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 		Label:    "Roll Dice",
 		Style:    discordgo.PrimaryButton,
 		CustomID: ButtonRollDice,
-		Emoji: &discordgo.ComponentEmoji{
+		Emoji: discordgo.ComponentEmoji{
 			Name: "🎲",
 		},
 	}
@@ -358,7 +358,7 @@ func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.Interacti
 		Label:    "Roll Dice",
 		Style:    discordgo.PrimaryButton,
 		CustomID: ButtonRollDice,
-		Emoji: &discordgo.ComponentEmoji{
+		Emoji: discordgo.ComponentEmoji{
 			Name: "🎲",
 		},
 	}
@@ -536,7 +536,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		RollValue:         rollOutput.RollValue,
 		IsCriticalHit:     rollOutput.IsCriticalHit,
 		IsCriticalFail:    rollOutput.RollValue == 1, // Assuming 1 is critical fail
-		IsPersonalMessage: true,                     // This is an ephemeral message to the player
+		IsPersonalMessage: true,                      // This is an ephemeral message to the player
 	})
 
 	// Get a supportive whisper message from Ronnie
@@ -564,14 +564,14 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 	} else {
 		// Use the fun message from the messaging service
 		contentText = rollResultOutput.Title
-		
+
 		// Create an embed with the fun message
 		embed := &discordgo.MessageEmbed{
 			Title:       rollResultOutput.Title,
 			Description: rollResultOutput.Message,
 			Color:       embedColor,
 		}
-		
+
 		embeds = append(embeds, embed)
 	}
 
@@ -601,7 +601,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 					Label:       player.PlayerName,
 					Value:       player.PlayerID,
 					Description: "Assign a drink to this player",
-					Emoji: &discordgo.ComponentEmoji{
+					Emoji: discordgo.ComponentEmoji{
 						Name: "🍺",
 					},
 				})
@@ -621,7 +621,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 			Label:    "Roll Again",
 			Style:    discordgo.PrimaryButton,
 			CustomID: ButtonRollDice,
-			Emoji: &discordgo.ComponentEmoji{
+			Emoji: discordgo.ComponentEmoji{
 				Name: "🎲",
 			},
 		}
@@ -631,7 +631,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 			Label:    "Pay Drink",
 			Style:    discordgo.SuccessButton,
 			CustomID: ButtonPayDrink,
-			Emoji: &discordgo.ComponentEmoji{
+			Emoji: discordgo.ComponentEmoji{
 				Name: "💸",
 			},
 		}
@@ -654,7 +654,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		Embeds:     &embeds,
 		Components: &messageComponents,
 	})
-	
+
 	return err
 }
 
@@ -715,7 +715,7 @@ func (b *Bot) handleAssignDrinkSelect(s *discordgo.Session, i *discordgo.Interac
 		Label:    "Roll Again",
 		Style:    discordgo.PrimaryButton,
 		CustomID: ButtonRollDice,
-		Emoji: &discordgo.ComponentEmoji{
+		Emoji: discordgo.ComponentEmoji{
 			Name: "🎲",
 		},
 	}
@@ -725,7 +725,7 @@ func (b *Bot) handleAssignDrinkSelect(s *discordgo.Session, i *discordgo.Interac
 		Label:    "Pay Drink",
 		Style:    discordgo.SuccessButton,
 		CustomID: ButtonPayDrink,
-		Emoji: &discordgo.ComponentEmoji{
+		Emoji: discordgo.ComponentEmoji{
 			Name: "💸",
 		},
 	}
@@ -787,7 +787,7 @@ func (b *Bot) handleStartNewGameButton(s *discordgo.Session, i *discordgo.Intera
 		Label:    "Join Game",
 		Style:    discordgo.SuccessButton,
 		CustomID: ButtonJoinGame,
-		Emoji: &discordgo.ComponentEmoji{
+		Emoji: discordgo.ComponentEmoji{
 			Name: "🎲",
 		},
 	}
@@ -797,7 +797,7 @@ func (b *Bot) handleStartNewGameButton(s *discordgo.Session, i *discordgo.Intera
 		Label:    "Begin Game",
 		Style:    discordgo.PrimaryButton,
 		CustomID: ButtonBeginGame,
-		Emoji: &discordgo.ComponentEmoji{
+		Emoji: discordgo.ComponentEmoji{
 			Name: "🎮",
 		},
 	}
@@ -926,7 +926,7 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 	sessionOutput, err := b.gameService.GetSessionLeaderboard(ctx, &game.GetSessionLeaderboardInput{
 		ChannelID: channelID,
 	})
-	
+
 	// Calculate remaining drinks for the player
 	var remainingDrinks int
 	var drinkStats string
@@ -937,7 +937,7 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 		for _, entry := range sessionOutput.Entries {
 			if entry.PlayerID == userID {
 				remainingDrinks = entry.DrinkCount - entry.PaidCount
-				
+
 				// Create a detailed drink stats message
 				if entry.DrinkCount > 0 {
 					// Select appropriate emoji based on payment status
@@ -957,10 +957,10 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 						statusEmoji = "💪" // Flexed arm for just starting
 						motivationalMsg = "Just getting started! You can do this!"
 					}
-					
-					drinkStats = fmt.Sprintf("**Drink Stats** %s\nTotal: %d | Paid: %d | Remaining: %d", 
+
+					drinkStats = fmt.Sprintf("**Drink Stats** %s\nTotal: %d | Paid: %d | Remaining: %d",
 						statusEmoji, entry.DrinkCount, entry.PaidCount, remainingDrinks)
-					
+
 					// Create a visual progress bar
 					progressBar = createDrinkProgressBar(entry.PaidCount, entry.DrinkCount)
 				}
@@ -974,13 +974,13 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 		PlayerName: playerName,
 		DrinkCount: 1, // For now, we're just paying one drink at a time
 	})
-	
+
 	// Create roll button for the next roll
 	rollButton := discordgo.Button{
 		Label:    "Roll Again",
 		Style:    discordgo.PrimaryButton,
 		CustomID: ButtonRollDice,
-		Emoji: &discordgo.ComponentEmoji{
+		Emoji: discordgo.ComponentEmoji{
 			Name: "🎲",
 		},
 	}
@@ -990,7 +990,7 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 		Label:    "Pay Drink",
 		Style:    discordgo.SuccessButton,
 		CustomID: ButtonPayDrink,
-		Emoji: &discordgo.ComponentEmoji{
+		Emoji: discordgo.ComponentEmoji{
 			Name: "💸",
 		},
 	}
@@ -1005,14 +1005,14 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 	} else {
 		// Use the fun message from the messaging service
 		contentText = payDrinkMsgOutput.Title
-		
+
 		// Create an embed with the fun message
 		embed := &discordgo.MessageEmbed{
 			Title:       payDrinkMsgOutput.Title,
 			Description: payDrinkMsgOutput.Message,
 			Color:       0x2ecc71, // Green for success
 		}
-		
+
 		embeds = append(embeds, embed)
 	}
 
@@ -1074,7 +1074,7 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 		Embeds:     &embeds,
 		Components: &messageComponents,
 	})
-	
+
 	return err
 }
 
@@ -1177,11 +1177,11 @@ func createDrinkProgressBar(paidCount int, totalDrinks int) string {
 
 	// Calculate progress
 	progress := float64(paidCount) / float64(totalDrinks)
-	
+
 	// Select appropriate bar characters based on Discord's rendering
 	filledChar := "🟩" // Green square for paid drinks
 	emptyChar := "⬜"  // White square for unpaid drinks
-	
+
 	// For small numbers of drinks (≤ 10), show one character per drink
 	if totalDrinks <= 10 {
 		var progressBar string
@@ -1194,11 +1194,11 @@ func createDrinkProgressBar(paidCount int, totalDrinks int) string {
 		}
 		return progressBar
 	}
-	
+
 	// For larger numbers, create a 10-segment bar
 	const segments = 10
 	filledSegments := int(progress * segments)
-	
+
 	var progressBar string
 	for i := 0; i < segments; i++ {
 		if i < filledSegments {

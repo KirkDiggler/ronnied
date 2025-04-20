@@ -169,7 +169,7 @@ func (c *RonniedCommand) handleStart(s *discordgo.Session, i *discordgo.Interact
 		Label:    "Join Game",
 		Style:    discordgo.SuccessButton,
 		CustomID: ButtonJoinGame,
-		Emoji: &discordgo.ComponentEmoji{
+		Emoji: discordgo.ComponentEmoji{
 			Name: "🎲",
 		},
 	}
@@ -178,7 +178,7 @@ func (c *RonniedCommand) handleStart(s *discordgo.Session, i *discordgo.Interact
 		Label:    "Begin Game",
 		Style:    discordgo.PrimaryButton,
 		CustomID: ButtonBeginGame,
-		Emoji: &discordgo.ComponentEmoji{
+		Emoji: discordgo.ComponentEmoji{
 			Name: "🎮",
 		},
 	}
@@ -331,7 +331,7 @@ func (c *RonniedCommand) handleBegin(s *discordgo.Session, i *discordgo.Interact
 		Label:    "Roll Dice",
 		Style:    discordgo.PrimaryButton,
 		CustomID: ButtonRollDice,
-		Emoji: &discordgo.ComponentEmoji{
+		Emoji: discordgo.ComponentEmoji{
 			Name: "🎲",
 		},
 	}
@@ -385,8 +385,8 @@ func (c *RonniedCommand) handleBegin(s *discordgo.Session, i *discordgo.Interact
 		_, err = s.ChannelMessageEditComplex(&discordgo.MessageEdit{
 			Channel:    channelID,
 			ID:         existingGame.Game.MessageID,
-			Embeds:     &embeds,
-			Components: &components,
+			Embeds:     embeds,
+			Components: components,
 		})
 		if err != nil {
 			// Just log the error and continue, this isn't critical
@@ -469,7 +469,7 @@ func (c *RonniedCommand) handleRoll(s *discordgo.Session, i *discordgo.Interacti
 		Label:    "Roll Again",
 		Style:    discordgo.PrimaryButton,
 		CustomID: ButtonRollDice,
-		Emoji: &discordgo.ComponentEmoji{
+		Emoji: discordgo.ComponentEmoji{
 			Name: "🎲",
 		},
 	}
@@ -479,7 +479,7 @@ func (c *RonniedCommand) handleRoll(s *discordgo.Session, i *discordgo.Interacti
 		Label:    "Pay Drink",
 		Style:    discordgo.SuccessButton,
 		CustomID: ButtonPayDrink,
-		Emoji: &discordgo.ComponentEmoji{
+		Emoji: discordgo.ComponentEmoji{
 			Name: "💸",
 		},
 	}
@@ -488,7 +488,7 @@ func (c *RonniedCommand) handleRoll(s *discordgo.Session, i *discordgo.Interacti
 	var description string
 	if rollOutput.IsCriticalHit {
 		description = "Critical hit! You can assign a drink to another player."
-		
+
 		// Create player selection dropdown for critical hits
 		if len(rollOutput.EligiblePlayers) > 0 {
 			var playerOptions []discordgo.SelectMenuOption
@@ -498,7 +498,7 @@ func (c *RonniedCommand) handleRoll(s *discordgo.Session, i *discordgo.Interacti
 					Label:       player.PlayerName,
 					Value:       player.PlayerID,
 					Description: "Assign a drink to this player",
-					Emoji: &discordgo.ComponentEmoji{
+					Emoji: discordgo.ComponentEmoji{
 						Name: "🍺",
 					},
 				})
@@ -509,7 +509,7 @@ func (c *RonniedCommand) handleRoll(s *discordgo.Session, i *discordgo.Interacti
 				Placeholder: "Select a player to drink",
 				Options:     playerOptions,
 			}
-			
+
 			// Respond with the roll result and player selection dropdown
 			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseUpdateMessage,

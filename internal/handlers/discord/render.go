@@ -28,7 +28,7 @@ func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate
 					Label:       player.PlayerName,
 					Value:       player.PlayerID,
 					Description: "Assign a drink to this player",
-					Emoji: &discordgo.ComponentEmoji{
+					Emoji: discordgo.ComponentEmoji{
 						Name: "🍺",
 					},
 				})
@@ -48,7 +48,7 @@ func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate
 			Label:    "Roll Again",
 			Style:    discordgo.PrimaryButton,
 			CustomID: ButtonRollDice,
-			Emoji: &discordgo.ComponentEmoji{
+			Emoji: discordgo.ComponentEmoji{
 				Name: "🎲",
 			},
 		}
@@ -173,7 +173,7 @@ func renderRollDiceResponseEdit(s *discordgo.Session, i *discordgo.InteractionCr
 					Label:       player.PlayerName,
 					Value:       player.PlayerID,
 					Description: "Assign a drink to this player",
-					Emoji: &discordgo.ComponentEmoji{
+					Emoji: discordgo.ComponentEmoji{
 						Name: "🍺",
 					},
 				})
@@ -193,7 +193,7 @@ func renderRollDiceResponseEdit(s *discordgo.Session, i *discordgo.InteractionCr
 			Label:    "Roll Again",
 			Style:    discordgo.PrimaryButton,
 			CustomID: ButtonRollDice,
-			Emoji: &discordgo.ComponentEmoji{
+			Emoji: discordgo.ComponentEmoji{
 				Name: "🎲",
 			},
 		}
@@ -203,7 +203,7 @@ func renderRollDiceResponseEdit(s *discordgo.Session, i *discordgo.InteractionCr
 			Label:    "Pay Drink",
 			Style:    discordgo.SuccessButton,
 			CustomID: ButtonPayDrink,
-			Emoji: &discordgo.ComponentEmoji{
+			Emoji: discordgo.ComponentEmoji{
 				Name: "💸",
 			},
 		}
@@ -696,7 +696,7 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 			Label:    "Join Game",
 			Style:    discordgo.SuccessButton,
 			CustomID: ButtonJoinGame,
-			Emoji: &discordgo.ComponentEmoji{
+			Emoji: discordgo.ComponentEmoji{
 				Name: "🎲",
 			},
 		}
@@ -709,7 +709,7 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 				Label:    "Begin Game",
 				Style:    discordgo.PrimaryButton,
 				CustomID: ButtonBeginGame,
-				Emoji: &discordgo.ComponentEmoji{
+				Emoji: discordgo.ComponentEmoji{
 					Name: "▶️",
 				},
 			}
@@ -735,7 +735,7 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 			Label:    "Start New Game",
 			Style:    discordgo.SuccessButton,
 			CustomID: ButtonStartNewGame,
-			Emoji: &discordgo.ComponentEmoji{
+			Emoji: discordgo.ComponentEmoji{
 				Name: "🎮",
 			},
 		}
@@ -753,18 +753,18 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 	messageEdit := &discordgo.MessageEdit{
 		Channel: game.ChannelID,
 		ID:      game.MessageID,
-		Embeds:  &embeds,
+		Embeds:  embeds,
 	}
 
 	// Only set Components if we have any
 	if len(components) > 0 {
 		log.Printf("Setting %d components for game %s", len(components), game.ID)
-		messageEdit.Components = &components
+		messageEdit.Components = components
 	} else {
 		log.Printf("No components to set for message edit for game %s (status: %s)", game.ID, game.Status)
 		// Explicitly set to nil to remove any existing components
 		var emptyComponents []discordgo.MessageComponent
-		messageEdit.Components = &emptyComponents
+		messageEdit.Components = emptyComponents
 		log.Printf("Set empty components array for game %s to clear buttons", game.ID)
 	}
 
