@@ -16,6 +16,9 @@ const (
 	
 	// DrinkReasonLowestRoll indicates a drink assigned due to having the lowest roll
 	DrinkReasonLowestRoll DrinkReason = "lowest_roll"
+	
+	// DrinkReasonDelayedStart indicates a drink assigned to the creator for delaying game start
+	DrinkReasonDelayedStart DrinkReason = "delayed_start"
 )
 
 // DrinkLedger records a drink assignment between players

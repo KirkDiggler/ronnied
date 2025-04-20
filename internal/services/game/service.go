@@ -3,9 +3,9 @@ package game
 import (
 	"context"
 	"errors"
-
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/KirkDiggler/ronnied/internal/common/clock"
 	"github.com/KirkDiggler/ronnied/internal/common/uuid"
@@ -150,11 +150,6 @@ func (s *service) StartGame(ctx context.Context, input *StartGameInput) (*StartG
 		return nil, ErrGameNotFound
 	}
 
-	// Verify the player is the game creator
-	if game.CreatorID != input.PlayerID {
-		return nil, ErrNotCreator
-	}
-
 	// Ensure the game is in waiting status
 	if game.Status != models.GameStatusWaiting {
 		return nil, ErrInvalidGameState
@@ -163,6 +158,55 @@ func (s *service) StartGame(ctx context.Context, input *StartGameInput) (*StartG
 	// Ensure there is at least 1 player (the creator)
 	if len(game.Participants) < 1 {
 		return nil, ErrNotEnoughPlayers
+	}
+
+	// Get the creator's name
+	creatorName := "Unknown Creator"
+	for _, p := range game.Participants {
+		if p.PlayerID == game.CreatorID {
+			creatorName = p.PlayerName
+			break
+		}
+	}
+
+	// Check if the player is the game creator
+	isCreator := game.CreatorID == input.PlayerID
+	
+	// If not the creator, check if force start is allowed
+	forceStarted := false
+	if !isCreator {
+		// Only allow force start if explicitly requested and game is older than 5 minutes
+		if !input.ForceStart {
+			return nil, ErrNotCreator
+		}
+		
+		// Calculate game age
+		gameAge := s.clock.Now().Sub(game.CreatedAt)
+		fiveMinutes := 5 * time.Minute
+		
+		// If game is less than 5 minutes old, don't allow force start
+		if gameAge < fiveMinutes {
+			return nil, fmt.Errorf("%w: game must be at least 5 minutes old for non-creator to start (current age: %v)", 
+				ErrNotCreator, gameAge.Round(time.Second))
+		}
+		
+		// Game is old enough, allow force start
+		forceStarted = true
+		
+		// Assign a drink to the creator for delaying
+		_, err = s.drinkLedgerRepo.CreateDrinkRecord(ctx, &ledgerRepo.CreateDrinkRecordInput{
+			GameID:       input.GameID,
+			FromPlayerID: input.PlayerID,
+			ToPlayerID:   game.CreatorID,
+			Reason:       models.DrinkReasonDelayedStart,
+			Timestamp:    s.clock.Now(),
+			SessionID:    s.getSessionIDForChannel(ctx, game.ChannelID),
+		})
+		
+		if err != nil {
+			// Log the error but don't fail the operation
+			log.Printf("Error assigning drink to creator for delayed start: %v", err)
+		}
 	}
 
 	// Update game status to active
@@ -196,7 +240,10 @@ func (s *service) StartGame(ctx context.Context, input *StartGameInput) (*StartG
 	}
 
 	return &StartGameOutput{
-		Success: true,
+		Success:      true,
+		ForceStarted: forceStarted,
+		CreatorID:    game.CreatorID,
+		CreatorName:  creatorName,
 	}, nil
 }
 

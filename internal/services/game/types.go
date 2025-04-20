@@ -310,20 +310,20 @@ type EndGameOutput struct {
 	SessionLeaderboard []LeaderboardEntry
 }
 
-// StartGameInput contains parameters for starting a game
+// StartGameInput defines the input for starting a game
 type StartGameInput struct {
-	// GameID is the unique identifier for the game
-	GameID string
-
-	// PlayerID is the Discord user ID of the player starting the game
-	// This should match the game's creator ID
-	PlayerID string
+	GameID     string
+	PlayerID   string
+	ForceStart bool // Set to true when a non-creator tries to start the game after timeout
 }
 
 // StartGameOutput contains the result of starting a game
 type StartGameOutput struct {
 	// Success indicates if the game was successfully started
-	Success bool
+	Success       bool
+	ForceStarted  bool   // Whether the game was force-started by a non-creator
+	CreatorID     string // The ID of the original creator who delayed starting
+	CreatorName   string // The name of the original creator
 }
 
 // HandleRollOffInput contains parameters for handling a roll-off

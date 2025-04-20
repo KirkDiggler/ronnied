@@ -338,8 +338,9 @@ func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.Interacti
 
 	// Start the game
 	startOutput, err := b.gameService.StartGame(ctx, &game.StartGameInput{
-		GameID:   existingGame.Game.ID,
-		PlayerID: userID,
+		GameID:     existingGame.Game.ID,
+		PlayerID:   userID,
+		ForceStart: true, // Always try to force start, service layer will decide if it's allowed
 	})
 	if err != nil {
 		log.Printf("Error starting game: %v", err)
@@ -371,7 +372,11 @@ func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.Interacti
 
 	// Default message if the messaging service fails
 	gameStartedMessage := "Game Started! Click the button below to roll your dice."
-	if err == nil {
+	
+	// If the game was force-started, add information about the original creator
+	if startOutput.ForceStarted && startOutput.CreatorName != "" {
+		gameStartedMessage = fmt.Sprintf("Game force-started! %s took too long to start the game and has been assigned a drink. Click the button below to roll your dice.", startOutput.CreatorName)
+	} else if err == nil {
 		gameStartedMessage = startMsgOutput.Message
 	} else {
 		log.Printf("Error getting game started message: %v", err)
