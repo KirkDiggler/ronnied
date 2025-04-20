@@ -244,19 +244,25 @@ func (c *RonniedCommand) handleSessionboard(s *discordgo.Session, i *discordgo.I
 	
 	// Session info header
 	if sessionboard.Session != nil {
-		// Check if the session's CreatedAt time is valid (not zero or far in the past/future)
+		// Get current time and session creation time
 		now := time.Now()
 		sessionCreatedAt := sessionboard.Session.CreatedAt
 		
-		// If the session time is more than a week in the past or future, it's likely invalid
-		oneWeek := 7 * 24 * time.Hour
-		if sessionCreatedAt.Before(now.Add(-oneWeek)) || sessionCreatedAt.After(now.Add(oneWeek)) {
-			// Use a placeholder for invalid times
-			description.WriteString("🍻 **Session:** Active\n\n")
-		} else {
-			// Calculate age with valid time
-			sessionAge := now.Sub(sessionCreatedAt)
-			
+		// Log for debugging
+		log.Printf("Session ID: %s, CreatedAt: %v, Now: %v", 
+			sessionboard.Session.ID, 
+			sessionCreatedAt, 
+			now)
+		
+		// Always show session creation time for reference
+		description.WriteString(fmt.Sprintf("🍻 **Session Started:** %s\n", 
+			sessionCreatedAt.Format("Jan 2 at 3:04 PM")))
+		
+		// Calculate and format the age
+		sessionAge := now.Sub(sessionCreatedAt)
+		
+		// Only show age if it's a reasonable value (positive and less than a week)
+		if sessionAge > 0 && sessionAge < 7*24*time.Hour {
 			// Format the duration in a human-readable way
 			var formattedAge string
 			hours := int(sessionAge.Hours())
@@ -278,7 +284,9 @@ func (c *RonniedCommand) handleSessionboard(s *discordgo.Session, i *discordgo.I
 				formattedAge = "just started"
 			}
 			
-			description.WriteString(fmt.Sprintf("🍻 **Session Age:** %s\n\n", formattedAge))
+			description.WriteString(fmt.Sprintf(" (%s ago)\n\n", formattedAge))
+		} else {
+			description.WriteString("\n\n")
 		}
 	}
 	
