@@ -2612,3 +2612,106 @@ func (s *GameServiceTestSuite) TestEndGame_IncludesSessionLeaderboard() {
 func TestGameServiceSuite(t *testing.T) {
 	suite.Run(t, new(GameServiceTestSuite))
 }
+
+func (s *GameServiceTestSuite) TestPayDrink_HappyPath() {
+	// Set up test data
+	testDrinkID := "test-drink-id"
+	testDrink := &models.DrinkLedger{
+		ID:           testDrinkID,
+		GameID:       s.testGameID,
+		FromPlayerID: s.testCreatorID,
+		ToPlayerID:   s.testPlayerID,
+		Reason:       models.DrinkReasonCriticalHit,
+		Timestamp:    s.testTime,
+		Paid:         false,
+	}
+	
+	// Set up expectations
+	// Get the game
+	s.mockGameRepo.EXPECT().GetGame(s.ctx, &gameRepo.GetGameInput{
+		GameID: s.testGameID,
+	}).Return(s.expectedGameWithPlayer, nil)
+	
+	// Get the session ID for the channel
+	s.mockDrinkRepo.EXPECT().GetCurrentSession(s.ctx, &ledgerRepo.GetCurrentSessionInput{
+		ChannelID: s.testChannelID,
+	}).Return(&ledgerRepo.GetCurrentSessionOutput{
+		Session: &models.Session{
+			ID: s.testSessionID,
+		},
+	}, nil)
+	
+	// Get drink records for the session
+	s.mockDrinkRepo.EXPECT().GetDrinkRecordsForSession(s.ctx, &ledgerRepo.GetDrinkRecordsForSessionInput{
+		SessionID: s.testSessionID,
+	}).Return(&ledgerRepo.GetDrinkRecordsForSessionOutput{
+		Records: []*models.DrinkLedger{testDrink},
+	}, nil)
+	
+	// Mark the drink as paid
+	s.mockDrinkRepo.EXPECT().MarkDrinkPaid(s.ctx, &ledgerRepo.MarkDrinkPaidInput{
+		DrinkID: testDrinkID,
+	}).Return(nil)
+	
+	// Execute the method
+	result, err := s.gameService.PayDrink(s.ctx, &PayDrinkInput{
+		GameID:   s.testGameID,
+		PlayerID: s.testPlayerID,
+	})
+	
+	// Verify the result
+	s.NoError(err)
+	s.NotNil(result)
+	s.True(result.Success)
+	s.Equal(s.expectedGameWithPlayer, result.Game)
+	s.NotNil(result.DrinkRecord)
+	s.Equal(testDrinkID, result.DrinkRecord.ID)
+	s.True(result.DrinkRecord.Paid)
+}
+
+func (s *GameServiceTestSuite) TestPayDrink_NoUnpaidDrinks() {
+	// Set up test data
+	testDrinkID := "test-drink-id"
+	testDrink := &models.DrinkLedger{
+		ID:           testDrinkID,
+		GameID:       s.testGameID,
+		FromPlayerID: s.testCreatorID,
+		ToPlayerID:   "different-player-id", // Different player
+		Reason:       models.DrinkReasonCriticalHit,
+		Timestamp:    s.testTime,
+		Paid:         false,
+	}
+	
+	// Set up expectations
+	// Get the game
+	s.mockGameRepo.EXPECT().GetGame(s.ctx, &gameRepo.GetGameInput{
+		GameID: s.testGameID,
+	}).Return(s.expectedGameWithPlayer, nil)
+	
+	// Get the session ID for the channel
+	s.mockDrinkRepo.EXPECT().GetCurrentSession(s.ctx, &ledgerRepo.GetCurrentSessionInput{
+		ChannelID: s.testChannelID,
+	}).Return(&ledgerRepo.GetCurrentSessionOutput{
+		Session: &models.Session{
+			ID: s.testSessionID,
+		},
+	}, nil)
+	
+	// Get drink records for the session
+	s.mockDrinkRepo.EXPECT().GetDrinkRecordsForSession(s.ctx, &ledgerRepo.GetDrinkRecordsForSessionInput{
+		SessionID: s.testSessionID,
+	}).Return(&ledgerRepo.GetDrinkRecordsForSessionOutput{
+		Records: []*models.DrinkLedger{testDrink},
+	}, nil)
+	
+	// Execute the method
+	result, err := s.gameService.PayDrink(s.ctx, &PayDrinkInput{
+		GameID:   s.testGameID,
+		PlayerID: s.testPlayerID,
+	})
+	
+	// Verify the result
+	s.Error(err)
+	s.Nil(result)
+	s.Contains(err.Error(), "no unpaid drinks found")
+}
