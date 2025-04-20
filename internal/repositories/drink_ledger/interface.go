@@ -22,4 +22,19 @@ type Repository interface {
 	
 	// CreateDrinkRecord creates a new drink record with a generated UUID
 	CreateDrinkRecord(ctx context.Context, input *CreateDrinkRecordInput) (*CreateDrinkRecordOutput, error)
+	
+	// ArchiveDrinkRecords marks all drink records for a game as archived
+	ArchiveDrinkRecords(ctx context.Context, input *ArchiveDrinkRecordsInput) error
+	
+	// DeleteDrinkRecords deletes all drink records for a game
+	DeleteDrinkRecords(ctx context.Context, input *DeleteDrinkRecordsInput) error
+	
+	// CreateSession creates a new drinking session
+	CreateSession(ctx context.Context, input *CreateSessionInput) (*CreateSessionOutput, error)
+	
+	// GetCurrentSession retrieves the current active session for a channel
+	GetCurrentSession(ctx context.Context, input *GetCurrentSessionInput) (*GetCurrentSessionOutput, error)
+	
+	// GetDrinkRecordsForSession retrieves all drink records for a session
+	GetDrinkRecordsForSession(ctx context.Context, input *GetDrinkRecordsForSessionInput) (*GetDrinkRecordsForSessionOutput, error)
 }

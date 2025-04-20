@@ -7,7 +7,7 @@ import (
 	"github.com/KirkDiggler/ronnied/internal/common/uuid"
 	"github.com/KirkDiggler/ronnied/internal/dice"
 	"github.com/KirkDiggler/ronnied/internal/models"
-	ledgerRepo "github.com/KirkDiggler/ronnied/internal/repositories/drink_ledger"
+	drinkLedgerRepo "github.com/KirkDiggler/ronnied/internal/repositories/drink_ledger"
 	gameRepo "github.com/KirkDiggler/ronnied/internal/repositories/game"
 	playerRepo "github.com/KirkDiggler/ronnied/internal/repositories/player"
 )
@@ -74,7 +74,7 @@ type Config struct {
 	// Repository dependencies
 	GameRepo        gameRepo.Repository
 	PlayerRepo      playerRepo.Repository
-	DrinkLedgerRepo ledgerRepo.Repository
+	DrinkLedgerRepo drinkLedgerRepo.Repository
 
 	// Service dependencies
 	DiceRoller    dice.Roller
@@ -159,6 +159,15 @@ type PlayerOption struct {
 type RollDiceOutput struct {
 	// Value is the result of the dice roll
 	Value int
+
+	// RollValue is an alias for Value to maintain compatibility
+	RollValue int
+
+	// PlayerID is the ID of the player who rolled
+	PlayerID string
+
+	// PlayerName is the name of the player who rolled
+	PlayerName string
 
 	// IsCriticalHit indicates if the roll was a critical hit
 	IsCriticalHit bool
@@ -251,8 +260,8 @@ type PlayerStats struct {
 
 // EndGameInput contains parameters for ending a game
 type EndGameInput struct {
-	// GameID is the unique identifier for the game
-	GameID string
+	// Game is the game to end
+	Game *models.Game
 }
 
 // EndGameOutput contains the result of ending a game
@@ -263,17 +272,42 @@ type EndGameOutput struct {
 	// FinalLeaderboard contains the final standings for the game
 	FinalLeaderboard []*PlayerStats
 
-	// NeedsRollOff indicates if a roll-off is needed
+	// NeedsHighestRollOff indicates if a highest roll-off is needed
+	NeedsHighestRollOff bool
+
+	// HighestRollOffGameID is the ID of the highest roll-off game
+	HighestRollOffGameID string
+
+	// HighestRollOffPlayerIDs contains the IDs of players in the highest roll-off
+	HighestRollOffPlayerIDs []string
+
+	// NeedsLowestRollOff indicates if a lowest roll-off is needed
+	NeedsLowestRollOff bool
+
+	// LowestRollOffGameID is the ID of the lowest roll-off game
+	LowestRollOffGameID string
+
+	// LowestRollOffPlayerIDs contains the IDs of players in the lowest roll-off
+	LowestRollOffPlayerIDs []string
+
+	// Backward compatibility fields
+	// NeedsRollOff indicates if a roll-off is needed (either highest or lowest)
 	NeedsRollOff bool
+
+	// RollOffType indicates the type of roll-off needed (highest or lowest)
+	RollOffType RollOffType
 
 	// RollOffGameID is the ID of the roll-off game
 	RollOffGameID string
 
-	// RollOffType indicates the type of roll-off (highest or lowest)
-	RollOffType RollOffType
-
 	// RollOffPlayerIDs contains the IDs of players in the roll-off
 	RollOffPlayerIDs []string
+
+	// SessionID is the ID of the session this game belongs to
+	SessionID string
+
+	// SessionLeaderboard contains the current session leaderboard
+	SessionLeaderboard []LeaderboardEntry
 }
 
 // StartGameInput contains parameters for starting a game
@@ -341,7 +375,8 @@ type GetLeaderboardInput struct {
 type LeaderboardEntry struct {
 	PlayerID   string
 	PlayerName string
-	DrinkCount int
+	DrinkCount int // Total drinks this player owes
+	PaidCount  int // Number of drinks this player has paid
 }
 
 // GetLeaderboardOutput defines the output for retrieving a game's leaderboard
@@ -366,7 +401,7 @@ type AbandonGameOutput struct {
 type UpdateGameMessageInput struct {
 	// GameID is the unique identifier for the game
 	GameID string
-	
+
 	// MessageID is the Discord message ID to associate with the game
 	MessageID string
 }
@@ -408,4 +443,192 @@ type GetGameLeaderboardInput struct {
 type GetGameLeaderboardOutput struct {
 	GameID  string
 	Entries []LeaderboardEntry
+}
+
+// GetPlayerTabInput contains parameters for retrieving a player's current tab
+type GetPlayerTabInput struct {
+	// GameID is the ID of the game to get the tab for
+	GameID string
+
+	// PlayerID is the ID of the player to get the tab for
+	PlayerID string
+}
+
+// PlayerTabEntry represents a single drink in a player's tab
+type PlayerTabEntry struct {
+	// FromPlayerID is the ID of the player who assigned the drink
+	FromPlayerID string
+
+	// FromPlayerName is the name of the player who assigned the drink
+	FromPlayerName string
+
+	// ToPlayerID is the ID of the player who received the drink
+	ToPlayerID string
+
+	// ToPlayerName is the name of the player who received the drink
+	ToPlayerName string
+
+	// Reason is why the drink was assigned
+	Reason models.DrinkReason
+
+	// Timestamp is when the drink was assigned
+	Timestamp time.Time
+
+	// Paid indicates whether the drink has been paid (taken)
+	Paid bool
+}
+
+// PlayerTab contains information about a player's drinks
+type PlayerTab struct {
+	// PlayerID is the ID of the player
+	PlayerID string
+
+	// PlayerName is the name of the player
+	PlayerName string
+
+	// DrinksOwed are drinks the player needs to take
+	DrinksOwed []*PlayerTabEntry
+
+	// DrinksAssigned are drinks the player has assigned to others
+	DrinksAssigned []*PlayerTabEntry
+
+	// TotalOwed is the total number of drinks the player needs to take
+	TotalOwed int
+
+	// TotalAssigned is the total number of drinks the player has assigned
+	TotalAssigned int
+
+	// NetDrinks is the net number of drinks (owed - assigned)
+	NetDrinks int
+}
+
+// GetPlayerTabOutput contains the result of retrieving a player's tab
+type GetPlayerTabOutput struct {
+	// Tab is the player's tab information
+	Tab *PlayerTab
+
+	// Game is the game the tab is for
+	Game *models.Game
+}
+
+// ResetGameTabInput contains parameters for resetting a game's drink ledger
+type ResetGameTabInput struct {
+	// GameID is the ID of the game to reset the tab for
+	GameID string
+
+	// ResetterID is the ID of the player who is resetting the tab
+	ResetterID string
+
+	// ArchiveRecords determines whether to archive the drink records or delete them
+	// If true, records will be marked as archived but kept in the database
+	// If false, records will be deleted
+	ArchiveRecords bool
+}
+
+// GameTabSummary contains a summary of a game's drink ledger before reset
+type GameTabSummary struct {
+	// GameID is the ID of the game
+	GameID string
+
+	// ResetTime is when the tab was reset
+	ResetTime time.Time
+
+	// ResetterID is the ID of the player who reset the tab
+	ResetterID string
+
+	// ResetterName is the name of the player who reset the tab
+	ResetterName string
+
+	// Leaderboard is the leaderboard at the time of reset
+	Leaderboard []LeaderboardEntry
+
+	// TotalDrinks is the total number of drinks assigned in the game
+	TotalDrinks int
+}
+
+// ResetGameTabOutput contains the result of resetting a game's drink ledger
+type ResetGameTabOutput struct {
+	// Success indicates whether the reset was successful
+	Success bool
+
+	// PreviousTab is a summary of the game's drink ledger before reset
+	PreviousTab *GameTabSummary
+
+	// Game is the game with the reset tab
+	Game *models.Game
+}
+
+// PayDrinkInput contains parameters for paying a drink
+type PayDrinkInput struct {
+	// GameID is the ID of the game
+	GameID string
+	
+	// PlayerID is the ID of the player paying the drink
+	PlayerID string
+}
+
+// PayDrinkOutput represents the output of the PayDrink method
+type PayDrinkOutput struct {
+	// Success indicates whether the drink was successfully paid
+	Success bool
+	
+	// Game is the game the drink was paid in
+	Game *models.Game
+	
+	// DrinkRecord is the drink record that was marked as paid
+	DrinkRecord *models.DrinkLedger
+}
+
+// CreateSessionInput represents the input for the CreateSession method
+type CreateSessionInput struct {
+	// ChannelID is the Discord channel ID for this session
+	ChannelID string
+	
+	// CreatedBy is the user ID who created the session
+	CreatedBy string
+}
+
+// CreateSessionOutput represents the output of the CreateSession method
+type CreateSessionOutput struct {
+	// Success indicates whether the session was successfully created
+	Success bool
+	
+	// Session is the newly created session
+	Session *models.Session
+}
+
+// GetSessionLeaderboardInput represents the input for the GetSessionLeaderboard method
+type GetSessionLeaderboardInput struct {
+	// ChannelID is the Discord channel ID to get the leaderboard for
+	// If specified, will use the current session for this channel
+	ChannelID string
+	
+	// SessionID is the specific session ID to get the leaderboard for
+	// If specified, will override ChannelID
+	SessionID string
+}
+
+// GetSessionLeaderboardOutput represents the output of the GetSessionLeaderboard method
+type GetSessionLeaderboardOutput struct {
+	// Success indicates whether the leaderboard was successfully retrieved
+	Success bool
+	
+	// Session is the session this leaderboard is for
+	Session *models.Session
+	
+	// Entries is the list of leaderboard entries
+	Entries []LeaderboardEntry
+}
+
+// StartNewSessionInput is the input for StartNewSession
+type StartNewSessionInput struct {
+	ChannelID string
+	CreatorID string
+}
+
+// StartNewSessionOutput is the output for StartNewSession
+type StartNewSessionOutput struct {
+	Success     bool
+	Session     *models.Session
+	SessionID   string
 }

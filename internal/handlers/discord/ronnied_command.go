@@ -49,7 +49,17 @@ func NewRonniedCommand(gameService game.Service) *RonniedCommand {
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "leaderboard",
-					Description: "Show the current leaderboard",
+					Description: "Show the current game leaderboard",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "sessionboard",
+					Description: "Show the session leaderboard (drinks across all games)",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "newsession",
+					Description: "Start a new drinking session (resets the session leaderboard)",
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
@@ -94,6 +104,10 @@ func (c *RonniedCommand) Handle(s *discordgo.Session, i *discordgo.InteractionCr
 		return c.handleRoll(s, i, channelID, userID)
 	case "leaderboard":
 		return c.handleLeaderboard(s, i, channelID)
+	case "sessionboard":
+		return c.handleSessionboard(s, i, channelID)
+	case "newsession":
+		return c.handleNewSession(s, i, channelID)
 	case "abandon":
 		return c.handleAbandon(s, i, channelID, userID)
 	default:
@@ -155,7 +169,7 @@ func (c *RonniedCommand) handleStart(s *discordgo.Session, i *discordgo.Interact
 		Label:    "Join Game",
 		Style:    discordgo.SuccessButton,
 		CustomID: ButtonJoinGame,
-		Emoji: &discordgo.ComponentEmoji{
+		Emoji: discordgo.ComponentEmoji{
 			Name: "🎲",
 		},
 	}
@@ -164,7 +178,7 @@ func (c *RonniedCommand) handleStart(s *discordgo.Session, i *discordgo.Interact
 		Label:    "Begin Game",
 		Style:    discordgo.PrimaryButton,
 		CustomID: ButtonBeginGame,
-		Emoji: &discordgo.ComponentEmoji{
+		Emoji: discordgo.ComponentEmoji{
 			Name: "🎮",
 		},
 	}
@@ -317,7 +331,7 @@ func (c *RonniedCommand) handleBegin(s *discordgo.Session, i *discordgo.Interact
 		Label:    "Roll Dice",
 		Style:    discordgo.PrimaryButton,
 		CustomID: ButtonRollDice,
-		Emoji: &discordgo.ComponentEmoji{
+		Emoji: discordgo.ComponentEmoji{
 			Name: "🎲",
 		},
 	}
@@ -327,7 +341,7 @@ func (c *RonniedCommand) handleBegin(s *discordgo.Session, i *discordgo.Interact
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: "Game Started! Click the button below to roll your dice.",
-			Flags: discordgo.MessageFlagsEphemeral,
+			Flags:   discordgo.MessageFlagsEphemeral,
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
 					Components: []discordgo.MessageComponent{rollButton},
@@ -365,14 +379,14 @@ func (c *RonniedCommand) handleBegin(s *discordgo.Session, i *discordgo.Interact
 				Fields:      fields,
 			},
 		}
-		
+
 		components := []discordgo.MessageComponent{}
-		
+
 		_, err = s.ChannelMessageEditComplex(&discordgo.MessageEdit{
 			Channel:    channelID,
 			ID:         existingGame.Game.MessageID,
-			Embeds:     &embeds,
-			Components: &components,
+			Embeds:     embeds,
+			Components: components,
 		})
 		if err != nil {
 			// Just log the error and continue, this isn't critical
@@ -428,8 +442,8 @@ func (c *RonniedCommand) handleRoll(s *discordgo.Session, i *discordgo.Interacti
 
 	// Handle errors or missing game
 	if err != nil {
-		if err == game.ErrGameNotFound {
-			return RespondWithError(s, i, "No active game found in this channel. Use `/ronnied start` to create a new game.")
+		if errors.Is(err, game.ErrGameNotFound) {
+			return RespondWithError(s, i, "No game found in this channel. Use `/ronnied start` to create a new game.")
 		}
 		log.Printf("Error getting game: %v", err)
 		return RespondWithError(s, i, fmt.Sprintf("Error getting game: %v", err))
@@ -450,18 +464,85 @@ func (c *RonniedCommand) handleRoll(s *discordgo.Session, i *discordgo.Interacti
 		return RespondWithError(s, i, fmt.Sprintf("Failed to roll dice: %v", err))
 	}
 
+	// Create roll button for the next roll
+	rollButton := discordgo.Button{
+		Label:    "Roll Again",
+		Style:    discordgo.PrimaryButton,
+		CustomID: ButtonRollDice,
+		Emoji: discordgo.ComponentEmoji{
+			Name: "🎲",
+		},
+	}
+
+	// Create pay drink button
+	payDrinkButton := discordgo.Button{
+		Label:    "Pay Drink",
+		Style:    discordgo.SuccessButton,
+		CustomID: ButtonPayDrink,
+		Emoji: discordgo.ComponentEmoji{
+			Name: "💸",
+		},
+	}
+
 	// Build the response message
 	var description string
 	if rollOutput.IsCriticalHit {
 		description = "Critical hit! You can assign a drink to another player."
+
+		// Create player selection dropdown for critical hits
+		if len(rollOutput.EligiblePlayers) > 0 {
+			var playerOptions []discordgo.SelectMenuOption
+
+			for _, player := range rollOutput.EligiblePlayers {
+				playerOptions = append(playerOptions, discordgo.SelectMenuOption{
+					Label:       player.PlayerName,
+					Value:       player.PlayerID,
+					Description: "Assign a drink to this player",
+					Emoji: discordgo.ComponentEmoji{
+						Name: "🍺",
+					},
+				})
+			}
+
+			playerSelect := discordgo.SelectMenu{
+				CustomID:    SelectAssignDrink,
+				Placeholder: "Select a player to drink",
+				Options:     playerOptions,
+			}
+
+			// Respond with the roll result and player selection dropdown
+			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseUpdateMessage,
+				Data: &discordgo.InteractionResponseData{
+					Content: fmt.Sprintf("You rolled a %d. %s", rollOutput.Value, description),
+					Flags:   discordgo.MessageFlagsEphemeral,
+					Components: []discordgo.MessageComponent{
+						discordgo.ActionsRow{
+							Components: []discordgo.MessageComponent{playerSelect},
+						},
+					},
+				},
+			})
+		}
 	} else if rollOutput.IsCriticalFail {
 		description = "Critical fail! Take a drink."
 	} else {
 		description = "You rolled the dice."
 	}
 
-	// Respond with the roll result
-	return RespondWithMessage(s, i, fmt.Sprintf("You rolled a %d. %s", rollOutput.Value, description))
+	// Respond with the roll result and buttons
+	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseUpdateMessage,
+		Data: &discordgo.InteractionResponseData{
+			Content: fmt.Sprintf("You rolled a %d. %s", rollOutput.Value, description),
+			Flags:   discordgo.MessageFlagsEphemeral,
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{rollButton, payDrinkButton},
+				},
+			},
+		},
+	})
 }
 
 // handleLeaderboard handles the leaderboard subcommand
@@ -503,6 +584,50 @@ func (c *RonniedCommand) handleLeaderboard(s *discordgo.Session, i *discordgo.In
 
 	// Respond with the leaderboard
 	return RespondWithEmbed(s, i, "Leaderboard", description.String(), nil)
+}
+
+// handleSessionboard handles the sessionboard subcommand
+func (c *RonniedCommand) handleSessionboard(s *discordgo.Session, i *discordgo.InteractionCreate, channelID string) error {
+	ctx := context.Background()
+
+	// Get the session leaderboard
+	sessionboard, err := c.gameService.GetSessionLeaderboard(ctx, &game.GetSessionLeaderboardInput{
+		ChannelID: channelID,
+	})
+	if err != nil {
+		log.Printf("Error getting session leaderboard: %v", err)
+		return RespondWithError(s, i, fmt.Sprintf("Failed to get session leaderboard: %v", err))
+	}
+
+	// Build the session leaderboard description
+	var description strings.Builder
+	if len(sessionboard.Entries) == 0 {
+		description.WriteString("No drinks have been assigned yet.")
+	} else {
+		for _, entry := range sessionboard.Entries {
+			description.WriteString(fmt.Sprintf("**%s**: %d drinks\n", entry.PlayerName, entry.DrinkCount))
+		}
+	}
+
+	// Respond with the session leaderboard
+	return RespondWithEmbed(s, i, "Session Leaderboard", description.String(), nil)
+}
+
+// handleNewSession handles the newsession subcommand
+func (c *RonniedCommand) handleNewSession(s *discordgo.Session, i *discordgo.InteractionCreate, channelID string) error {
+	ctx := context.Background()
+
+	// Start a new session
+	_, err := c.gameService.StartNewSession(ctx, &game.StartNewSessionInput{
+		ChannelID: channelID,
+	})
+	if err != nil {
+		log.Printf("Error starting new session: %v", err)
+		return RespondWithError(s, i, fmt.Sprintf("Failed to start new session: %v", err))
+	}
+
+	// Respond with success message
+	return RespondWithMessage(s, i, "New session started successfully.")
 }
 
 // handleAbandon handles the abandon subcommand

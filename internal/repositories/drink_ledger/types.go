@@ -42,9 +42,22 @@ type CreateDrinkRecordInput struct {
 	ToPlayerID   string
 	Reason       models.DrinkReason
 	Timestamp    time.Time
+	SessionID    string // ID of the session this drink belongs to
 }
 
 // CreateDrinkRecordOutput contains the result of creating a new drink record
 type CreateDrinkRecordOutput struct {
 	Record *models.DrinkLedger
+}
+
+// ArchiveDrinkRecordsInput contains parameters for archiving drink records
+type ArchiveDrinkRecordsInput struct {
+	// GameID is the ID of the game to archive drink records for
+	GameID string
+}
+
+// DeleteDrinkRecordsInput contains parameters for deleting drink records
+type DeleteDrinkRecordsInput struct {
+	// GameID is the ID of the game to delete drink records for
+	GameID string
 }

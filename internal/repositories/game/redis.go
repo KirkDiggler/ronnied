@@ -256,7 +256,7 @@ func (r *redisRepository) GetActiveGames(ctx context.Context, input *GetActiveGa
 // GetGamesByParent retrieves all games with a specific parent game ID from Redis
 func (r *redisRepository) GetGamesByParent(ctx context.Context, input *GetGamesByParentInput) ([]*models.Game, error) {
 	// Get the list of child game IDs for this parent
-	childGameIDs, err := r.client.SMembers(ctx, fmt.Sprintf("%s%s", parentChildIndex, input.ParentGameID)).Result()
+	childGameIDs, err := r.client.ZRange(ctx, fmt.Sprintf("%s%s", parentChildIndex, input.ParentGameID), 0, -1).Result()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get child games: %w", err)
 	}

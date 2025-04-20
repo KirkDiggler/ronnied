@@ -24,22 +24,40 @@ type Service interface {
 
 	// HandleRollOff manages roll-offs for tied players
 	HandleRollOff(ctx context.Context, input *HandleRollOffInput) (*HandleRollOffOutput, error)
-	
+
 	// GetGameByChannel retrieves a game by its Discord channel ID
 	GetGameByChannel(ctx context.Context, input *GetGameByChannelInput) (*GetGameByChannelOutput, error)
-	
+
 	// GetGame retrieves a game by its ID
 	GetGame(ctx context.Context, input *GetGameInput) (*GetGameOutput, error)
-	
+
 	// GetLeaderboard retrieves the leaderboard for a game
 	GetLeaderboard(ctx context.Context, input *GetLeaderboardInput) (*GetLeaderboardOutput, error)
-	
+
 	// AbandonGame forcefully abandons a game regardless of its state
 	AbandonGame(ctx context.Context, input *AbandonGameInput) (*AbandonGameOutput, error)
-	
+
 	// UpdateGameMessage updates the Discord message ID associated with a game
 	UpdateGameMessage(ctx context.Context, input *UpdateGameMessageInput) (*UpdateGameMessageOutput, error)
-	
+
 	// GetDrinkRecords retrieves all drink records for a game
 	GetDrinkRecords(ctx context.Context, input *GetDrinkRecordsInput) (*GetDrinkRecordsOutput, error)
+
+	// GetPlayerTab retrieves a player's current tab (drinks owed and received)
+	GetPlayerTab(ctx context.Context, input *GetPlayerTabInput) (*GetPlayerTabOutput, error)
+
+	// ResetGameTab resets the drink ledger for a game and returns the previous leaderboard
+	ResetGameTab(ctx context.Context, input *ResetGameTabInput) (*ResetGameTabOutput, error)
+
+	// PayDrink marks a drink as paid
+	PayDrink(ctx context.Context, input *PayDrinkInput) (*PayDrinkOutput, error)
+
+	// CreateSession creates a new drinking session for a channel
+	CreateSession(ctx context.Context, input *CreateSessionInput) (*CreateSessionOutput, error)
+
+	// GetSessionLeaderboard retrieves the leaderboard for the current session
+	GetSessionLeaderboard(ctx context.Context, input *GetSessionLeaderboardInput) (*GetSessionLeaderboardOutput, error)
+	
+	// StartNewSession creates a new drinking session for a channel (alias for CreateSession with a clearer name)
+	StartNewSession(ctx context.Context, input *StartNewSessionInput) (*StartNewSessionOutput, error)
 }

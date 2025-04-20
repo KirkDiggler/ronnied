@@ -18,6 +18,9 @@ const (
 	gameDrinksKeyPrefix   = "game_drinks:"
 	playerDrinksKeyPrefix = "player_drinks:"
 	playerStatsKeyPrefix  = "player_stats:"
+	sessionKeyPrefix      = "session:"
+	channelSessionPrefix  = "channel_session:"
+	sessionDrinksPrefix   = "session_drinks:"
 )
 
 // ErrDrinkNotFound is returned when a drink record is not found
@@ -283,6 +286,14 @@ func (r *redisRepository) CreateDrinkRecord(ctx context.Context, input *CreateDr
 		return nil, errors.New("recipient player ID cannot be empty")
 	}
 
+	// If no session ID is provided, try to get the current session for this game's channel
+	sessionID := input.SessionID
+	if sessionID == "" {
+		// We don't have a direct way to get the channel ID from the game ID
+		// In a real implementation, we would need to get the game to find its channel
+		// For now, we'll just create a drink without a session if none is provided
+	}
+
 	// Generate a new UUID for the drink record
 	drinkID := uuid.New().String()
 
@@ -295,6 +306,7 @@ func (r *redisRepository) CreateDrinkRecord(ctx context.Context, input *CreateDr
 		Reason:       input.Reason,
 		Timestamp:    input.Timestamp,
 		Paid:         false,
+		SessionID:    sessionID,
 	}
 
 	// Save the drink record
@@ -303,7 +315,19 @@ func (r *redisRepository) CreateDrinkRecord(ctx context.Context, input *CreateDr
 		return nil, fmt.Errorf("failed to save drink record: %w", err)
 	}
 
-	return &CreateDrinkRecordOutput{Record: record}, nil
+	// If we have a session ID, add this drink to the session's drink set
+	if sessionID != "" {
+		sessionDrinksKey := sessionDrinksPrefix + sessionID
+		err = r.client.SAdd(ctx, sessionDrinksKey, drinkID).Err()
+		if err != nil {
+			// Log the error but don't fail the operation
+			fmt.Printf("failed to add drink to session: %v\n", err)
+		}
+	}
+
+	return &CreateDrinkRecordOutput{
+		Record: record,
+	}, nil
 }
 
 // MarkDrinkPaid marks a drink as paid
@@ -343,5 +367,95 @@ func (r *redisRepository) MarkDrinkPaid(ctx context.Context, input *MarkDrinkPai
 		return fmt.Errorf("failed to save updated drink record: %w", err)
 	}
 
+	return nil
+}
+
+// ArchiveDrinkRecords marks all drink records for a game as archived
+func (r *redisRepository) ArchiveDrinkRecords(ctx context.Context, input *ArchiveDrinkRecordsInput) error {
+	if input == nil || input.GameID == "" {
+		return errors.New("game ID is required")
+	}
+
+	// Get all drink records for the game
+	drinkRecords, err := r.GetDrinkRecordsForGame(ctx, &GetDrinkRecordsForGameInput{
+		GameID: input.GameID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to get drink records: %w", err)
+	}
+
+	// Create a Redis pipeline for batch operations
+	pipe := r.client.Pipeline()
+	
+	// Get current time for archiving timestamp
+	now := time.Now()
+	
+	// Archive each drink record
+	for _, record := range drinkRecords.Records {
+		// Create a copy of the record with the archived flag set
+		archivedRecord := *record
+		archivedRecord.Archived = true
+		archivedRecord.ArchivedTimestamp = now
+		
+		// Serialize the updated record
+		recordJSON, err := json.Marshal(archivedRecord)
+		if err != nil {
+			return fmt.Errorf("failed to marshal drink record: %w", err)
+		}
+		
+		// Update the record in Redis
+		drinkKey := fmt.Sprintf("%s%s", drinkKeyPrefix, record.ID)
+		pipe.Set(ctx, drinkKey, recordJSON, 0)
+	}
+	
+	// Execute the pipeline
+	_, err = pipe.Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to archive drink records: %w", err)
+	}
+	
+	return nil
+}
+
+// DeleteDrinkRecords deletes all drink records for a game
+func (r *redisRepository) DeleteDrinkRecords(ctx context.Context, input *DeleteDrinkRecordsInput) error {
+	if input == nil || input.GameID == "" {
+		return errors.New("game ID is required")
+	}
+
+	// Get all drink records for the game
+	drinkRecords, err := r.GetDrinkRecordsForGame(ctx, &GetDrinkRecordsForGameInput{
+		GameID: input.GameID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to get drink records: %w", err)
+	}
+
+	// Create a Redis pipeline for batch operations
+	pipe := r.client.Pipeline()
+	
+	// Delete each drink record
+	for _, record := range drinkRecords.Records {
+		// Delete the record from Redis
+		drinkKey := fmt.Sprintf("%s%s", drinkKeyPrefix, record.ID)
+		pipe.Del(ctx, drinkKey)
+		
+		// Remove from player drink lists
+		fromPlayerKey := fmt.Sprintf("%s%s", playerDrinksKeyPrefix, record.FromPlayerID)
+		toPlayerKey := fmt.Sprintf("%s%s", playerDrinksKeyPrefix, record.ToPlayerID)
+		pipe.SRem(ctx, fromPlayerKey, record.ID)
+		pipe.SRem(ctx, toPlayerKey, record.ID)
+	}
+	
+	// Delete the game drinks set
+	gameKey := fmt.Sprintf("%s%s", gameDrinksKeyPrefix, input.GameID)
+	pipe.Del(ctx, gameKey)
+	
+	// Execute the pipeline
+	_, err = pipe.Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to delete drink records: %w", err)
+	}
+	
 	return nil
 }

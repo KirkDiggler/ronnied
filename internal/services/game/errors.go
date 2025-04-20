@@ -25,4 +25,14 @@ const (
 	ErrNilDiceRoller       GameError = "dice roller cannot be nil"
 	ErrNilClock            GameError = "clock cannot be nil"
 	ErrNilUUIDGenerator    GameError = "UUID generator cannot be nil"
+	
+	// More specific game state errors
+	ErrGameActive          GameError = "game is already active"
+	ErrGameRollOff         GameError = "game is in roll-off state"
+	ErrGameCompleted       GameError = "game is already completed"
+	ErrPlayerAlreadyRolled GameError = "player already rolled"
+	ErrNotEnoughPlayers    GameError = "not enough players"
+	ErrInvalidRollOffType  GameError = "invalid roll-off type"
+	ErrInvalidDrinkReason  GameError = "invalid drink reason"
+	ErrNotCreator          GameError = "not creator"
 )
