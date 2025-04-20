@@ -351,8 +351,18 @@ func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.Interacti
 		return RespondWithEphemeralMessage(s, i, "Failed to start the game. Make sure you are the creator of the game.")
 	}
 
-	// Update the game message
-	b.updateGameMessage(s, channelID, existingGame.Game.ID)
+	// If the game was force-started, add a metadata field to the game
+	if startOutput.ForceStarted && startOutput.CreatorName != "" {
+		// Create a special message for the shared game message
+		forceStartMsg := fmt.Sprintf("⚠️ Game force-started by %s! %s took too long to start the game and has been assigned a drink.", 
+			s.State.User.Username, startOutput.CreatorName)
+		
+		// Update the game message with the force-start information
+		b.updateGameMessageWithForceStart(s, channelID, existingGame.Game.ID, forceStartMsg)
+	} else {
+		// Update the game message normally
+		b.updateGameMessage(s, channelID, existingGame.Game.ID)
+	}
 
 	// Create roll button
 	rollButton := discordgo.Button{
@@ -1181,6 +1191,103 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 	if err != nil {
 		log.Printf("Error rendering game message: %v", err)
 		return
+	}
+
+	// Send the message edit
+	_, err = s.ChannelMessageEditComplex(messageEdit)
+	if err != nil {
+		log.Printf("Error updating game message: %v", err)
+	}
+}
+
+// updateGameMessageWithForceStart updates the main game message in the channel with force-start information
+func (b *Bot) updateGameMessageWithForceStart(s *discordgo.Session, channelID string, gameID string, forceStartMsg string) {
+	ctx := context.Background()
+
+	// Get the game
+	gameOutput, err := b.gameService.GetGame(ctx, &game.GetGameInput{
+		GameID: gameID,
+	})
+	if err != nil {
+		log.Printf("Error getting game for message update: %v", err)
+		return
+	}
+
+	if gameOutput.Game.MessageID == "" {
+		log.Printf("Game has no message ID, cannot update")
+		return
+	}
+
+	// Get related data needed for rendering
+	var rollOffGame, parentGame *models.Game
+	var drinkRecords []*models.DrinkLedger
+	var leaderboardEntries, sessionLeaderboardEntries []game.LeaderboardEntry
+
+	// Check if this is a roll-off game
+	if gameOutput.Game.Status.IsRollOff() && gameOutput.Game.ParentGameID != "" {
+		// Get the parent game
+		parentGameOutput, err := b.gameService.GetGame(ctx, &game.GetGameInput{
+			GameID: gameOutput.Game.ParentGameID,
+		})
+		if err == nil {
+			parentGame = parentGameOutput.Game
+		}
+	}
+
+	// Check if this game has a roll-off in progress
+	if gameOutput.Game.RollOffGameID != "" {
+		// Get the roll-off game
+		rollOffGameOutput, err := b.gameService.GetGame(ctx, &game.GetGameInput{
+			GameID: gameOutput.Game.RollOffGameID,
+		})
+		if err == nil {
+			rollOffGame = rollOffGameOutput.Game
+		}
+	}
+
+	// Get drink records
+	drinkRecordsOutput, err := b.gameService.GetDrinkRecords(ctx, &game.GetDrinkRecordsInput{
+		GameID: gameID,
+	})
+	if err == nil && drinkRecordsOutput != nil {
+		drinkRecords = drinkRecordsOutput.Records
+	}
+
+	// Get leaderboard for completed games
+	if gameOutput.Game.Status.IsCompleted() {
+		leaderboardOutput, err := b.gameService.GetLeaderboard(ctx, &game.GetLeaderboardInput{
+			GameID: gameID,
+		})
+		if err == nil && leaderboardOutput != nil {
+			leaderboardEntries = leaderboardOutput.Entries
+		}
+
+		// Get session leaderboard for completed games
+		sessionOutput, err := b.gameService.GetSessionLeaderboard(ctx, &game.GetSessionLeaderboardInput{
+			ChannelID: channelID,
+		})
+		if err == nil && sessionOutput != nil {
+			sessionLeaderboardEntries = sessionOutput.Entries
+		}
+	}
+
+	// Render the game message
+	messageEdit, err := b.renderGameMessage(gameOutput.Game, drinkRecords, leaderboardEntries, sessionLeaderboardEntries, rollOffGame, parentGame)
+	if err != nil {
+		log.Printf("Error rendering game message: %v", err)
+		return
+	}
+
+	// Add the force-start message to the game message
+	if messageEdit.Embeds != nil && len(messageEdit.Embeds) > 0 {
+		messageEdit.Embeds[0].Description = forceStartMsg + "\n\n" + messageEdit.Embeds[0].Description
+	} else if messageEdit.Content != nil {
+		// Create a new content string with the force-start message
+		newContent := forceStartMsg + "\n\n" + *messageEdit.Content
+		messageEdit.Content = &newContent
+	} else {
+		// If there's no content, create a new one
+		messageEdit.Content = &forceStartMsg
 	}
 
 	// Send the message edit
