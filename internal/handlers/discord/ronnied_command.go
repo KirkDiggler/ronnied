@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"time"
 
@@ -33,11 +34,6 @@ func NewRonniedCommand(gameService game.Service) *RonniedCommand {
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
-					Name:        "join",
-					Description: "Join the current game",
-				},
-				{
-					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "leaderboard",
 					Description: "Show the current session leaderboard",
 				},
@@ -50,19 +46,6 @@ func NewRonniedCommand(gameService game.Service) *RonniedCommand {
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "abandon",
 					Description: "Abandon the current game",
-				},
-				{
-					Type:        discordgo.ApplicationCommandOptionSubCommand,
-					Name:        "pay",
-					Description: "Pay a drink",
-					Options: []*discordgo.ApplicationCommandOption{
-						{
-							Type:        discordgo.ApplicationCommandOptionInteger,
-							Name:        "count",
-							Description: "Number of drinks to pay (default: 1)",
-							Required:    false,
-						},
-					},
 				},
 			},
 		},
@@ -94,20 +77,12 @@ func (c *RonniedCommand) Handle(s *discordgo.Session, i *discordgo.InteractionCr
 	switch data.Options[0].Name {
 	case "start":
 		err = c.handleStart(s, i, channelID, userID, username)
-	case "join":
-		err = c.handleJoin(s, i, channelID, userID, username)
 	case "leaderboard":
 		err = c.handleSessionboard(s, i, channelID)
 	case "newsession":
 		err = c.handleNewSession(s, i, channelID)
 	case "abandon":
 		err = c.handleAbandon(s, i, channelID, userID)
-	case "pay":
-		count := 1
-		if len(data.Options[0].Options) > 0 {
-			count = int(data.Options[0].Options[0].IntValue())
-		}
-		err = c.handlePay(s, i, channelID, userID, count)
 	default:
 		err = errors.New("unknown subcommand")
 	}
@@ -251,44 +226,6 @@ func (c *RonniedCommand) handleStart(s *discordgo.Session, i *discordgo.Interact
 	return nil
 }
 
-// handleJoin handles the join subcommand
-func (c *RonniedCommand) handleJoin(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID, username string) error {
-	ctx := context.Background()
-
-	// Get the game in this channel
-	existingGame, err := c.gameService.GetGameByChannel(ctx, &game.GetGameByChannelInput{
-		ChannelID: channelID,
-	})
-
-	// Handle errors or missing game
-	if err != nil {
-		if errors.Is(err, game.ErrGameNotFound) {
-			return RespondWithError(s, i, "No game found in this channel. Use `/ronnied start` to create a new game.")
-		}
-		log.Printf("Error getting game: %v", err)
-		return RespondWithError(s, i, fmt.Sprintf("Error getting game: %v", err))
-	}
-
-	// Check if the game is in a state where players can join
-	if existingGame.Game.Status != models.GameStatusWaiting {
-		return RespondWithError(s, i, "Cannot join game. Game is not in waiting state.")
-	}
-
-	// Join the game
-	_, err = c.gameService.JoinGame(ctx, &game.JoinGameInput{
-		GameID:     existingGame.Game.ID,
-		PlayerID:   userID,
-		PlayerName: username,
-	})
-	if err != nil {
-		log.Printf("Error joining game: %v", err)
-		return RespondWithError(s, i, fmt.Sprintf("Failed to join game: %v", err))
-	}
-
-	// Respond with success message
-	return RespondWithMessage(s, i, fmt.Sprintf("You've joined the game! Wait for the creator to start the game."))
-}
-
 // handleSessionboard handles the sessionboard subcommand
 func (c *RonniedCommand) handleSessionboard(s *discordgo.Session, i *discordgo.InteractionCreate, channelID string) error {
 	ctx := context.Background()
@@ -304,16 +241,112 @@ func (c *RonniedCommand) handleSessionboard(s *discordgo.Session, i *discordgo.I
 
 	// Build the session leaderboard description
 	var description strings.Builder
+	
+	// Session info header
+	if sessionboard.Session != nil {
+		sessionAge := time.Since(sessionboard.Session.CreatedAt).Round(time.Minute)
+		description.WriteString(fmt.Sprintf("🍻 **Session Age:** %s\n\n", sessionAge))
+	}
+	
 	if len(sessionboard.Entries) == 0 {
-		description.WriteString("No drinks have been assigned yet.")
+		description.WriteString("🏜️ **The Sahara is less dry than this session!** No drinks have been assigned yet.")
 	} else {
+		// Find the player with the most drinks for ranking
+		maxDrinks := 0
 		for _, entry := range sessionboard.Entries {
-			description.WriteString(fmt.Sprintf("**%s**: %d drinks\n", entry.PlayerName, entry.DrinkCount))
+			if entry.DrinkCount > maxDrinks {
+				maxDrinks = entry.DrinkCount
+			}
+		}
+		
+		// Sort entries by drink count (descending)
+		sort.Slice(sessionboard.Entries, func(i, j int) bool {
+			return sessionboard.Entries[i].DrinkCount > sessionboard.Entries[j].DrinkCount
+		})
+		
+		// Add a header
+		description.WriteString("🏆 **DRINK LEADERBOARD** 🏆\n\n")
+		
+		// Add each player with rank emoji and progress bar
+		rankEmojis := []string{"🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"}
+		
+		for i, entry := range sessionboard.Entries {
+			// Rank emoji
+			rankEmoji := "🍺"
+			if i < len(rankEmojis) {
+				rankEmoji = rankEmojis[i]
+			}
+			
+			// Progress bar (10 segments)
+			progressBarLength := 10
+			filledSegments := 0
+			if maxDrinks > 0 {
+				filledSegments = (entry.DrinkCount * progressBarLength) / maxDrinks
+				if filledSegments == 0 && entry.DrinkCount > 0 {
+					filledSegments = 1 // Show at least one segment if they have any drinks
+				}
+			}
+			
+			progressBar := ""
+			for j := 0; j < progressBarLength; j++ {
+				if j < filledSegments {
+					progressBar += "🟥" // Filled segment
+				} else {
+					progressBar += "⬜" // Empty segment
+				}
+			}
+			
+			// Payment status
+			paymentStatus := ""
+			if entry.PaidCount > 0 {
+				paymentRatio := float64(entry.PaidCount) / float64(entry.DrinkCount)
+				if paymentRatio >= 1.0 {
+					paymentStatus = " ✅ **PAID IN FULL!**"
+				} else if paymentRatio >= 0.5 {
+					paymentStatus = fmt.Sprintf(" ⏳ (%d/%d paid)", entry.PaidCount, entry.DrinkCount)
+				} else {
+					paymentStatus = fmt.Sprintf(" 💸 (%d/%d paid)", entry.PaidCount, entry.DrinkCount)
+				}
+			}
+			
+			// Add the entry with all components
+			description.WriteString(fmt.Sprintf("%s **%s**: %d drinks%s\n%s\n\n", 
+				rankEmoji, 
+				entry.PlayerName, 
+				entry.DrinkCount,
+				paymentStatus,
+				progressBar))
+		}
+		
+		// Add a fun message at the end based on total drinks
+		totalDrinks := 0
+		for _, entry := range sessionboard.Entries {
+			totalDrinks += entry.DrinkCount
+		}
+		
+		description.WriteString("\n")
+		if totalDrinks > 20 {
+			description.WriteString("🔥 **LEGENDARY SESSION!** Your livers will be remembered for generations to come!")
+		} else if totalDrinks > 10 {
+			description.WriteString("🥴 **IMPRESSIVE!** Tomorrow's hangover is going to be epic!")
+		} else if totalDrinks > 5 {
+			description.WriteString("😎 **GOOD START!** Keep the drinks flowing!")
+		} else {
+			description.WriteString("🐣 **JUST WARMING UP!** The night is young!")
 		}
 	}
 
+	// Create fields for additional info
+	fields := []*discordgo.MessageEmbedField{
+		{
+			Name:   "Commands",
+			Value:  "`/ronnied newsession` - Start a new session",
+			Inline: false,
+		},
+	}
+
 	// Respond with the session leaderboard
-	return RespondWithEmbed(s, i, "Session Leaderboard", description.String(), nil)
+	return RespondWithEmbed(s, i, "🍻 Session Leaderboard 🍻", description.String(), fields)
 }
 
 // handleNewSession handles the newsession subcommand
@@ -364,7 +397,7 @@ func (c *RonniedCommand) handleAbandon(s *discordgo.Session, i *discordgo.Intera
 	return RespondWithMessage(s, i, "Game abandoned successfully. You can start a new game with `/ronnied start`.")
 }
 
-// handlePay handles the pay subcommand
+// handlePay handles the pay button interaction
 func (c *RonniedCommand) handlePay(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID string, count int) error {
 	ctx := context.Background()
 
@@ -382,18 +415,37 @@ func (c *RonniedCommand) handlePay(s *discordgo.Session, i *discordgo.Interactio
 		return RespondWithError(s, i, fmt.Sprintf("Error getting game: %v", err))
 	}
 
+	// Track how many drinks were successfully paid
+	paidCount := 0
+	
 	// Pay one drink at a time
 	for j := 0; j < count; j++ {
-		_, err = c.gameService.PayDrink(ctx, &game.PayDrinkInput{
+		_, err := c.gameService.PayDrink(ctx, &game.PayDrinkInput{
 			GameID:   existingGame.Game.ID,
 			PlayerID: userID,
 		})
+		
 		if err != nil {
+			// If we've paid at least one drink, consider it a partial success
+			if paidCount > 0 {
+				return RespondWithMessage(s, i, fmt.Sprintf("You've paid %d drinks. No more unpaid drinks found!", paidCount))
+			}
+			
+			// Check for specific error about no unpaid drinks
+			if strings.Contains(err.Error(), "no unpaid drinks found") {
+				return RespondWithMessage(s, i, "You're all caught up! No drinks to pay right now. 🎉")
+			}
+			
 			log.Printf("Error paying drink: %v", err)
 			return RespondWithError(s, i, fmt.Sprintf("Failed to pay drinks: %v", err))
 		}
+		
+		paidCount++
 	}
 
 	// Respond with success message
-	return RespondWithMessage(s, i, fmt.Sprintf("You've paid %d drinks.", count))
+	if paidCount == 1 {
+		return RespondWithMessage(s, i, "You've paid 1 drink. Cheers! 🍻")
+	}
+	return RespondWithMessage(s, i, fmt.Sprintf("You've paid %d drinks. Cheers! 🍻", paidCount))
 }
