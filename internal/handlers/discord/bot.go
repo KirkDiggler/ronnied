@@ -220,7 +220,7 @@ func (b *Bot) handleComponentInteraction(s *discordgo.Session, i *discordgo.Inte
 		return b.handleStartNewGameButton(s, i, channelID, userID, username)
 	case ButtonPayDrink:
 		// Handle pay drink button
-		return b.handlePayDrinkButton(s, i, channelID, userID)
+		return b.handlePayDrinkButton(s, i)
 	default:
 		return RespondWithError(s, i, fmt.Sprintf("Unknown button: %s", customID))
 	}
@@ -751,7 +751,10 @@ func (b *Bot) handleStartNewGameButton(s *discordgo.Session, i *discordgo.Intera
 }
 
 // handlePayDrinkButton handles the pay drink button click
-func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID string) error {
+func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.InteractionCreate) error {
+	// Get the user ID and channel ID
+	userID := i.Member.User.ID
+	channelID := i.ChannelID
 	ctx := context.Background()
 
 	// Get the game in this channel
@@ -777,34 +780,10 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 		}
 	}
 
-	// Get the player's unpaid drinks
-	drinkRecordsOutput, err := b.gameService.GetDrinkRecords(ctx, &game.GetDrinkRecordsInput{
-		GameID: existingGame.Game.ID,
-	})
-	if err != nil {
-		log.Printf("Error getting drink records: %v", err)
-		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to get drink records: %v", err))
-	}
-
-	// Find the first unpaid drink assigned to this player
-	var drinkToPay *models.DrinkLedger
-	for _, drink := range drinkRecordsOutput.Records {
-		if drink.ToPlayerID == userID && !drink.Paid {
-			drinkToPay = drink
-			break
-		}
-	}
-
-	// Check if there are any unpaid drinks
-	if drinkToPay == nil {
-		return RespondWithEphemeralMessage(s, i, "You don't have any unpaid drinks to pay!")
-	}
-
 	// Pay the drink
 	_, err = b.gameService.PayDrink(ctx, &game.PayDrinkInput{
 		GameID:   existingGame.Game.ID,
 		PlayerID: userID,
-		DrinkID:  drinkToPay.ID,
 	})
 	if err != nil {
 		log.Printf("Error paying drink: %v", err)
@@ -869,7 +848,10 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 			Embeds:     embeds,
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
-					Components: []discordgo.MessageComponent{rollButton, payDrinkButton},
+					Components: []discordgo.MessageComponent{
+						rollButton,
+						payDrinkButton,
+					},
 				},
 			},
 		},

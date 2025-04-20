@@ -1751,10 +1751,6 @@ func (s *service) PayDrink(ctx context.Context, input *PayDrinkInput) (*PayDrink
 		return nil, errors.New("player ID is required")
 	}
 
-	if input.DrinkID == "" {
-		return nil, errors.New("drink ID is required")
-	}
-
 	// Get the game
 	game, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
 		GameID: input.GameID,
@@ -1763,40 +1759,37 @@ func (s *service) PayDrink(ctx context.Context, input *PayDrinkInput) (*PayDrink
 		return nil, fmt.Errorf("failed to get game: %w", err)
 	}
 
-	// Get the drink record
-	drinkRecords, err := s.drinkLedgerRepo.GetDrinkRecordsForGame(ctx, &ledgerRepo.GetDrinkRecordsForGameInput{
-		GameID: input.GameID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get drink records: %w", err)
+	// Get the session ID from the game's channel
+	sessionID := s.getSessionIDForChannel(ctx, game.ChannelID)
+	if sessionID == "" {
+		return nil, fmt.Errorf("no active session found for channel")
 	}
 
-	// Find the specific drink record
+	// Get all drink records for this session
+	sessionDrinkRecords, err := s.drinkLedgerRepo.GetDrinkRecordsForSession(ctx, &ledgerRepo.GetDrinkRecordsForSessionInput{
+		SessionID: sessionID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get session drink records: %w", err)
+	}
+
+	// Find the first unpaid drink for this player
 	var drinkRecord *models.DrinkLedger
-	for _, record := range drinkRecords.Records {
-		if record.ID == input.DrinkID {
+	for _, record := range sessionDrinkRecords.Records {
+		if record.ToPlayerID == input.PlayerID && !record.Paid {
 			drinkRecord = record
 			break
 		}
 	}
 
+	// If no unpaid drink found, return an error
 	if drinkRecord == nil {
-		return nil, fmt.Errorf("drink record with ID %s not found", input.DrinkID)
-	}
-
-	// Verify the player is the one who owes the drink
-	if drinkRecord.ToPlayerID != input.PlayerID {
-		return nil, fmt.Errorf("player %s is not the one who owes this drink", input.PlayerID)
-	}
-
-	// Check if the drink is already paid
-	if drinkRecord.Paid {
-		return nil, fmt.Errorf("drink is already paid")
+		return nil, fmt.Errorf("no unpaid drinks found for player %s", input.PlayerID)
 	}
 
 	// Mark the drink as paid
 	err = s.drinkLedgerRepo.MarkDrinkPaid(ctx, &ledgerRepo.MarkDrinkPaidInput{
-		DrinkID: input.DrinkID,
+		DrinkID: drinkRecord.ID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to mark drink as paid: %w", err)

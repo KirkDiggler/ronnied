@@ -558,16 +558,13 @@ type ResetGameTabOutput struct {
 	Game *models.Game
 }
 
-// PayDrinkInput contains parameters for marking a drink as paid
+// PayDrinkInput contains parameters for paying a drink
 type PayDrinkInput struct {
-	// GameID is the ID of the game the drink belongs to
+	// GameID is the ID of the game
 	GameID string
-
+	
 	// PlayerID is the ID of the player paying the drink
 	PlayerID string
-
-	// DrinkID is the ID of the drink to mark as paid
-	DrinkID string
 }
 
 // PayDrinkOutput represents the output of the PayDrink method
