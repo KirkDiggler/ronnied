@@ -17,8 +17,8 @@ func (r *redisRepository) CreateSession(ctx context.Context, input *CreateSessio
 		return nil, fmt.Errorf("input cannot be nil")
 	}
 
-	if input.ChannelID == "" {
-		return nil, fmt.Errorf("channel ID is required")
+	if input.GuildID == "" {
+		return nil, fmt.Errorf("guild ID is required")
 	}
 
 	// Generate a new session ID
@@ -27,7 +27,7 @@ func (r *redisRepository) CreateSession(ctx context.Context, input *CreateSessio
 	// Create a new session
 	session := &models.Session{
 		ID:        sessionID,
-		ChannelID: input.ChannelID,
+		GuildID:   input.GuildID,
 		CreatedAt: time.Now(),
 		CreatedBy: input.CreatedBy,
 		Active:    true,
@@ -46,10 +46,10 @@ func (r *redisRepository) CreateSession(ctx context.Context, input *CreateSessio
 		return nil, fmt.Errorf("failed to store session: %w", err)
 	}
 
-	// Get the current active session for this channel
-	channelSessionKey := channelSessionPrefix + input.ChannelID
-	oldSessionID, err := r.client.Get(ctx, channelSessionKey).Result()
-	
+	// Get the current active session for this guild
+	guildSessionKey := guildSessionPrefix + input.GuildID
+	oldSessionID, err := r.client.Get(ctx, guildSessionKey).Result()
+
 	// If there's an existing session, mark it as inactive
 	if err == nil && oldSessionID != "" {
 		oldSessionKey := sessionKeyPrefix + oldSessionID
@@ -66,8 +66,8 @@ func (r *redisRepository) CreateSession(ctx context.Context, input *CreateSessio
 		}
 	}
 
-	// Set this as the current active session for the channel
-	err = r.client.Set(ctx, channelSessionKey, sessionID, 0).Err()
+	// Set this as the current active session for the guild
+	err = r.client.Set(ctx, guildSessionKey, sessionID, 0).Err()
 	if err != nil {
 		return nil, fmt.Errorf("failed to set current session: %w", err)
 	}
@@ -77,22 +77,22 @@ func (r *redisRepository) CreateSession(ctx context.Context, input *CreateSessio
 	}, nil
 }
 
-// GetCurrentSession retrieves the current active session for a channel
+// GetCurrentSession retrieves the current active session for a guild
 func (r *redisRepository) GetCurrentSession(ctx context.Context, input *GetCurrentSessionInput) (*GetCurrentSessionOutput, error) {
 	if input == nil {
 		return nil, fmt.Errorf("input cannot be nil")
 	}
 
-	if input.ChannelID == "" {
-		return nil, fmt.Errorf("channel ID is required")
+	if input.GuildID == "" {
+		return nil, fmt.Errorf("guild ID is required")
 	}
 
-	// Get the current session ID for this channel
-	channelSessionKey := channelSessionPrefix + input.ChannelID
-	sessionID, err := r.client.Get(ctx, channelSessionKey).Result()
+	// Get the current session ID for this guild
+	guildSessionKey := guildSessionPrefix + input.GuildID
+	sessionID, err := r.client.Get(ctx, guildSessionKey).Result()
 	if err != nil {
 		if err == redis.Nil {
-			// No session exists for this channel
+			// No session exists for this guild
 			return &GetCurrentSessionOutput{
 				Session: nil,
 			}, nil
@@ -100,13 +100,13 @@ func (r *redisRepository) GetCurrentSession(ctx context.Context, input *GetCurre
 		return nil, fmt.Errorf("failed to get current session ID: %w", err)
 	}
 
-	// Get the session
+	// Get the session details
 	sessionKey := sessionKeyPrefix + sessionID
 	sessionJSON, err := r.client.Get(ctx, sessionKey).Result()
 	if err != nil {
 		if err == redis.Nil {
-			// Session doesn't exist anymore, clear the channel session
-			r.client.Del(ctx, channelSessionKey)
+			// Session doesn't exist anymore, clear the guild session
+			r.client.Del(ctx, guildSessionKey)
 			return &GetCurrentSessionOutput{
 				Session: nil,
 			}, nil

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
 	"github.com/google/uuid"
 
 	"github.com/KirkDiggler/ronnied/internal/models"
@@ -19,7 +20,7 @@ const (
 	playerDrinksKeyPrefix = "player_drinks:"
 	playerStatsKeyPrefix  = "player_stats:"
 	sessionKeyPrefix      = "session:"
-	channelSessionPrefix  = "channel_session:"
+	guildSessionPrefix    = "guild_session:"
 	sessionDrinksPrefix   = "session_drinks:"
 )
 
@@ -386,34 +387,34 @@ func (r *redisRepository) ArchiveDrinkRecords(ctx context.Context, input *Archiv
 
 	// Create a Redis pipeline for batch operations
 	pipe := r.client.Pipeline()
-	
+
 	// Get current time for archiving timestamp
 	now := time.Now()
-	
+
 	// Archive each drink record
 	for _, record := range drinkRecords.Records {
 		// Create a copy of the record with the archived flag set
 		archivedRecord := *record
 		archivedRecord.Archived = true
 		archivedRecord.ArchivedTimestamp = now
-		
+
 		// Serialize the updated record
 		recordJSON, err := json.Marshal(archivedRecord)
 		if err != nil {
 			return fmt.Errorf("failed to marshal drink record: %w", err)
 		}
-		
+
 		// Update the record in Redis
 		drinkKey := fmt.Sprintf("%s%s", drinkKeyPrefix, record.ID)
 		pipe.Set(ctx, drinkKey, recordJSON, 0)
 	}
-	
+
 	// Execute the pipeline
 	_, err = pipe.Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to archive drink records: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -433,29 +434,29 @@ func (r *redisRepository) DeleteDrinkRecords(ctx context.Context, input *DeleteD
 
 	// Create a Redis pipeline for batch operations
 	pipe := r.client.Pipeline()
-	
+
 	// Delete each drink record
 	for _, record := range drinkRecords.Records {
 		// Delete the record from Redis
 		drinkKey := fmt.Sprintf("%s%s", drinkKeyPrefix, record.ID)
 		pipe.Del(ctx, drinkKey)
-		
+
 		// Remove from player drink lists
 		fromPlayerKey := fmt.Sprintf("%s%s", playerDrinksKeyPrefix, record.FromPlayerID)
 		toPlayerKey := fmt.Sprintf("%s%s", playerDrinksKeyPrefix, record.ToPlayerID)
 		pipe.SRem(ctx, fromPlayerKey, record.ID)
 		pipe.SRem(ctx, toPlayerKey, record.ID)
 	}
-	
+
 	// Delete the game drinks set
 	gameKey := fmt.Sprintf("%s%s", gameDrinksKeyPrefix, input.GameID)
 	pipe.Del(ctx, gameKey)
-	
+
 	// Execute the pipeline
 	_, err = pipe.Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to delete drink records: %w", err)
 	}
-	
+
 	return nil
 }

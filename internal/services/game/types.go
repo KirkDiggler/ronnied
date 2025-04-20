@@ -562,7 +562,7 @@ type ResetGameTabOutput struct {
 type PayDrinkInput struct {
 	// GameID is the ID of the game
 	GameID string
-	
+
 	// PlayerID is the ID of the player paying the drink
 	PlayerID string
 }
@@ -571,10 +571,10 @@ type PayDrinkInput struct {
 type PayDrinkOutput struct {
 	// Success indicates whether the drink was successfully paid
 	Success bool
-	
+
 	// Game is the game the drink was paid in
 	Game *models.Game
-	
+
 	// DrinkRecord is the drink record that was marked as paid
 	DrinkRecord *models.DrinkLedger
 }
@@ -583,7 +583,7 @@ type PayDrinkOutput struct {
 type CreateSessionInput struct {
 	// ChannelID is the Discord channel ID for this session
 	ChannelID string
-	
+
 	// CreatedBy is the user ID who created the session
 	CreatedBy string
 }
@@ -592,7 +592,7 @@ type CreateSessionInput struct {
 type CreateSessionOutput struct {
 	// Success indicates whether the session was successfully created
 	Success bool
-	
+
 	// Session is the newly created session
 	Session *models.Session
 }
@@ -602,7 +602,7 @@ type GetSessionLeaderboardInput struct {
 	// ChannelID is the Discord channel ID to get the leaderboard for
 	// If specified, will use the current session for this channel
 	ChannelID string
-	
+
 	// SessionID is the specific session ID to get the leaderboard for
 	// If specified, will override ChannelID
 	SessionID string
@@ -612,10 +612,10 @@ type GetSessionLeaderboardInput struct {
 type GetSessionLeaderboardOutput struct {
 	// Success indicates whether the leaderboard was successfully retrieved
 	Success bool
-	
+
 	// Session is the session this leaderboard is for
 	Session *models.Session
-	
+
 	// Entries is the list of leaderboard entries
 	Entries []LeaderboardEntry
 }
@@ -628,7 +628,7 @@ type StartNewSessionInput struct {
 
 // StartNewSessionOutput is the output for StartNewSession
 type StartNewSessionOutput struct {
-	Success     bool
-	Session     *models.Session
-	SessionID   string
+	Success   bool
+	Session   *models.Session
+	SessionID string
 }

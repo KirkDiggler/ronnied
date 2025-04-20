@@ -57,7 +57,7 @@ type Service interface {
 
 	// GetSessionLeaderboard retrieves the leaderboard for the current session
 	GetSessionLeaderboard(ctx context.Context, input *GetSessionLeaderboardInput) (*GetSessionLeaderboardOutput, error)
-	
+
 	// StartNewSession creates a new drinking session for a channel (alias for CreateSession with a clearer name)
 	StartNewSession(ctx context.Context, input *StartNewSessionInput) (*StartNewSessionOutput, error)
 }
