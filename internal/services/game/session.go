@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 
 	"github.com/KirkDiggler/ronnied/internal/models"
@@ -99,10 +100,13 @@ func (s *service) GetSessionLeaderboard(ctx context.Context, input *GetSessionLe
 	}
 
 	var sessionID string
+	var session *models.Session
 
 	// If a specific session ID is provided, use that
 	if input.SessionID != "" {
 		sessionID = input.SessionID
+		// We don't have a direct method to get a session by ID, so we'll need to use what we have
+		// This is a limitation in the current API
 	} else if input.ChannelID != "" {
 		// Extract the guild ID from the channel ID
 		guildID := s.extractGuildIDFromChannel(ctx, input.ChannelID)
@@ -125,6 +129,11 @@ func (s *service) GetSessionLeaderboard(ctx context.Context, input *GetSessionLe
 		}
 		
 		sessionID = currentSessionOutput.Session.ID
+		session = currentSessionOutput.Session
+		
+		// Log the session details for debugging
+		log.Printf("GetSessionLeaderboard: Found session %s with CreatedAt %v", 
+			session.ID, session.CreatedAt)
 	} else {
 		return nil, errors.New("either channel ID or session ID must be provided")
 	}
@@ -181,9 +190,14 @@ func (s *service) GetSessionLeaderboard(ctx context.Context, input *GetSessionLe
 		return entries[i].DrinkCount > entries[j].DrinkCount
 	})
 
+	// If we have a session ID but no session object (from direct ID lookup), create a minimal session
+	if session == nil && sessionID != "" {
+		session = &models.Session{ID: sessionID}
+	}
+
 	return &GetSessionLeaderboardOutput{
 		Success: true,
-		Session: &models.Session{ID: sessionID},
+		Session: session,
 		Entries: entries,
 	}, nil
 }
