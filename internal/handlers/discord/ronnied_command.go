@@ -244,8 +244,30 @@ func (c *RonniedCommand) handleSessionboard(s *discordgo.Session, i *discordgo.I
 	
 	// Session info header
 	if sessionboard.Session != nil {
-		sessionAge := time.Since(sessionboard.Session.CreatedAt).Round(time.Minute)
-		description.WriteString(fmt.Sprintf("🍻 **Session Age:** %s\n\n", sessionAge))
+		sessionAge := time.Since(sessionboard.Session.CreatedAt)
+		
+		// Format the duration in a human-readable way
+		var formattedAge string
+		hours := int(sessionAge.Hours())
+		minutes := int(sessionAge.Minutes()) % 60
+		
+		if hours > 0 {
+			if hours == 1 {
+				formattedAge = "1 hour"
+			} else {
+				formattedAge = fmt.Sprintf("%d hours", hours)
+			}
+			
+			if minutes > 0 {
+				formattedAge += fmt.Sprintf(" %d min", minutes)
+			}
+		} else if minutes > 0 {
+			formattedAge = fmt.Sprintf("%d minutes", minutes)
+		} else {
+			formattedAge = "just started"
+		}
+		
+		description.WriteString(fmt.Sprintf("🍻 **Session Age:** %s\n\n", formattedAge))
 	}
 	
 	if len(sessionboard.Entries) == 0 {
