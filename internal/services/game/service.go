@@ -659,9 +659,29 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 	// Get the game
 	game := input.Game
 
+	// Check if this is a roll-off game
+	var parentGame *models.Game
+	var isRollOffGame bool
+	if game.ParentGameID != "" {
+		isRollOffGame = true
+		// Get the parent game
+		var err error
+		parentGame, err = s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
+			GameID: game.ParentGameID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get parent game: %w", err)
+		}
+	}
+
 	// Check if game is active
 	if game.Status != models.GameStatusActive && game.Status != models.GameStatusRollOff {
 		return nil, ErrInvalidGameState
+	}
+
+	// For roll-off games, we always mark them as completed when EndGame is called
+	if isRollOffGame {
+		game.Status = models.GameStatusCompleted
 	}
 
 	// Check if all participants have completed their actions
@@ -821,9 +841,16 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 		// we can complete the game and assign a drink
 		lowestPlayerID := lowestRollPlayerIDs[0]
 
+		// Determine which game ID to use for the drink record
+		targetGameID := game.ID
+		if isRollOffGame {
+			// If this is a roll-off game, assign the drink to the parent game
+			targetGameID = game.ParentGameID
+		}
+
 		// Create a drink record for the player with the lowest roll using the repository
 		_, err = s.drinkLedgerRepo.CreateDrinkRecord(ctx, &ledgerRepo.CreateDrinkRecordInput{
-			GameID:     game.ID,
+			GameID:     targetGameID,
 			ToPlayerID: lowestPlayerID,
 			Reason:     models.DrinkReasonLowestRoll,
 			Timestamp:  s.clock.Now(),
@@ -919,6 +946,49 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 		})
 		if err != nil {
 			return nil, err
+		}
+
+		// If this is a roll-off game, update the parent game as well
+		if isRollOffGame && parentGame != nil {
+			// Check if the parent game has any other active roll-offs
+			hasOtherActiveRollOffs := false
+			
+			// If the parent game has a highest roll-off that's not this game
+			if parentGame.HighestRollOffGameID != "" && parentGame.HighestRollOffGameID != game.ID {
+				// Check if that roll-off is still active
+				highestRollOffGame, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
+					GameID: parentGame.HighestRollOffGameID,
+				})
+				if err == nil && highestRollOffGame.Status != models.GameStatusCompleted {
+					hasOtherActiveRollOffs = true
+				}
+			}
+			
+			// If the parent game has a lowest roll-off that's not this game
+			if parentGame.LowestRollOffGameID != "" && parentGame.LowestRollOffGameID != game.ID {
+				// Check if that roll-off is still active
+				lowestRollOffGame, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
+					GameID: parentGame.LowestRollOffGameID,
+				})
+				if err == nil && lowestRollOffGame.Status != models.GameStatusCompleted {
+					hasOtherActiveRollOffs = true
+				}
+			}
+			
+			// If there are no other active roll-offs, mark the parent game as completed
+			if !hasOtherActiveRollOffs {
+				parentGame.Status = models.GameStatusCompleted
+				parentGame.UpdatedAt = s.clock.Now()
+				
+				// Save the updated parent game
+				err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
+					Game: parentGame,
+				})
+				if err != nil {
+					log.Printf("Error updating parent game status: %v", err)
+					// Don't return the error, continue with ending the game
+				}
+			}
 		}
 	}
 
@@ -1108,7 +1178,7 @@ func (s *service) HandleRollOff(ctx context.Context, input *HandleRollOffInput) 
 			// For lowest roll-off, the losers take drinks
 			// Assign drinks to the losers
 			for _, loserID := range winners {
-				// Create a drink ledger entry for each loser using the repository
+				// Create a new drink record using the repository
 				_, drinkErr := s.drinkLedgerRepo.CreateDrinkRecord(ctx, &ledgerRepo.CreateDrinkRecordInput{
 					GameID:     input.ParentGameID,
 					ToPlayerID: loserID,
