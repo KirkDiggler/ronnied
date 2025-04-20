@@ -365,11 +365,14 @@ func renderGameMessage(s *discordgo.Session, game *models.Game, leaderboard *gam
 		}
 
 	case models.GameStatusRollOff:
-		embed.Description = "Roll-off in progress! Players in the roll-off need to roll again."
+		embed.Description = "🔄 **ROLL-OFF IN PROGRESS!** Players in the roll-off need to roll again to break the tie."
+		embed.Color = 0xff9900 // Orange color for roll-offs to make them stand out
+
+		// Add fields for roll-off status
 		embed.Fields = []*discordgo.MessageEmbedField{
 			{
 				Name:   "Status",
-				Value:  "Roll-off",
+				Value:  "⚔️ Roll-Off",
 				Inline: true,
 			},
 			{
@@ -378,6 +381,45 @@ func renderGameMessage(s *discordgo.Session, game *models.Game, leaderboard *gam
 				Inline: true,
 			},
 		}
+
+		// If this is a roll-off game, add info about the parent game
+		if game.ParentGameID != "" {
+			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+				Name:  "Roll-Off Type",
+				Value: "This is a tie-breaker roll-off",
+			})
+		}
+
+		// Add a special field highlighting who needs to roll
+		var pendingRollers string
+		for _, p := range game.Participants {
+			if p.RollTime == nil {
+				pendingRollers += fmt.Sprintf("• **%s** - NEEDS TO ROLL! 🎲\n", p.PlayerName)
+			} else {
+				pendingRollers += fmt.Sprintf("• %s - Already rolled ✅\n", p.PlayerName)
+			}
+		}
+
+		if pendingRollers != "" {
+			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+				Name:  "Roll-Off Participants",
+				Value: pendingRollers,
+			})
+		}
+
+		rollButton := discordgo.Button{
+			Label:    "Roll Dice",
+			Style:    discordgo.DangerButton, // Red to make it stand out
+			CustomID: ButtonRollDice,
+			Emoji: discordgo.ComponentEmoji{
+				Name: "🎲",
+			},
+		}
+		components = append(components, discordgo.ActionsRow{
+			Components: []discordgo.MessageComponent{
+				rollButton,
+			},
+		})
 
 	case models.GameStatusCompleted:
 		embed.Description = "Game completed! Here are the final results."
@@ -440,16 +482,16 @@ func renderGameMessage(s *discordgo.Session, game *models.Game, leaderboard *gam
 		var leaderboardText string
 		var totalDrinks int
 		var totalPaid int
-		
+
 		// Create a visual progress bar for the session
 		for _, entry := range leaderboard.Entries {
 			totalDrinks += entry.DrinkCount
 			totalPaid += entry.PaidCount
-			
+
 			// Show drinks owed and paid for each player
 			remaining := entry.DrinkCount - entry.PaidCount
 			var statusEmoji string
-			
+
 			// Select appropriate emoji based on payment status
 			if remaining == 0 && entry.DrinkCount > 0 {
 				statusEmoji = "🎉" // Celebration emoji for all paid
@@ -464,16 +506,16 @@ func renderGameMessage(s *discordgo.Session, game *models.Game, leaderboard *gam
 			} else {
 				statusEmoji = "😇" // Angel for no drinks
 			}
-			
+
 			// Format the leaderboard entry
 			if entry.DrinkCount > 0 {
-				leaderboardText += fmt.Sprintf("• %s: %d owed, %d paid, %d remaining %s\n", 
+				leaderboardText += fmt.Sprintf("• %s: %d owed, %d paid, %d remaining %s\n",
 					entry.PlayerName, entry.DrinkCount, entry.PaidCount, remaining, statusEmoji)
 			} else {
 				leaderboardText += fmt.Sprintf("• %s: No drinks owed %s\n", entry.PlayerName, statusEmoji)
 			}
 		}
-		
+
 		// Add session progress bar if there are any drinks
 		if totalDrinks > 0 {
 			sessionProgress := createDrinkProgressBar(totalPaid, totalDrinks)
@@ -509,52 +551,6 @@ func renderGameMessage(s *discordgo.Session, game *models.Game, leaderboard *gam
 
 	_, err := s.ChannelMessageEditComplex(messageEdit)
 	return err
-}
-
-// createDrinkProgressBar creates a visual progress bar for drink payments
-func createDrinkProgressBar(paidCount int, totalDrinks int) string {
-	// Handle edge cases
-	if totalDrinks == 0 {
-		return "No drinks to pay"
-	}
-
-	// Calculate progress
-	progress := float64(paidCount) / float64(totalDrinks)
-
-	// Select appropriate bar characters based on Discord's rendering
-	filledChar := "🟩" // Green square for paid drinks
-	emptyChar := "⬜"  // White square for unpaid drinks
-
-	// For small numbers of drinks (≤ 10), show one character per drink
-	if totalDrinks <= 10 {
-		var progressBar string
-		for i := 0; i < totalDrinks; i++ {
-			if i < paidCount {
-				progressBar += filledChar
-			} else {
-				progressBar += emptyChar
-			}
-		}
-		return progressBar + fmt.Sprintf(" (%d/%d)", paidCount, totalDrinks)
-	}
-
-	// For larger numbers, create a 10-segment bar
-	const segments = 10
-	filledSegments := int(progress * segments)
-
-	var progressBar string
-	for i := 0; i < segments; i++ {
-		if i < filledSegments {
-			progressBar += filledChar
-		} else {
-			progressBar += emptyChar
-		}
-	}
-
-	// Add percentage to the progress bar
-	progressBar += fmt.Sprintf(" (%.0f%%)", progress*100)
-
-	return progressBar
 }
 
 // renderGameMessage renders the game message based on the current game state
@@ -598,11 +594,14 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 		}
 
 	case models.GameStatusRollOff:
-		embed.Description = "Roll-off in progress! Players in the roll-off need to roll again."
+		embed.Description = "🔄 **ROLL-OFF IN PROGRESS!** Players in the roll-off need to roll again to break the tie."
+		embed.Color = 0xff9900 // Orange color for roll-offs to make them stand out
+
+		// Add fields for roll-off status
 		embed.Fields = []*discordgo.MessageEmbedField{
 			{
 				Name:   "Status",
-				Value:  "Roll-off",
+				Value:  "⚔️ Roll-Off",
 				Inline: true,
 			},
 			{
@@ -615,8 +614,25 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 		// If this is a roll-off game, add info about the parent game
 		if parentGame != nil {
 			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
-				Name:  "Roll-off Type",
-				Value: "This is a roll-off game",
+				Name:  "Roll-Off Type",
+				Value: "This is a tie-breaker roll-off",
+			})
+		}
+
+		// Add a special field highlighting who needs to roll
+		var pendingRollers string
+		for _, p := range game.Participants {
+			if p.RollTime == nil {
+				pendingRollers += fmt.Sprintf("• **%s** - NEEDS TO ROLL! 🎲\n", p.PlayerName)
+			} else {
+				pendingRollers += fmt.Sprintf("• %s - Already rolled ✅\n", p.PlayerName)
+			}
+		}
+
+		if pendingRollers != "" {
+			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+				Name:  "Roll-Off Participants",
+				Value: pendingRollers,
 			})
 		}
 
@@ -665,16 +681,16 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 		var leaderboardText string
 		var totalDrinks int
 		var totalPaid int
-		
+
 		// Create a visual progress bar for the session
 		for _, entry := range sessionLeaderboardEntries {
 			totalDrinks += entry.DrinkCount
 			totalPaid += entry.PaidCount
-			
+
 			// Show drinks owed and paid for each player
 			remaining := entry.DrinkCount - entry.PaidCount
 			var statusEmoji string
-			
+
 			// Select appropriate emoji based on payment status
 			if remaining == 0 && entry.DrinkCount > 0 {
 				statusEmoji = "🎉" // Celebration emoji for all paid
@@ -689,20 +705,20 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 			} else {
 				statusEmoji = "😇" // Angel for no drinks
 			}
-			
+
 			// Format the leaderboard entry
 			if entry.DrinkCount > 0 {
-				leaderboardText += fmt.Sprintf("• %s: %d owed, %d paid, %d remaining %s\n", 
+				leaderboardText += fmt.Sprintf("• %s: %d owed, %d paid, %d remaining %s\n",
 					entry.PlayerName, entry.DrinkCount, entry.PaidCount, remaining, statusEmoji)
 			} else {
 				leaderboardText += fmt.Sprintf("• %s: No drinks owed %s\n", entry.PlayerName, statusEmoji)
 			}
 		}
-		
+
 		// Add session progress bar if there are any drinks
 		if totalDrinks > 0 {
-			progressBar := createProgressBar(totalPaid, totalDrinks)
-			leaderboardText += fmt.Sprintf("\n**Session Progress**: %s", progressBar)
+			sessionProgress := createProgressBar(totalPaid, totalDrinks)
+			leaderboardText += fmt.Sprintf("\n**Session Progress**: %s", sessionProgress)
 		}
 
 		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
@@ -756,6 +772,21 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 			},
 		})
 
+	case models.GameStatusRollOff:
+		rollButton := discordgo.Button{
+			Label:    "Roll Dice",
+			Style:    discordgo.DangerButton, // Red to make it stand out
+			CustomID: ButtonRollDice,
+			Emoji: discordgo.ComponentEmoji{
+				Name: "🎲",
+			},
+		}
+		components = append(components, discordgo.ActionsRow{
+			Components: []discordgo.MessageComponent{
+				rollButton,
+			},
+		})
+
 	case models.GameStatusCompleted:
 		// Add start new game button
 		startNewGameButton := discordgo.Button{
@@ -794,6 +825,52 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 	}
 
 	return messageEdit, nil
+}
+
+// createDrinkProgressBar creates a visual progress bar for drink payments
+func createDrinkProgressBar(paidCount int, totalDrinks int) string {
+	// Handle edge cases
+	if totalDrinks == 0 {
+		return "No drinks to pay"
+	}
+
+	// Calculate progress
+	progress := float64(paidCount) / float64(totalDrinks)
+
+	// Select appropriate bar characters based on Discord's rendering
+	filledChar := "🟩" // Green square for paid drinks
+	emptyChar := "⬜"  // White square for unpaid drinks
+
+	// For small numbers of drinks (≤ 10), show one character per drink
+	if totalDrinks <= 10 {
+		var progressBar string
+		for i := 0; i < totalDrinks; i++ {
+			if i < paidCount {
+				progressBar += filledChar
+			} else {
+				progressBar += emptyChar
+			}
+		}
+		return progressBar + fmt.Sprintf(" (%d/%d)", paidCount, totalDrinks)
+	}
+
+	// For larger numbers, create a 10-segment bar
+	const segments = 10
+	filledSegments := int(progress * segments)
+
+	var progressBar string
+	for i := 0; i < segments; i++ {
+		if i < filledSegments {
+			progressBar += filledChar
+		} else {
+			progressBar += emptyChar
+		}
+	}
+
+	// Add percentage to the progress bar
+	progressBar += fmt.Sprintf(" (%.0f%%)", progress*100)
+
+	return progressBar
 }
 
 // createProgressBar creates a visual progress bar for drink payments

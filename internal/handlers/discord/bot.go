@@ -427,7 +427,40 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		return err
 	}
 
-	// Roll the dice
+	// Check if there's an active roll-off game for this player
+	rollOffGame, rollOffErr := b.gameService.FindActiveRollOffGame(ctx, userID, existingGame.Game.ID)
+	if rollOffErr == nil && rollOffGame != nil {
+		// Player should be rolling in the roll-off game instead
+		log.Printf("Player %s should be rolling in roll-off game %s instead of main game %s", 
+			userID, rollOffGame.ID, existingGame.Game.ID)
+		
+		// Roll the dice in the roll-off game
+		rollOutput, err := b.gameService.RollDice(ctx, &game.RollDiceInput{
+			GameID:   rollOffGame.ID,
+			PlayerID: userID,
+		})
+		
+		if err != nil {
+			_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+				Content: fmt.Sprintf("Failed to roll in roll-off game: %v", err),
+				Flags:   discordgo.MessageFlagsEphemeral,
+			})
+			return err
+		}
+		
+		// Update both the roll-off game message and the main game message
+		b.updateGameMessage(s, channelID, rollOffGame.ID)
+		b.updateGameMessage(s, channelID, existingGame.Game.ID)
+		
+		// Create a response for the player
+		_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+			Content: fmt.Sprintf("⚔️ **ROLL-OFF ROLL!** You rolled a **%d** in the tie-breaker! Check the game message to see if you won the roll-off.", rollOutput.RollValue),
+			Flags:   discordgo.MessageFlagsEphemeral,
+		})
+		return err
+	}
+
+	// Roll the dice in the main game
 	rollOutput, err := b.gameService.RollDice(ctx, &game.RollDiceInput{
 		GameID:   existingGame.Game.ID,
 		PlayerID: userID,
@@ -435,31 +468,20 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 
 	// Handle errors
 	if err != nil {
-		// Special handling for roll-off games
-		if errors.Is(err, game.ErrPlayerAlreadyRolled) {
-			// Check if there's a roll-off game where the player hasn't rolled yet
-			if existingGame.Game.RollOffGameID != "" {
-				rollOffGameOutput, err := b.gameService.GetGame(ctx, &game.GetGameInput{
-					GameID: existingGame.Game.RollOffGameID,
+		// Check if we need to redirect to a roll-off game
+		if errors.Is(err, game.ErrPlayerNotInGame) || errors.Is(err, game.ErrPlayerAlreadyRolled) || errors.Is(err, game.ErrInvalidGameState) {
+			// Check again for an active roll-off game (in case one was created between our earlier check and now)
+			rollOffGame, rollOffErr := b.gameService.FindActiveRollOffGame(ctx, userID, existingGame.Game.ID)
+			if rollOffErr == nil && rollOffGame != nil {
+				// Player should be rolling in a roll-off game
+				_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+					Content: "You need to roll in a roll-off game! Use the Roll button on the game message to continue.",
+					Flags:   discordgo.MessageFlagsEphemeral,
 				})
-				if err == nil && rollOffGameOutput != nil {
-					// Check if the player has already rolled in the roll-off game
-					playerRolled := false
-					for _, p := range rollOffGameOutput.Game.Participants {
-						if p.PlayerID == userID && p.RollValue > 0 {
-							playerRolled = true
-							break
-						}
-					}
-					if !playerRolled {
-						// Player hasn't rolled in the roll-off game, redirect them
-						_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-							Content: "You need to roll in the roll-off game. Check the game message for details.",
-							Flags:   discordgo.MessageFlagsEphemeral,
-						})
-						return err
-					}
-				}
+				
+				// Update the game message to make the roll-off more visible
+				b.updateGameMessage(s, channelID, existingGame.Game.ID)
+				return err
 			}
 		}
 
@@ -514,7 +536,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 	// Check if the player should be redirected to a roll-off game
 	if rollOutput.ActiveRollOffGameID != "" {
 		_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-			Content: "You need to roll in the roll-off game. Check the game message for details.",
+			Content: "⚔️ **ROLL-OFF REQUIRED!** You need to roll again to break the tie. Use the Roll button to continue.",
 			Flags:   discordgo.MessageFlagsEphemeral,
 		})
 		return err
