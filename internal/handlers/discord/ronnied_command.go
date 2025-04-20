@@ -244,30 +244,42 @@ func (c *RonniedCommand) handleSessionboard(s *discordgo.Session, i *discordgo.I
 	
 	// Session info header
 	if sessionboard.Session != nil {
-		sessionAge := time.Since(sessionboard.Session.CreatedAt)
+		// Check if the session's CreatedAt time is valid (not zero or far in the past/future)
+		now := time.Now()
+		sessionCreatedAt := sessionboard.Session.CreatedAt
 		
-		// Format the duration in a human-readable way
-		var formattedAge string
-		hours := int(sessionAge.Hours())
-		minutes := int(sessionAge.Minutes()) % 60
-		
-		if hours > 0 {
-			if hours == 1 {
-				formattedAge = "1 hour"
+		// If the session time is more than a week in the past or future, it's likely invalid
+		oneWeek := 7 * 24 * time.Hour
+		if sessionCreatedAt.Before(now.Add(-oneWeek)) || sessionCreatedAt.After(now.Add(oneWeek)) {
+			// Use a placeholder for invalid times
+			description.WriteString("🍻 **Session:** Active\n\n")
+		} else {
+			// Calculate age with valid time
+			sessionAge := now.Sub(sessionCreatedAt)
+			
+			// Format the duration in a human-readable way
+			var formattedAge string
+			hours := int(sessionAge.Hours())
+			minutes := int(sessionAge.Minutes()) % 60
+			
+			if hours > 0 {
+				if hours == 1 {
+					formattedAge = "1 hour"
+				} else {
+					formattedAge = fmt.Sprintf("%d hours", hours)
+				}
+				
+				if minutes > 0 {
+					formattedAge += fmt.Sprintf(" %d min", minutes)
+				}
+			} else if minutes > 0 {
+				formattedAge = fmt.Sprintf("%d minutes", minutes)
 			} else {
-				formattedAge = fmt.Sprintf("%d hours", hours)
+				formattedAge = "just started"
 			}
 			
-			if minutes > 0 {
-				formattedAge += fmt.Sprintf(" %d min", minutes)
-			}
-		} else if minutes > 0 {
-			formattedAge = fmt.Sprintf("%d minutes", minutes)
-		} else {
-			formattedAge = "just started"
+			description.WriteString(fmt.Sprintf("🍻 **Session Age:** %s\n\n", formattedAge))
 		}
-		
-		description.WriteString(fmt.Sprintf("🍻 **Session Age:** %s\n\n", formattedAge))
 	}
 	
 	if len(sessionboard.Entries) == 0 {
