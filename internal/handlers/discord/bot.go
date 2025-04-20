@@ -777,10 +777,34 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 		}
 	}
 
+	// Get the player's unpaid drinks
+	drinkRecordsOutput, err := b.gameService.GetDrinkRecords(ctx, &game.GetDrinkRecordsInput{
+		GameID: existingGame.Game.ID,
+	})
+	if err != nil {
+		log.Printf("Error getting drink records: %v", err)
+		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to get drink records: %v", err))
+	}
+
+	// Find the first unpaid drink assigned to this player
+	var drinkToPay *models.DrinkLedger
+	for _, drink := range drinkRecordsOutput.Records {
+		if drink.ToPlayerID == userID && !drink.Paid {
+			drinkToPay = drink
+			break
+		}
+	}
+
+	// Check if there are any unpaid drinks
+	if drinkToPay == nil {
+		return RespondWithEphemeralMessage(s, i, "You don't have any unpaid drinks to pay!")
+	}
+
 	// Pay the drink
 	_, err = b.gameService.PayDrink(ctx, &game.PayDrinkInput{
 		GameID:   existingGame.Game.ID,
 		PlayerID: userID,
+		DrinkID:  drinkToPay.ID,
 	})
 	if err != nil {
 		log.Printf("Error paying drink: %v", err)
