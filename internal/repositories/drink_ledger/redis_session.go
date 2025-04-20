@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/KirkDiggler/ronnied/internal/models"
@@ -24,11 +25,14 @@ func (r *redisRepository) CreateSession(ctx context.Context, input *CreateSessio
 	// Generate a new session ID
 	sessionID := uuid.New().String()
 
-	// Create a new session
+	// Create a new session with explicit current time
+	now := time.Now()
+	log.Printf("Creating new session with time: %v", now)
+	
 	session := &models.Session{
 		ID:        sessionID,
 		GuildID:   input.GuildID,
-		CreatedAt: time.Now(),
+		CreatedAt: now,
 		CreatedBy: input.CreatedBy,
 		Active:    true,
 	}
@@ -38,6 +42,9 @@ func (r *redisRepository) CreateSession(ctx context.Context, input *CreateSessio
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal session: %w", err)
 	}
+	
+	// Log the serialized JSON for debugging
+	log.Printf("Serialized session JSON: %s", string(sessionJSON))
 
 	// Store the session
 	sessionKey := sessionKeyPrefix + sessionID
@@ -113,11 +120,26 @@ func (r *redisRepository) GetCurrentSession(ctx context.Context, input *GetCurre
 		}
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
+	
+	// Log the retrieved JSON for debugging
+	log.Printf("Retrieved session JSON: %s", sessionJSON)
 
 	// Deserialize the session
 	var session models.Session
 	if err := json.Unmarshal([]byte(sessionJSON), &session); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal session: %w", err)
+	}
+	
+	// Check if the CreatedAt time is zero and fix it if needed
+	if session.CreatedAt.IsZero() {
+		log.Printf("Session %s has zero CreatedAt time, setting to current time", session.ID)
+		session.CreatedAt = time.Now()
+		
+		// Update the session in Redis with the fixed time
+		updatedJSON, err := json.Marshal(session)
+		if err == nil {
+			r.client.Set(ctx, sessionKey, updatedJSON, 0)
+		}
 	}
 
 	return &GetCurrentSessionOutput{

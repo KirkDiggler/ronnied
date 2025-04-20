@@ -255,38 +255,39 @@ func (c *RonniedCommand) handleSessionboard(s *discordgo.Session, i *discordgo.I
 			now)
 		
 		// Always show session creation time for reference
-		description.WriteString(fmt.Sprintf("🍻 **Session Started:** %s\n", 
-			sessionCreatedAt.Format("Jan 2 at 3:04 PM")))
-		
-		// Calculate and format the age
-		sessionAge := now.Sub(sessionCreatedAt)
-		
-		// Only show age if it's a reasonable value (positive and less than a week)
-		if sessionAge > 0 && sessionAge < 7*24*time.Hour {
-			// Format the duration in a human-readable way
-			var formattedAge string
-			hours := int(sessionAge.Hours())
-			minutes := int(sessionAge.Minutes()) % 60
+			description.WriteString(fmt.Sprintf("🍻 **Session Started:** %s\n", 
+				sessionCreatedAt.Format("Jan 2 at 3:04 PM")))
 			
-			if hours > 0 {
-				if hours == 1 {
-					formattedAge = "1 hour"
+			// Calculate and format the age
+			sessionAge := now.Sub(sessionCreatedAt)
+			
+			// Only show age if it's a reasonable value (positive and less than a week)
+			if sessionAge > 0 && sessionAge < 7*24*time.Hour {
+				// Format the duration in a human-readable way
+				var formattedAge string
+				hours := int(sessionAge.Hours())
+				minutes := int(sessionAge.Minutes()) % 60
+				
+				if hours > 0 {
+					if hours == 1 {
+						formattedAge = "1 hour"
+					} else {
+						formattedAge = fmt.Sprintf("%d hours", hours)
+					}
+					
+					if minutes > 0 {
+						formattedAge += fmt.Sprintf(" %d min", minutes)
+					}
+				} else if minutes > 0 {
+					formattedAge = fmt.Sprintf("%d minutes", minutes)
 				} else {
-					formattedAge = fmt.Sprintf("%d hours", hours)
+					formattedAge = "just started"
 				}
 				
-				if minutes > 0 {
-					formattedAge += fmt.Sprintf(" %d min", minutes)
-				}
-			} else if minutes > 0 {
-				formattedAge = fmt.Sprintf("%d minutes", minutes)
+				description.WriteString(fmt.Sprintf(" (%s ago)\n\n", formattedAge))
 			} else {
-				formattedAge = "just started"
+				description.WriteString("\n\n")
 			}
-			
-			description.WriteString(fmt.Sprintf(" (%s ago)\n\n", formattedAge))
-		} else {
-			description.WriteString("\n\n")
 		}
 	}
 	
