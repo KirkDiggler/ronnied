@@ -562,14 +562,17 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		}
 		contentText = rollOutput.Result
 	} else {
-		embeds = []*discordgo.MessageEmbed{
-			{
-				Title:       rollResultOutput.Title,
-				Description: rollResultOutput.Message,
-				Color:       embedColor,
-			},
-		}
+		// Use the fun message from the messaging service
 		contentText = rollResultOutput.Title
+		
+		// Create an embed with the fun message
+		embed := &discordgo.MessageEmbed{
+			Title:       rollResultOutput.Title,
+			Description: rollResultOutput.Message,
+			Color:       embedColor,
+		}
+		
+		embeds = append(embeds, embed)
 	}
 
 	// Add the whisper message as a second embed if available
@@ -919,12 +922,59 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 	// Update the game message in the channel to show the drink payment
 	b.updateGameMessage(s, channelID, existingGame.Game.ID)
 
+	// Get the session ID from the game's channel
+	sessionOutput, err := b.gameService.GetSessionLeaderboard(ctx, &game.GetSessionLeaderboardInput{
+		ChannelID: channelID,
+	})
+	
+	// Calculate remaining drinks for the player
+	var remainingDrinks int
+	var drinkStats string
+	var progressBar string
+	var statusEmoji string
+	var motivationalMsg string
+	if err == nil && sessionOutput != nil {
+		for _, entry := range sessionOutput.Entries {
+			if entry.PlayerID == userID {
+				remainingDrinks = entry.DrinkCount - entry.PaidCount
+				
+				// Create a detailed drink stats message
+				if entry.DrinkCount > 0 {
+					// Select appropriate emoji based on payment status
+					if remainingDrinks == 0 {
+						statusEmoji = "🎉" // Celebration emoji for all paid
+						motivationalMsg = "All paid up! You're a champion!"
+					} else if float64(entry.PaidCount)/float64(entry.DrinkCount) >= 0.75 {
+						statusEmoji = "🔥" // Fire emoji for almost done
+						motivationalMsg = "Almost there! Just a few more to go!"
+					} else if float64(entry.PaidCount)/float64(entry.DrinkCount) >= 0.5 {
+						statusEmoji = "👍" // Thumbs up for good progress
+						motivationalMsg = "Halfway there! Keep it up!"
+					} else if float64(entry.PaidCount)/float64(entry.DrinkCount) >= 0.25 {
+						statusEmoji = "🍺" // Beer emoji for some progress
+						motivationalMsg = "Good start! Keep those drinks flowing!"
+					} else {
+						statusEmoji = "💪" // Flexed arm for just starting
+						motivationalMsg = "Just getting started! You can do this!"
+					}
+					
+					drinkStats = fmt.Sprintf("**Drink Stats** %s\nTotal: %d | Paid: %d | Remaining: %d", 
+						statusEmoji, entry.DrinkCount, entry.PaidCount, remainingDrinks)
+					
+					// Create a visual progress bar
+					progressBar = createDrinkProgressBar(entry.PaidCount, entry.DrinkCount)
+				}
+				break
+			}
+		}
+	}
+
 	// Get a fun message for the drink payment
 	payDrinkMsgOutput, err := b.messagingService.GetPayDrinkMessage(ctx, &messaging.GetPayDrinkMessageInput{
 		PlayerName: playerName,
 		DrinkCount: 1, // For now, we're just paying one drink at a time
 	})
-
+	
 	// Create roll button for the next roll
 	rollButton := discordgo.Button{
 		Label:    "Roll Again",
@@ -964,6 +1014,48 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 		}
 		
 		embeds = append(embeds, embed)
+	}
+
+	// Add remaining drinks to the embed description
+	if remainingDrinks > 0 {
+		if len(embeds) > 0 {
+			embeds[0].Description += fmt.Sprintf("\nYou still owe %d drinks!", remainingDrinks)
+		} else {
+			contentText += fmt.Sprintf("\nYou still owe %d drinks!", remainingDrinks)
+		}
+	} else {
+		if len(embeds) > 0 {
+			embeds[0].Description += "\nYou've paid all your drinks!"
+		} else {
+			contentText += "\nYou've paid all your drinks!"
+		}
+	}
+
+	// Add drink stats to the embed description
+	if drinkStats != "" {
+		if len(embeds) > 0 {
+			embeds[0].Description += "\n" + drinkStats
+		} else {
+			contentText += "\n" + drinkStats
+		}
+	}
+
+	// Add progress bar to the embed description
+	if progressBar != "" {
+		if len(embeds) > 0 {
+			embeds[0].Description += "\n" + progressBar
+		} else {
+			contentText += "\n" + progressBar
+		}
+	}
+
+	// Add motivational message to the embed description
+	if motivationalMsg != "" {
+		if len(embeds) > 0 {
+			embeds[0].Description += "\n" + motivationalMsg
+		} else {
+			contentText += "\n" + motivationalMsg
+		}
 	}
 
 	// Create message components
@@ -1074,4 +1166,50 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 // Helper function to create a string pointer
 func stringPtr(s string) *string {
 	return &s
+}
+
+// createDrinkProgressBar creates a visual progress bar for drink payments
+func createDrinkProgressBar(paidCount int, totalDrinks int) string {
+	// Handle edge cases
+	if totalDrinks == 0 {
+		return "No drinks to pay"
+	}
+
+	// Calculate progress
+	progress := float64(paidCount) / float64(totalDrinks)
+	
+	// Select appropriate bar characters based on Discord's rendering
+	filledChar := "🟩" // Green square for paid drinks
+	emptyChar := "⬜"  // White square for unpaid drinks
+	
+	// For small numbers of drinks (≤ 10), show one character per drink
+	if totalDrinks <= 10 {
+		var progressBar string
+		for i := 0; i < totalDrinks; i++ {
+			if i < paidCount {
+				progressBar += filledChar
+			} else {
+				progressBar += emptyChar
+			}
+		}
+		return progressBar
+	}
+	
+	// For larger numbers, create a 10-segment bar
+	const segments = 10
+	filledSegments := int(progress * segments)
+	
+	var progressBar string
+	for i := 0; i < segments; i++ {
+		if i < filledSegments {
+			progressBar += filledChar
+		} else {
+			progressBar += emptyChar
+		}
+	}
+
+	// Add percentage to the progress bar
+	progressBar += fmt.Sprintf(" (%.0f%%)", progress*100)
+
+	return progressBar
 }
