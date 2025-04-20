@@ -163,6 +163,7 @@ const (
 	ButtonBeginGame    = "begin_game"
 	ButtonRollDice     = "roll_dice"
 	ButtonStartNewGame = "start_new_game"
+	ButtonPayDrink     = "pay_drink"
 
 	// Select menu custom IDs
 	SelectAssignDrink = "assign_drink"
@@ -217,6 +218,9 @@ func (b *Bot) handleComponentInteraction(s *discordgo.Session, i *discordgo.Inte
 	case ButtonStartNewGame:
 		// Handle start new game button
 		return b.handleStartNewGameButton(s, i, channelID, userID, username)
+	case ButtonPayDrink:
+		// Handle pay drink button
+		return b.handlePayDrinkButton(s, i, channelID, userID)
 	default:
 		return RespondWithError(s, i, fmt.Sprintf("Unknown button: %s", customID))
 	}
@@ -608,6 +612,16 @@ func (b *Bot) handleAssignDrinkSelect(s *discordgo.Session, i *discordgo.Interac
 		},
 	}
 
+	// Get a pay drink button
+	payDrinkButton := discordgo.Button{
+		Label:    "Pay Drink",
+		Style:    discordgo.SuccessButton,
+		CustomID: ButtonPayDrink,
+		Emoji: &discordgo.ComponentEmoji{
+			Name: "💸",
+		},
+	}
+
 	// Update the current message with a confirmation and a roll button
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseUpdateMessage,
@@ -615,7 +629,7 @@ func (b *Bot) handleAssignDrinkSelect(s *discordgo.Session, i *discordgo.Interac
 			Content: fmt.Sprintf("You assigned a drink to %s! 🍻", targetPlayerName),
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
-					Components: []discordgo.MessageComponent{rollButton},
+					Components: []discordgo.MessageComponent{rollButton, payDrinkButton},
 				},
 			},
 		},
@@ -733,6 +747,98 @@ func (b *Bot) handleStartNewGameButton(s *discordgo.Session, i *discordgo.Intera
 	// Acknowledge the interaction without sending a message
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseDeferredMessageUpdate,
+	})
+}
+
+// handlePayDrinkButton handles the pay drink button click
+func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID string) error {
+	ctx := context.Background()
+
+	// Get the game in this channel
+	existingGame, err := b.gameService.GetGameByChannel(ctx, &game.GetGameByChannelInput{
+		ChannelID: channelID,
+	})
+
+	// Handle errors or missing game
+	if err != nil {
+		if errors.Is(err, game.ErrGameNotFound) {
+			return RespondWithEphemeralMessage(s, i, "No active game found in this channel.")
+		}
+		log.Printf("Error getting game: %v", err)
+		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Error getting game: %v", err))
+	}
+
+	// Get player info
+	var playerName string
+	for _, participant := range existingGame.Game.Participants {
+		if participant.PlayerID == userID {
+			playerName = participant.PlayerName
+			break
+		}
+	}
+
+	// Pay the drink
+	_, err = b.gameService.PayDrink(ctx, &game.PayDrinkInput{
+		GameID:   existingGame.Game.ID,
+		PlayerID: userID,
+	})
+	if err != nil {
+		log.Printf("Error paying drink: %v", err)
+		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to pay drink: %v", err))
+	}
+
+	// Update the game message in the channel to show the drink payment
+	b.updateGameMessage(s, channelID, existingGame.Game.ID)
+
+	// Get a fun message for the drink payment
+	payDrinkMsgOutput, err := b.messagingService.GetPayDrinkMessage(ctx, &messaging.GetPayDrinkMessageInput{
+		PlayerName: playerName,
+		DrinkCount: 1, // For now, we're just paying one drink at a time
+	})
+
+	// Create roll button for the next roll
+	rollButton := discordgo.Button{
+		Label:    "Roll Again",
+		Style:    discordgo.PrimaryButton,
+		CustomID: ButtonRollDice,
+		Emoji: &discordgo.ComponentEmoji{
+			Name: "🎲",
+		},
+	}
+
+	// Create embeds for the response
+	var embeds []*discordgo.MessageEmbed
+	var contentText string
+
+	if err != nil {
+		// Fallback to static message if messaging service fails
+		contentText = "You paid your drink!"
+	} else {
+		// Use the fun message from the messaging service
+		contentText = payDrinkMsgOutput.Title
+		
+		// Create an embed with the fun message
+		embed := &discordgo.MessageEmbed{
+			Title:       payDrinkMsgOutput.Title,
+			Description: payDrinkMsgOutput.Message,
+			Color:       0x2ecc71, // Green for success
+		}
+		
+		embeds = append(embeds, embed)
+	}
+
+	// Update the current message with a confirmation and a roll button
+	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseUpdateMessage,
+		Data: &discordgo.InteractionResponseData{
+			Content:    contentText,
+			Embeds:     embeds,
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{rollButton},
+				},
+			},
+		},
 	})
 }
 

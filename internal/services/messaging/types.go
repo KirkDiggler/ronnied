@@ -174,6 +174,24 @@ type GetLeaderboardMessageOutput struct {
 	Message string
 }
 
+// GetPayDrinkMessageInput contains parameters for getting a pay drink message
+type GetPayDrinkMessageInput struct {
+	// PlayerName is the name of the player paying the drink
+	PlayerName string
+	
+	// DrinkCount is the number of drinks being paid
+	DrinkCount int
+}
+
+// GetPayDrinkMessageOutput contains the output for a pay drink message
+type GetPayDrinkMessageOutput struct {
+	// Title is a short title for the message
+	Title string
+	
+	// Message is the generated message
+	Message string
+}
+
 // ServiceConfig contains configuration for the messaging service
 type ServiceConfig struct {
 	// Repository is the repository for storing and retrieving messages

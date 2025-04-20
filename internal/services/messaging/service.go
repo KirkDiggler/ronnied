@@ -136,7 +136,7 @@ func (s *service) GetJoinGameErrorMessage(ctx context.Context, input *GetJoinGam
 		messages = []string{
 			fmt.Sprintf("%s, there's a roll-off in progress! Only the tied players get to participate in this showdown.", input.PlayerName),
 			fmt.Sprintf("Hold your horses, %s! This is a special tie-breaker round. Wait for the next full game.", input.PlayerName),
-			fmt.Sprintf("Nice try, %s, but roll-offs are invitation-only events. Wait for the next game to start!", input.PlayerName),
+			"Roll-off in progress! This is where legends (and hangovers) are made.",
 		}
 	case "already_joined":
 		messages = []string{
@@ -276,7 +276,7 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				fmt.Sprintf("Look at %s showing off with that 6! Now they get to choose who drinks!", input.PlayerName),
 				fmt.Sprintf("A wild 6 appears for %s! Time to inflict some liquid damage!", input.PlayerName),
 				fmt.Sprintf("%s just rolled a 6! Finally achieving something in life!", input.PlayerName),
-				fmt.Sprintf("The chosen one! %s r now wields the power of drink assignment!", input.PlayerName),
+				fmt.Sprintf("The chosen one! %s now wields the power of drink assignment!", input.PlayerName),
 				fmt.Sprintf("Against all odds, %s somehow managed to roll a 6! Must be their birthday!", input.PlayerName),
 				fmt.Sprintf("%s's 6 is the universe's way of saying someone needs to drink more!", input.PlayerName),
 			}
@@ -635,5 +635,44 @@ func (s *service) GetLeaderboardMessage(ctx context.Context, input *GetLeaderboa
 
 	return &GetLeaderboardMessageOutput{
 		Message: message,
+	}, nil
+}
+
+// GetPayDrinkMessage returns a fun message when a player pays a drink
+func (s *service) GetPayDrinkMessage(ctx context.Context, input *GetPayDrinkMessageInput) (*GetPayDrinkMessageOutput, error) {
+	if input == nil {
+		return nil, errors.New("input cannot be nil")
+	}
+
+	// Fun titles for paying drinks
+	titles := []string{
+		"Debt Cleared!",
+		"Tab Paid!",
+		"Drink Settled!",
+		"Cheers to That!",
+		"Bottoms Up!",
+	}
+
+	// Fun messages for paying drinks
+	messages := []string{
+		fmt.Sprintf("%s chugs with dignity and honor! 🍻", input.PlayerName),
+		fmt.Sprintf("%s takes their medicine like a champ! 💪", input.PlayerName),
+		fmt.Sprintf("%s settles their tab with the drinking gods! 🙏", input.PlayerName),
+		fmt.Sprintf("%s drinks up and lives to roll another day! 🎲", input.PlayerName),
+		fmt.Sprintf("The bartender nods approvingly as %s pays their dues! 🍸", input.PlayerName),
+		fmt.Sprintf("%s raises their glass in a toast to bad luck and good friends! 🥂", input.PlayerName),
+		fmt.Sprintf("%s accepts defeat gracefully and drinks up! 🏳️", input.PlayerName),
+		fmt.Sprintf("A moment of silence as %s downs their drink... and it's gone! 💨", input.PlayerName),
+		fmt.Sprintf("%s proves they're a player of honor by paying their drink debt! 🎖️", input.PlayerName),
+		fmt.Sprintf("The drinking gods are pleased with %s's sacrifice! 🔱", input.PlayerName),
+	}
+
+	// Select random title and message
+	selectedTitle := titles[s.rand.Intn(len(titles))]
+	selectedMessage := messages[s.rand.Intn(len(messages))]
+
+	return &GetPayDrinkMessageOutput{
+		Title:   selectedTitle,
+		Message: selectedMessage,
 	}, nil
 }

@@ -27,4 +27,7 @@ type Service interface {
 
 	// GetLeaderboardMessage returns a funny message for a player in the leaderboard
 	GetLeaderboardMessage(ctx context.Context, input *GetLeaderboardMessageInput) (*GetLeaderboardMessageOutput, error)
+
+	// GetPayDrinkMessage returns a fun message when a player pays a drink
+	GetPayDrinkMessage(ctx context.Context, input *GetPayDrinkMessageInput) (*GetPayDrinkMessageOutput, error)
 }

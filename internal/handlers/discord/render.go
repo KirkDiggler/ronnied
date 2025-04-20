@@ -185,7 +185,7 @@ func renderRollDiceResponseEdit(s *discordgo.Session, i *discordgo.InteractionCr
 				Options:     playerOptions,
 			}
 
-			components = append(components, discordgo.SelectMenu(playerSelect))
+			components = append(components, playerSelect)
 		}
 	} else {
 		// Create roll again button for non-critical hits
@@ -198,7 +198,18 @@ func renderRollDiceResponseEdit(s *discordgo.Session, i *discordgo.InteractionCr
 			},
 		}
 
-		components = append(components, rollButton)
+		// Add Pay Drink button
+		payDrinkButton := discordgo.Button{
+			Label:    "Pay Drink",
+			Style:    discordgo.SuccessButton,
+			CustomID: ButtonPayDrink,
+			Emoji: &discordgo.ComponentEmoji{
+				Name: "💸",
+			},
+		}
+
+		// Add both buttons
+		components = append(components, rollButton, payDrinkButton)
 	}
 
 	// Create action row for components if we have any
