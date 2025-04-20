@@ -442,8 +442,8 @@ func (c *RonniedCommand) handleRoll(s *discordgo.Session, i *discordgo.Interacti
 
 	// Handle errors or missing game
 	if err != nil {
-		if err == game.ErrGameNotFound {
-			return RespondWithError(s, i, "No active game found in this channel. Use `/ronnied start` to create a new game.")
+		if errors.Is(err, game.ErrGameNotFound) {
+			return RespondWithError(s, i, "No game found in this channel. Use `/ronnied start` to create a new game.")
 		}
 		log.Printf("Error getting game: %v", err)
 		return RespondWithError(s, i, fmt.Sprintf("Error getting game: %v", err))
@@ -464,18 +464,85 @@ func (c *RonniedCommand) handleRoll(s *discordgo.Session, i *discordgo.Interacti
 		return RespondWithError(s, i, fmt.Sprintf("Failed to roll dice: %v", err))
 	}
 
+	// Create roll button for the next roll
+	rollButton := discordgo.Button{
+		Label:    "Roll Again",
+		Style:    discordgo.PrimaryButton,
+		CustomID: ButtonRollDice,
+		Emoji: &discordgo.ComponentEmoji{
+			Name: "🎲",
+		},
+	}
+
+	// Create pay drink button
+	payDrinkButton := discordgo.Button{
+		Label:    "Pay Drink",
+		Style:    discordgo.SuccessButton,
+		CustomID: ButtonPayDrink,
+		Emoji: &discordgo.ComponentEmoji{
+			Name: "💸",
+		},
+	}
+
 	// Build the response message
 	var description string
 	if rollOutput.IsCriticalHit {
 		description = "Critical hit! You can assign a drink to another player."
+		
+		// Create player selection dropdown for critical hits
+		if len(rollOutput.EligiblePlayers) > 0 {
+			var playerOptions []discordgo.SelectMenuOption
+
+			for _, player := range rollOutput.EligiblePlayers {
+				playerOptions = append(playerOptions, discordgo.SelectMenuOption{
+					Label:       player.PlayerName,
+					Value:       player.PlayerID,
+					Description: "Assign a drink to this player",
+					Emoji: &discordgo.ComponentEmoji{
+						Name: "🍺",
+					},
+				})
+			}
+
+			playerSelect := discordgo.SelectMenu{
+				CustomID:    SelectAssignDrink,
+				Placeholder: "Select a player to drink",
+				Options:     playerOptions,
+			}
+			
+			// Respond with the roll result and player selection dropdown
+			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseUpdateMessage,
+				Data: &discordgo.InteractionResponseData{
+					Content: fmt.Sprintf("You rolled a %d. %s", rollOutput.Value, description),
+					Flags:   discordgo.MessageFlagsEphemeral,
+					Components: []discordgo.MessageComponent{
+						discordgo.ActionsRow{
+							Components: []discordgo.MessageComponent{playerSelect},
+						},
+					},
+				},
+			})
+		}
 	} else if rollOutput.IsCriticalFail {
 		description = "Critical fail! Take a drink."
 	} else {
 		description = "You rolled the dice."
 	}
 
-	// Respond with the roll result
-	return RespondWithMessage(s, i, fmt.Sprintf("You rolled a %d. %s", rollOutput.Value, description))
+	// Respond with the roll result and buttons
+	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseUpdateMessage,
+		Data: &discordgo.InteractionResponseData{
+			Content: fmt.Sprintf("You rolled a %d. %s", rollOutput.Value, description),
+			Flags:   discordgo.MessageFlagsEphemeral,
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{rollButton, payDrinkButton},
+				},
+			},
+		},
+	})
 }
 
 // handleLeaderboard handles the leaderboard subcommand

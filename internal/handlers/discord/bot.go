@@ -612,7 +612,7 @@ func (b *Bot) handleAssignDrinkSelect(s *discordgo.Session, i *discordgo.Interac
 		},
 	}
 
-	// Get a pay drink button
+	// Create pay drink button
 	payDrinkButton := discordgo.Button{
 		Label:    "Pay Drink",
 		Style:    discordgo.SuccessButton,
@@ -830,6 +830,16 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 		},
 	}
 
+	// Create pay drink button
+	payDrinkButton := discordgo.Button{
+		Label:    "Pay Drink",
+		Style:    discordgo.SuccessButton,
+		CustomID: ButtonPayDrink,
+		Emoji: &discordgo.ComponentEmoji{
+			Name: "💸",
+		},
+	}
+
 	// Create embeds for the response
 	var embeds []*discordgo.MessageEmbed
 	var contentText string
@@ -859,7 +869,7 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 			Embeds:     embeds,
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
-					Components: []discordgo.MessageComponent{rollButton},
+					Components: []discordgo.MessageComponent{rollButton, payDrinkButton},
 				},
 			},
 		},
