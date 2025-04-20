@@ -82,6 +82,21 @@ func (mr *MockRepositoryMockRecorder) CreateDrinkRecord(arg0, arg1 any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDrinkRecord", reflect.TypeOf((*MockRepository)(nil).CreateDrinkRecord), arg0, arg1)
 }
 
+// CreateSession mocks base method.
+func (m *MockRepository) CreateSession(arg0 context.Context, arg1 *drink_ledger.CreateSessionInput) (*drink_ledger.CreateSessionOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateSession", arg0, arg1)
+	ret0, _ := ret[0].(*drink_ledger.CreateSessionOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateSession indicates an expected call of CreateSession.
+func (mr *MockRepositoryMockRecorder) CreateSession(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateSession", reflect.TypeOf((*MockRepository)(nil).CreateSession), arg0, arg1)
+}
+
 // DeleteDrinkRecords mocks base method.
 func (m *MockRepository) DeleteDrinkRecords(arg0 context.Context, arg1 *drink_ledger.DeleteDrinkRecordsInput) error {
 	m.ctrl.T.Helper()
@@ -94,6 +109,21 @@ func (m *MockRepository) DeleteDrinkRecords(arg0 context.Context, arg1 *drink_le
 func (mr *MockRepositoryMockRecorder) DeleteDrinkRecords(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDrinkRecords", reflect.TypeOf((*MockRepository)(nil).DeleteDrinkRecords), arg0, arg1)
+}
+
+// GetCurrentSession mocks base method.
+func (m *MockRepository) GetCurrentSession(arg0 context.Context, arg1 *drink_ledger.GetCurrentSessionInput) (*drink_ledger.GetCurrentSessionOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCurrentSession", arg0, arg1)
+	ret0, _ := ret[0].(*drink_ledger.GetCurrentSessionOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCurrentSession indicates an expected call of GetCurrentSession.
+func (mr *MockRepositoryMockRecorder) GetCurrentSession(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentSession", reflect.TypeOf((*MockRepository)(nil).GetCurrentSession), arg0, arg1)
 }
 
 // GetDrinkRecordsForGame mocks base method.
@@ -124,6 +154,21 @@ func (m *MockRepository) GetDrinkRecordsForPlayer(arg0 context.Context, arg1 *dr
 func (mr *MockRepositoryMockRecorder) GetDrinkRecordsForPlayer(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDrinkRecordsForPlayer", reflect.TypeOf((*MockRepository)(nil).GetDrinkRecordsForPlayer), arg0, arg1)
+}
+
+// GetDrinkRecordsForSession mocks base method.
+func (m *MockRepository) GetDrinkRecordsForSession(arg0 context.Context, arg1 *drink_ledger.GetDrinkRecordsForSessionInput) (*drink_ledger.GetDrinkRecordsForSessionOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDrinkRecordsForSession", arg0, arg1)
+	ret0, _ := ret[0].(*drink_ledger.GetDrinkRecordsForSessionOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDrinkRecordsForSession indicates an expected call of GetDrinkRecordsForSession.
+func (mr *MockRepositoryMockRecorder) GetDrinkRecordsForSession(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDrinkRecordsForSession", reflect.TypeOf((*MockRepository)(nil).GetDrinkRecordsForSession), arg0, arg1)
 }
 
 // MarkDrinkPaid mocks base method.

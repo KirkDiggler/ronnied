@@ -272,16 +272,35 @@ type EndGameOutput struct {
 	// FinalLeaderboard contains the final standings for the game
 	FinalLeaderboard []*PlayerStats
 
-	// NeedsRollOff indicates if a roll-off is needed
+	// NeedsHighestRollOff indicates if a highest roll-off is needed
+	NeedsHighestRollOff bool
+
+	// HighestRollOffGameID is the ID of the highest roll-off game
+	HighestRollOffGameID string
+
+	// HighestRollOffPlayerIDs contains the IDs of players in the highest roll-off
+	HighestRollOffPlayerIDs []string
+
+	// NeedsLowestRollOff indicates if a lowest roll-off is needed
+	NeedsLowestRollOff bool
+
+	// LowestRollOffGameID is the ID of the lowest roll-off game
+	LowestRollOffGameID string
+
+	// LowestRollOffPlayerIDs contains the IDs of players in the lowest roll-off
+	LowestRollOffPlayerIDs []string
+
+	// Backward compatibility fields
+	// NeedsRollOff indicates if a roll-off is needed (either highest or lowest)
 	NeedsRollOff bool
 
-	// RollOffGameID is the ID of the roll-off game
+	// RollOffGameID is the ID of the roll-off game (either highest or lowest)
 	RollOffGameID string
 
 	// RollOffType indicates the type of roll-off (highest or lowest)
 	RollOffType RollOffType
 
-	// RollOffPlayerIDs contains the IDs of players in the roll-off
+	// RollOffPlayerIDs contains the IDs of players in the roll-off (either highest or lowest)
 	RollOffPlayerIDs []string
 }
 
@@ -545,33 +564,68 @@ type PayDrinkInput struct {
 	DrinkID string
 }
 
-// PayDrinkOutput contains the result of marking a drink as paid
+// PayDrinkOutput represents the output of the PayDrink method
 type PayDrinkOutput struct {
-	// Success indicates if the drink was successfully marked as paid
+	// Success indicates whether the drink was successfully paid
 	Success bool
-
-	// Game is the game the drink belongs to
+	
+	// Game is the game the drink was paid in
 	Game *models.Game
-
+	
 	// DrinkRecord is the drink record that was marked as paid
 	DrinkRecord *models.DrinkLedger
 }
 
-// ResetGameInput represents the input for the ResetGame method
-type ResetGameInput struct {
-	// GameID is the ID of the game to reset
-	GameID string
+// CreateSessionInput represents the input for the CreateSession method
+type CreateSessionInput struct {
+	// ChannelID is the Discord channel ID for this session
+	ChannelID string
 	
-	// Archive indicates whether to archive the drink records (true) or delete them (false)
-	// If not specified, defaults to archiving
-	Archive bool
+	// CreatedBy is the user ID who created the session
+	CreatedBy string
 }
 
-// ResetGameOutput represents the output of the ResetGame method
-type ResetGameOutput struct {
-	// Success indicates whether the game was successfully reset
+// CreateSessionOutput represents the output of the CreateSession method
+type CreateSessionOutput struct {
+	// Success indicates whether the session was successfully created
 	Success bool
 	
-	// RecordsAffected is the number of drink records that were reset
-	RecordsAffected int
+	// Session is the newly created session
+	Session *models.Session
+}
+
+// GetSessionLeaderboardInput represents the input for the GetSessionLeaderboard method
+type GetSessionLeaderboardInput struct {
+	// ChannelID is the Discord channel ID to get the leaderboard for
+	// If specified, will use the current session for this channel
+	ChannelID string
+	
+	// SessionID is the specific session ID to get the leaderboard for
+	// If specified, will override ChannelID
+	SessionID string
+}
+
+// GetSessionLeaderboardOutput represents the output of the GetSessionLeaderboard method
+type GetSessionLeaderboardOutput struct {
+	// Success indicates whether the leaderboard was successfully retrieved
+	Success bool
+	
+	// Session is the session this leaderboard is for
+	Session *models.Session
+	
+	// Entries is the list of leaderboard entries
+	Entries []LeaderboardEntry
+}
+
+// StartNewSessionInput is the input for StartNewSession
+type StartNewSessionInput struct {
+	ChannelID string
+	CreatorID string
+}
+
+// StartNewSessionOutput is the output for StartNewSession
+type StartNewSessionOutput struct {
+	Success     bool
+	Session     *models.Session
+	SessionID   string
 }

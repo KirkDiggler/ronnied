@@ -93,6 +93,12 @@ type Game struct {
 	// RollOffGameID is the ID of a roll-off game created from this game
 	RollOffGameID string
 
+	// HighestRollOffGameID is the ID of a roll-off game for highest rollers
+	HighestRollOffGameID string
+
+	// LowestRollOffGameID is the ID of a roll-off game for lowest rollers
+	LowestRollOffGameID string
+
 	// Participants contains information about players participating in the game
 	Participants []*Participant
 

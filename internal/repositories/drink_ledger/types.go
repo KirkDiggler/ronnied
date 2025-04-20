@@ -42,6 +42,7 @@ type CreateDrinkRecordInput struct {
 	ToPlayerID   string
 	Reason       models.DrinkReason
 	Timestamp    time.Time
+	SessionID    string // ID of the session this drink belongs to
 }
 
 // CreateDrinkRecordOutput contains the result of creating a new drink record

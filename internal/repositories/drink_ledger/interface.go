@@ -28,4 +28,13 @@ type Repository interface {
 	
 	// DeleteDrinkRecords deletes all drink records for a game
 	DeleteDrinkRecords(ctx context.Context, input *DeleteDrinkRecordsInput) error
+	
+	// CreateSession creates a new drinking session
+	CreateSession(ctx context.Context, input *CreateSessionInput) (*CreateSessionOutput, error)
+	
+	// GetCurrentSession retrieves the current active session for a channel
+	GetCurrentSession(ctx context.Context, input *GetCurrentSessionInput) (*GetCurrentSessionOutput, error)
+	
+	// GetDrinkRecordsForSession retrieves all drink records for a session
+	GetDrinkRecordsForSession(ctx context.Context, input *GetDrinkRecordsForSessionInput) (*GetDrinkRecordsForSessionOutput, error)
 }

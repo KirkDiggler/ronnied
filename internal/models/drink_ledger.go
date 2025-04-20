@@ -49,4 +49,7 @@ type DrinkLedger struct {
 	
 	// ArchivedTimestamp is when the drink was archived
 	ArchivedTimestamp time.Time
+	
+	// SessionID is the ID of the drinking session this record belongs to
+	SessionID string
 }

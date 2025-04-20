@@ -18,6 +18,9 @@ const (
 	gameDrinksKeyPrefix   = "game_drinks:"
 	playerDrinksKeyPrefix = "player_drinks:"
 	playerStatsKeyPrefix  = "player_stats:"
+	sessionKeyPrefix      = "session:"
+	channelSessionPrefix  = "channel_session:"
+	sessionDrinksPrefix   = "session_drinks:"
 )
 
 // ErrDrinkNotFound is returned when a drink record is not found
@@ -283,6 +286,14 @@ func (r *redisRepository) CreateDrinkRecord(ctx context.Context, input *CreateDr
 		return nil, errors.New("recipient player ID cannot be empty")
 	}
 
+	// If no session ID is provided, try to get the current session for this game's channel
+	sessionID := input.SessionID
+	if sessionID == "" {
+		// We don't have a direct way to get the channel ID from the game ID
+		// In a real implementation, we would need to get the game to find its channel
+		// For now, we'll just create a drink without a session if none is provided
+	}
+
 	// Generate a new UUID for the drink record
 	drinkID := uuid.New().String()
 
@@ -295,6 +306,7 @@ func (r *redisRepository) CreateDrinkRecord(ctx context.Context, input *CreateDr
 		Reason:       input.Reason,
 		Timestamp:    input.Timestamp,
 		Paid:         false,
+		SessionID:    sessionID,
 	}
 
 	// Save the drink record
@@ -303,7 +315,19 @@ func (r *redisRepository) CreateDrinkRecord(ctx context.Context, input *CreateDr
 		return nil, fmt.Errorf("failed to save drink record: %w", err)
 	}
 
-	return &CreateDrinkRecordOutput{Record: record}, nil
+	// If we have a session ID, add this drink to the session's drink set
+	if sessionID != "" {
+		sessionDrinksKey := sessionDrinksPrefix + sessionID
+		err = r.client.SAdd(ctx, sessionDrinksKey, drinkID).Err()
+		if err != nil {
+			// Log the error but don't fail the operation
+			fmt.Printf("failed to add drink to session: %v\n", err)
+		}
+	}
+
+	return &CreateDrinkRecordOutput{
+		Record: record,
+	}, nil
 }
 
 // MarkDrinkPaid marks a drink as paid

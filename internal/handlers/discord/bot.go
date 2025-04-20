@@ -162,11 +162,10 @@ const (
 	ButtonJoinGame     = "join_game"
 	ButtonBeginGame    = "begin_game"
 	ButtonRollDice     = "roll_dice"
-	SelectAssignDrink  = "assign_drink"
 	ButtonStartNewGame = "start_new_game"
-	ButtonResetArchive = "reset_archive"
-	ButtonResetDelete  = "reset_delete"
-	ButtonResetCancel  = "reset_cancel"
+
+	// Select menu custom IDs
+	SelectAssignDrink = "assign_drink"
 )
 
 // handleInteraction handles Discord interactions
@@ -218,15 +217,6 @@ func (b *Bot) handleComponentInteraction(s *discordgo.Session, i *discordgo.Inte
 	case ButtonStartNewGame:
 		// Handle start new game button
 		return b.handleStartNewGameButton(s, i, channelID, userID, username)
-	case ButtonResetArchive:
-		// Handle reset archive button
-		return b.handleResetArchiveButton(s, i, channelID, userID)
-	case ButtonResetDelete:
-		// Handle reset delete button
-		return b.handleResetDeleteButton(s, i, channelID, userID)
-	case ButtonResetCancel:
-		// Handle reset cancel button
-		return b.handleResetCancelButton(s, i)
 	default:
 		return RespondWithError(s, i, fmt.Sprintf("Unknown button: %s", customID))
 	}
@@ -826,86 +816,4 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 // Helper function to create a string pointer
 func stringPtr(s string) *string {
 	return &s
-}
-
-// handleResetArchiveButton handles the reset archive button click
-func (b *Bot) handleResetArchiveButton(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID string) error {
-	ctx := context.Background()
-
-	// Get the game in this channel
-	existingGame, err := b.gameService.GetGameByChannel(ctx, &game.GetGameByChannelInput{
-		ChannelID: channelID,
-	})
-	if err != nil {
-		log.Printf("Error getting game: %v", err)
-		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Error getting game: %v", err))
-	}
-
-	// Check if the user is the game creator
-	if existingGame.Game.CreatorID != userID {
-		return RespondWithEphemeralMessage(s, i, "Only the game creator can reset the drink tabs.")
-	}
-
-	// Reset the game with archive=true
-	resetOutput, err := b.gameService.ResetGame(ctx, &game.ResetGameInput{
-		GameID:  existingGame.Game.ID,
-		Archive: true,
-	})
-	if err != nil {
-		log.Printf("Error resetting game: %v", err)
-		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to reset game: %v", err))
-	}
-
-	// Update the game message
-	b.updateGameMessage(s, channelID, existingGame.Game.ID)
-
-	// Respond with success message
-	return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Successfully archived %d drink records. The leaderboard has been reset.", resetOutput.RecordsAffected))
-}
-
-// handleResetDeleteButton handles the reset delete button click
-func (b *Bot) handleResetDeleteButton(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID string) error {
-	ctx := context.Background()
-
-	// Get the game in this channel
-	existingGame, err := b.gameService.GetGameByChannel(ctx, &game.GetGameByChannelInput{
-		ChannelID: channelID,
-	})
-	if err != nil {
-		log.Printf("Error getting game: %v", err)
-		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Error getting game: %v", err))
-	}
-
-	// Check if the user is the game creator
-	if existingGame.Game.CreatorID != userID {
-		return RespondWithEphemeralMessage(s, i, "Only the game creator can reset the drink tabs.")
-	}
-
-	// Reset the game with archive=false (delete)
-	resetOutput, err := b.gameService.ResetGame(ctx, &game.ResetGameInput{
-		GameID:  existingGame.Game.ID,
-		Archive: false,
-	})
-	if err != nil {
-		log.Printf("Error resetting game: %v", err)
-		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to reset game: %v", err))
-	}
-
-	// Update the game message
-	b.updateGameMessage(s, channelID, existingGame.Game.ID)
-
-	// Respond with success message
-	return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Successfully deleted %d drink records. The leaderboard has been reset.", resetOutput.RecordsAffected))
-}
-
-// handleResetCancelButton handles the reset cancel button click
-func (b *Bot) handleResetCancelButton(s *discordgo.Session, i *discordgo.InteractionCreate) error {
-	// Just acknowledge the interaction and update the message
-	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseUpdateMessage,
-		Data: &discordgo.InteractionResponseData{
-			Content:    "Reset operation cancelled.",
-			Components: []discordgo.MessageComponent{},
-		},
-	})
 }

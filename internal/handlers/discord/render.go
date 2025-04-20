@@ -78,11 +78,11 @@ func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate
 	}
 
 	rollResultOutput, err := messagingService.GetRollResultMessage(ctx, &messaging.GetRollResultMessageInput{
-		PlayerName:       output.PlayerName,
-		RollValue:        output.RollValue,
-		IsCriticalHit:    output.IsCriticalHit,
-		IsCriticalFail:   output.RollValue == 1, // Assuming 1 is critical fail
-		IsPersonalMessage: true, // This is an ephemeral message to the player
+		PlayerName:        output.PlayerName,
+		RollValue:         output.RollValue,
+		IsCriticalHit:     output.IsCriticalHit,
+		IsCriticalFail:    output.RollValue == 1, // Assuming 1 is critical fail
+		IsPersonalMessage: true,                  // This is an ephemeral message to the player
 	})
 
 	// Get a supportive whisper message from Ronnie
@@ -126,7 +126,7 @@ func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate
 			Description: rollWhisperOutput.Message,
 			Color:       0x95a5a6, // Gray color for whispers
 			Footer: &discordgo.MessageEmbedFooter{
-				Text: "Just between us...",
+				Text:    "Just between us...",
 				IconURL: "https://cdn.discordapp.com/emojis/839903382661799966.png", // Optional: Add a whisper emoji
 			},
 		}
@@ -223,11 +223,11 @@ func renderRollDiceResponseEdit(s *discordgo.Session, i *discordgo.InteractionCr
 	}
 
 	rollResultOutput, err := messagingService.GetRollResultMessage(ctx, &messaging.GetRollResultMessageInput{
-		PlayerName:       output.PlayerName,
-		RollValue:        output.RollValue,
-		IsCriticalHit:    output.IsCriticalHit,
-		IsCriticalFail:   output.RollValue == 1, // Assuming 1 is critical fail
-		IsPersonalMessage: true, // This is an ephemeral message to the player
+		PlayerName:        output.PlayerName,
+		RollValue:         output.RollValue,
+		IsCriticalHit:     output.IsCriticalHit,
+		IsCriticalFail:    output.RollValue == 1, // Assuming 1 is critical fail
+		IsPersonalMessage: true,                  // This is an ephemeral message to the player
 	})
 
 	// Get a supportive whisper message from Ronnie
@@ -271,7 +271,7 @@ func renderRollDiceResponseEdit(s *discordgo.Session, i *discordgo.InteractionCr
 			Description: rollWhisperOutput.Message,
 			Color:       0x95a5a6, // Gray color for whispers
 			Footer: &discordgo.MessageEmbedFooter{
-				Text: "Just between us...",
+				Text:    "Just between us...",
 				IconURL: "https://cdn.discordapp.com/emojis/839903382661799966.png", // Optional: Add a whisper emoji
 			},
 		}
@@ -387,44 +387,44 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 					// Add emoji indicators for critical hits and fails
 					if participant.RollValue == 6 { // Assuming 6 is critical hit
 						rollInfo += " 🎯 Critical Hit!"
-						
+
 						// Get a funny message for this roll
 						rollMsgOutput, err := b.messagingService.GetRollResultMessage(ctx, &messaging.GetRollResultMessageInput{
-							PlayerName:     participant.PlayerName,
-							RollValue:      participant.RollValue,
-							IsCriticalHit:  true,
-							IsCriticalFail: false,
+							PlayerName:        participant.PlayerName,
+							RollValue:         participant.RollValue,
+							IsCriticalHit:     true,
+							IsCriticalFail:    false,
 							IsPersonalMessage: false, // This is for the group message
 						})
-						
+
 						if err == nil {
 							rollInfo += fmt.Sprintf("\n> *%s*", rollMsgOutput.Message)
 						}
 					} else if participant.RollValue == 1 { // Assuming 1 is critical fail
 						rollInfo += " 💀 Critical Fail!"
-						
+
 						// Get a funny message for this roll
 						rollMsgOutput, err := b.messagingService.GetRollResultMessage(ctx, &messaging.GetRollResultMessageInput{
-							PlayerName:     participant.PlayerName,
-							RollValue:      participant.RollValue,
-							IsCriticalHit:  false,
-							IsCriticalFail: true,
+							PlayerName:        participant.PlayerName,
+							RollValue:         participant.RollValue,
+							IsCriticalHit:     false,
+							IsCriticalFail:    true,
 							IsPersonalMessage: false, // This is for the group message
 						})
-						
+
 						if err == nil {
 							rollInfo += fmt.Sprintf("\n> *%s*", rollMsgOutput.Message)
 						}
 					} else {
 						// Get a funny message for normal rolls too
 						rollMsgOutput, err := b.messagingService.GetRollResultMessage(ctx, &messaging.GetRollResultMessageInput{
-							PlayerName:     participant.PlayerName,
-							RollValue:      participant.RollValue,
-							IsCriticalHit:  false,
-							IsCriticalFail: false,
+							PlayerName:        participant.PlayerName,
+							RollValue:         participant.RollValue,
+							IsCriticalHit:     false,
+							IsCriticalFail:    false,
 							IsPersonalMessage: false, // This is for the group message
 						})
-						
+
 						if err == nil {
 							rollInfo += fmt.Sprintf("\n> *%s*", rollMsgOutput.Message)
 						}
@@ -600,7 +600,7 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 					}
 
 					drinkTotals += fmt.Sprintf("%s **%s**: %d drink(s)\n", prefix, entry.PlayerName, entry.DrinkCount)
-					
+
 					// Get a funny message for this leaderboard entry
 					leaderboardMsgOutput, err := b.messagingService.GetLeaderboardMessage(ctx, &messaging.GetLeaderboardMessageInput{
 						PlayerName:   entry.PlayerName,
@@ -608,7 +608,7 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 						Rank:         i,
 						TotalPlayers: len(leaderboardEntries),
 					})
-					
+
 					if err == nil {
 						drinkTotals += fmt.Sprintf("> *%s*\n", leaderboardMsgOutput.Message)
 					}

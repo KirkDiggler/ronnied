@@ -49,12 +49,17 @@ func NewRonniedCommand(gameService game.Service) *RonniedCommand {
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "leaderboard",
-					Description: "Show the current leaderboard",
+					Description: "Show the current game leaderboard",
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
-					Name:        "reset",
-					Description: "Reset the drink tabs for the current game",
+					Name:        "sessionboard",
+					Description: "Show the session leaderboard (drinks across all games)",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "newsession",
+					Description: "Start a new drinking session (resets the session leaderboard)",
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
@@ -99,8 +104,10 @@ func (c *RonniedCommand) Handle(s *discordgo.Session, i *discordgo.InteractionCr
 		return c.handleRoll(s, i, channelID, userID)
 	case "leaderboard":
 		return c.handleLeaderboard(s, i, channelID)
-	case "reset":
-		return c.handleReset(s, i, channelID, userID)
+	case "sessionboard":
+		return c.handleSessionboard(s, i, channelID)
+	case "newsession":
+		return c.handleNewSession(s, i, channelID)
 	case "abandon":
 		return c.handleAbandon(s, i, channelID, userID)
 	default:
@@ -334,7 +341,7 @@ func (c *RonniedCommand) handleBegin(s *discordgo.Session, i *discordgo.Interact
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: "Game Started! Click the button below to roll your dice.",
-			Flags: discordgo.MessageFlagsEphemeral,
+			Flags:   discordgo.MessageFlagsEphemeral,
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
 					Components: []discordgo.MessageComponent{rollButton},
@@ -372,9 +379,9 @@ func (c *RonniedCommand) handleBegin(s *discordgo.Session, i *discordgo.Interact
 				Fields:      fields,
 			},
 		}
-		
+
 		components := []discordgo.MessageComponent{}
-		
+
 		_, err = s.ChannelMessageEditComplex(&discordgo.MessageEdit{
 			Channel:    channelID,
 			ID:         existingGame.Game.MessageID,
@@ -512,79 +519,48 @@ func (c *RonniedCommand) handleLeaderboard(s *discordgo.Session, i *discordgo.In
 	return RespondWithEmbed(s, i, "Leaderboard", description.String(), nil)
 }
 
-// handleReset handles the reset subcommand
-func (c *RonniedCommand) handleReset(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID string) error {
+// handleSessionboard handles the sessionboard subcommand
+func (c *RonniedCommand) handleSessionboard(s *discordgo.Session, i *discordgo.InteractionCreate, channelID string) error {
 	ctx := context.Background()
 
-	// Get the game in this channel
-	existingGame, err := c.gameService.GetGameByChannel(ctx, &game.GetGameByChannelInput{
+	// Get the session leaderboard
+	sessionboard, err := c.gameService.GetSessionLeaderboard(ctx, &game.GetSessionLeaderboardInput{
 		ChannelID: channelID,
 	})
-
-	// Handle errors or missing game
 	if err != nil {
-		if errors.Is(err, game.ErrGameNotFound) {
-			return RespondWithError(s, i, "No game found in this channel. Use `/ronnied start` to create a new game.")
+		log.Printf("Error getting session leaderboard: %v", err)
+		return RespondWithError(s, i, fmt.Sprintf("Failed to get session leaderboard: %v", err))
+	}
+
+	// Build the session leaderboard description
+	var description strings.Builder
+	if len(sessionboard.Entries) == 0 {
+		description.WriteString("No drinks have been assigned yet.")
+	} else {
+		for _, entry := range sessionboard.Entries {
+			description.WriteString(fmt.Sprintf("**%s**: %d drinks\n", entry.PlayerName, entry.DrinkCount))
 		}
-		log.Printf("Error getting game: %v", err)
-		return RespondWithError(s, i, fmt.Sprintf("Error getting game: %v", err))
 	}
 
-	// Check if the user is the game creator or an admin
-	isCreator := existingGame.Game.CreatorID == userID
-	if !isCreator {
-		return RespondWithError(s, i, "Only the game creator can reset the drink tabs.")
-	}
+	// Respond with the session leaderboard
+	return RespondWithEmbed(s, i, "Session Leaderboard", description.String(), nil)
+}
 
-	// Create a message asking for confirmation with buttons
-	confirmMessage := "Are you sure you want to reset all drink tabs for this game? This action cannot be undone."
-	
-	// Create buttons for confirmation
-	archiveButton := discordgo.Button{
-		Label:    "Archive Records",
-		Style:    discordgo.SuccessButton,
-		CustomID: "reset_archive",
-		Emoji: &discordgo.ComponentEmoji{
-			Name: "📁",
-		},
-	}
-	
-	deleteButton := discordgo.Button{
-		Label:    "Delete Records",
-		Style:    discordgo.DangerButton,
-		CustomID: "reset_delete",
-		Emoji: &discordgo.ComponentEmoji{
-			Name: "🗑️",
-		},
-	}
-	
-	cancelButton := discordgo.Button{
-		Label:    "Cancel",
-		Style:    discordgo.SecondaryButton,
-		CustomID: "reset_cancel",
-		Emoji: &discordgo.ComponentEmoji{
-			Name: "❌",
-		},
-	}
-	
-	// Create action row with buttons
-	actionRow := discordgo.ActionsRow{
-		Components: []discordgo.MessageComponent{
-			archiveButton,
-			deleteButton,
-			cancelButton,
-		},
-	}
-	
-	// Send the confirmation message with buttons
-	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content:    confirmMessage,
-			Components: []discordgo.MessageComponent{actionRow},
-			Flags:      discordgo.MessageFlagsEphemeral, // Make it ephemeral so only the user sees it
-		},
+// handleNewSession handles the newsession subcommand
+func (c *RonniedCommand) handleNewSession(s *discordgo.Session, i *discordgo.InteractionCreate, channelID string) error {
+	ctx := context.Background()
+
+	// Start a new session
+	_, err := c.gameService.StartNewSession(ctx, &game.StartNewSessionInput{
+		ChannelID: channelID,
 	})
+	if err != nil {
+		log.Printf("Error starting new session: %v", err)
+		return RespondWithError(s, i, fmt.Sprintf("Failed to start new session: %v", err))
+	}
+
+	// Respond with success message
+	return RespondWithMessage(s, i, "New session started successfully.")
 }
 
 // handleAbandon handles the abandon subcommand
