@@ -96,6 +96,11 @@ func (s *service) GetJoinGameMessage(ctx context.Context, input *GetJoinGameMess
 			"Fresh meat! Er, I mean... welcome to the game!",
 			"A new challenger appears! Get ready to roll those dice.",
 			"Look who decided to join! The dice gods await your tribute.",
+			"Do you want drunk people? Because that's how you get drunk people!",
+			"Welcome to the DANGER ZONE! Grab a drink and prepare to roll.",
+			"Holy shitsnacks! A new player has joined the game!",
+			"Phrasing! But seriously, welcome to the game.",
+			"Just the tip... of the iceberg of fun you're about to have!",
 		}
 	}
 
@@ -178,7 +183,6 @@ func (s *service) GetGameStatusMessage(ctx context.Context, input *GetGameStatus
 			"Gather 'round, brave souls! The dice await your courage (and your liver).",
 			"A new drinking game is forming. Join now or forever hold your sobriety!",
 			"Looking for players who can roll dice better than they can hold their liquor.",
-			fmt.Sprintf("We've got %d player(s) so far. The more the merrier (and drunker)!", input.ParticipantCount),
 			"Game night is loading... Please wait while we prepare the regrets for tomorrow morning.",
 		}
 	case models.GameStatusActive:
@@ -245,6 +249,8 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				"Nat 6!",
 				"Perfect Roll!",
 				"MAXIMUM DAMAGE!",
+				"DANGER ZONE!",
+				"PHRASING!",
 			}
 
 			messages := []string{
@@ -253,6 +259,11 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				"You're on fire! This means someone's about to get thirsty!",
 				"The dice gods favor you today! That's a 6! Choose your victim!",
 				"CRIT! You have the power to make someone drink!",
+				"WOOOO! That's how you get ants! And by ants, I mean drinks for someone else!",
+				"Holy shitsnacks! You rolled a 6! Time to make someone drink!",
+				"Sploosh! That's a 6! You get to choose who drinks!",
+				"Do you want drunk people? Because that's how you get drunk people!",
+				"Lana. Lana. LANA! LANAAAA! You rolled a 6!",
 			}
 
 			title = titles[rand.Intn(len(titles))]
@@ -264,6 +275,8 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				"Nat 6!",
 				"Perfect Roll!",
 				"MAXIMUM DAMAGE!",
+				"DANGER ZONE!",
+				"PHRASING!",
 			}
 
 			messages := []string{
@@ -279,6 +292,12 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				fmt.Sprintf("The chosen one! %s now wields the power of drink assignment!", input.PlayerName),
 				fmt.Sprintf("Against all odds, %s somehow managed to roll a 6! Must be their birthday!", input.PlayerName),
 				fmt.Sprintf("%s's 6 is the universe's way of saying someone needs to drink more!", input.PlayerName),
+				fmt.Sprintf("%s just entered the DANGER ZONE with that 6! Time to assign a drink!", input.PlayerName),
+				fmt.Sprintf("Holy shitsnacks! %s rolled a 6! Someone's about to get wasted!", input.PlayerName),
+				fmt.Sprintf("Do you want drunk people? Because that's how %s gets drunk people! With a 6!", input.PlayerName),
+				fmt.Sprintf("%s rolled a 6! Just the tip... of greatness!", input.PlayerName),
+				fmt.Sprintf("Sploosh! %s rolled a 6 and gets to make someone drink!", input.PlayerName),
+				fmt.Sprintf("%s: 'I swear I had something for this...' *rolls a 6*", input.PlayerName),
 			}
 
 			title = titles[rand.Intn(len(titles))]
@@ -295,6 +314,8 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				"MINIMUM DAMAGE!",
 				"Better luck next time!",
 				"I didn't see it, was it a good roll?",
+				"DANGER ZONE!",
+				"PHRASING!",
 			}
 
 			messages := []string{
@@ -303,6 +324,11 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				"You angered the dice gods with that 1! Drink up, friend!",
 				"Ronnie has spoken! You rolled a 1 and must take a drink!",
 				"CRITICAL FAIL! You rolled a 1 and have to drink!",
+				"Wow, that's... just... wow. You rolled a 1. Drink until you forget that happened.",
+				"That's what I call a 'Pam-level' roll. A 1! Drink up!",
+				"You rolled a 1! Do you want to get ants? Because that's how you get ants.",
+				"That's a 1! I had something for this... something about drinking?",
+				"Nooope! You rolled a 1. Time to drink away the shame.",
 			}
 
 			title = titles[rand.Intn(len(titles))]
@@ -315,6 +341,8 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				"MINIMUM DAMAGE!",
 				"Better luck next time!",
 				":trumpet: Sad Trumpet :(",
+				"DANGER ZONE!",
+				"PHRASING!",
 			}
 
 			messages := []string{
@@ -330,6 +358,12 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				fmt.Sprintf("The universe has spoken: %s rolled a 1 and needs alcohol to cope with it!", input.PlayerName),
 				fmt.Sprintf("Even the dice are laughing at %s's pathetic 1! Drink up, buddy!", input.PlayerName),
 				fmt.Sprintf("%s just proved they can't even roll dice properly with that 1! Drink to forget!", input.PlayerName),
+				fmt.Sprintf("Wow, that's... just... wow. %s rolled a 1. Drink until you forget that happened.", input.PlayerName),
+				fmt.Sprintf("%s rolled a 1! Guess they'll be entering the DANGER ZONE of drunkenness soon!", input.PlayerName),
+				fmt.Sprintf("Holy shitsnacks! %s rolled a 1! That's like, the worst possible outcome!", input.PlayerName),
+				fmt.Sprintf("%s: 'Wait, I had something for this...' *rolls a 1* 'Dammit!'", input.PlayerName),
+				fmt.Sprintf("That's what I call a 'Pam-level' roll from %s. A 1! Drink up!", input.PlayerName),
+				fmt.Sprintf("%s rolled a 1! Do you want to get drunk? Because that's how you get drunk.", input.PlayerName),
 			}
 
 			title = titles[rand.Intn(len(titles))]
@@ -345,6 +379,8 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				fmt.Sprintf("%d Points!", input.RollValue),
 				fmt.Sprintf("Roll: %d", input.RollValue),
 				fmt.Sprintf("The dice shows %d", input.RollValue),
+				"Meh.",
+				"Just the tip... of the dice.",
 			}
 
 			messages := []string{
@@ -353,6 +389,11 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				fmt.Sprintf("Your roll: %d - Keep trying!", input.RollValue),
 				fmt.Sprintf("A solid %d! That works for you in your income bracket", input.RollValue),
 				fmt.Sprintf("You rolled %d. The game continues!", input.RollValue),
+				fmt.Sprintf("You rolled a %d. Are we not doing 'phrasing' anymore?", input.RollValue),
+				fmt.Sprintf("A %d? I swear I had something for this...", input.RollValue),
+				fmt.Sprintf("You rolled a %d. That's what we call a 'Cyril-level' performance.", input.RollValue),
+				fmt.Sprintf("A %d. Not great, not terrible. Like a sad handjob.", input.RollValue),
+				fmt.Sprintf("You rolled a %d. Meh, I've seen better. I've seen worse, but I've definitely seen better.", input.RollValue),
 			}
 
 			title = titles[rand.Intn(len(titles))]
@@ -364,6 +405,8 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				fmt.Sprintf("%d Points!", input.RollValue),
 				fmt.Sprintf("Roll: %d", input.RollValue),
 				fmt.Sprintf("The dice shows %d", input.RollValue),
+				"Meh.",
+				"Just the tip... of the dice.",
 			}
 
 			messages := []string{
@@ -382,6 +425,11 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				fmt.Sprintf("%s rolled a %d. Let's all pretend to be impressed.", input.PlayerName, input.RollValue),
 				fmt.Sprintf("The dice gave %s a %d. The dice never lie about a person's true worth.", input.PlayerName, input.RollValue),
 				fmt.Sprintf("%s's %d is about as impressive as their choice of clothes tonight.", input.PlayerName, input.RollValue),
+				fmt.Sprintf("%s rolled a %d. Are we not doing 'phrasing' anymore?", input.PlayerName, input.RollValue),
+				fmt.Sprintf("%s: 'I swear I had something for this...' *rolls a %d*", input.PlayerName, input.RollValue),
+				fmt.Sprintf("A %d from %s. Not great, not terrible. Like a sad handjob.", input.RollValue, input.PlayerName),
+				fmt.Sprintf("%s rolled a %d. That's what we call a 'Cyril-level' performance.", input.PlayerName, input.RollValue),
+				fmt.Sprintf("%s got a %d. Meh, I've seen better. I've seen worse, but I've definitely seen better.", input.PlayerName, input.RollValue),
 			}
 
 			title = titles[rand.Intn(len(titles))]
@@ -404,12 +452,10 @@ func (s *service) GetGameStartedMessage(ctx context.Context, input *GetGameStart
 	// Create a variety of fun messages for when a game is started
 	messages := []string{
 		"Game Started! Click the button below to roll your dice.",
-		fmt.Sprintf("The game is ON! %d players are ready to roll. Your turn now!", input.PlayerCount),
 		"Let the dice decide your fate! Roll now!",
 		"Time to test your luck! Click to roll the dice!",
 		"The game has begun! Roll the dice and see what destiny has in store!",
 		"Ready, set, ROLL! Click the button to throw your dice!",
-		fmt.Sprintf("Game's on! You and %d other brave souls are about to tempt fate!", input.PlayerCount-1),
 		"May the odds be ever in your favor! Roll your dice!",
 		"It's dice time! Click to roll and see if luck is on your side today!",
 		"Game started! Will you roll a critical hit or a critical fail? Find out now!",
@@ -531,6 +577,11 @@ func (s *service) GetRollWhisperMessage(ctx context.Context, input *GetRollWhisp
 			fmt.Sprintf("Don't tell anyone, but that's the best roll I've seen all day, %s!", input.PlayerName),
 			fmt.Sprintf("*quietly* %s, you're my favorite player. That 6 was destiny!", input.PlayerName),
 			fmt.Sprintf("Just between us, %s, I might have nudged that dice a little for you. Our secret!", input.PlayerName),
+			fmt.Sprintf("*whispers* Welcome to the DANGER ZONE, %s! That 6 is your ticket to power!", input.PlayerName),
+			fmt.Sprintf("Hey %s, do you want drunk people? Because that's how you get drunk people! Nice 6!", input.PlayerName),
+			fmt.Sprintf("*quietly* Sploosh! That 6 was amazing, %s. Now make someone pay!", input.PlayerName),
+			fmt.Sprintf("Between us, %s, I'm pretty sure that roll just got you a seat on the highway to the DANGER ZONE!", input.PlayerName),
+			fmt.Sprintf("*whispers* That's how you roll dice, %s! Other Barry would be proud.", input.PlayerName),
 		}
 
 	case input.IsCriticalFail:
@@ -541,6 +592,11 @@ func (s *service) GetRollWhisperMessage(ctx context.Context, input *GetRollWhisp
 			fmt.Sprintf("*quietly* %s, that drink might help you forget that terrible roll!", input.PlayerName),
 			fmt.Sprintf("Don't let the others see you sweat, %s. Act like you meant to roll that 1!", input.PlayerName),
 			fmt.Sprintf("Hey %s, at least you're consistent! Consistently unlucky, but still...", input.PlayerName),
+			fmt.Sprintf("*whispers* Holy shitsnacks, %s! That was... not great. Drink to forget!", input.PlayerName),
+			fmt.Sprintf("Between us, %s, that roll was what I call a classic Cyril. Total failure.", input.PlayerName),
+			fmt.Sprintf("*quietly* %s, you just entered a whole new DANGER ZONE of failure with that 1!", input.PlayerName),
+			fmt.Sprintf("Phrasing! But seriously %s, that 1 was pretty bad. Have a drink, you need it.", input.PlayerName),
+			fmt.Sprintf("*whispers* %s, I'd say that roll was disappointing, but that would imply I expected more from you.", input.PlayerName),
 		}
 
 	default:
@@ -553,6 +609,11 @@ func (s *service) GetRollWhisperMessage(ctx context.Context, input *GetRollWhisp
 				fmt.Sprintf("*quietly* %s, I've seen you roll worse. This is practically a win!", input.PlayerName),
 				fmt.Sprintf("Hey %s, at least it wasn't a 1! Small victories, right?", input.PlayerName),
 				fmt.Sprintf("Don't tell anyone, but I think the dice are warming up to you, %s!", input.PlayerName),
+				fmt.Sprintf("*whispers* %s, that roll was like a sad handjob. Technically does the job, but nobody's excited about it.", input.PlayerName),
+				fmt.Sprintf("Between us, %s, that %d is what we call a 'Pam after five drinks' level of performance.", input.PlayerName, input.RollValue),
+				fmt.Sprintf("*quietly* %s, I had something for this... something about mediocrity?", input.PlayerName),
+				fmt.Sprintf("Do you want to be average? Because that's how you get average, %s.", input.PlayerName),
+				fmt.Sprintf("*whispers* Just the tip... of mediocrity with that %d, %s.", input.RollValue, input.PlayerName),
 			}
 		} else {
 			// Higher normal rolls
@@ -562,6 +623,11 @@ func (s *service) GetRollWhisperMessage(ctx context.Context, input *GetRollWhisp
 				fmt.Sprintf("*quietly* %s, you're getting better at this! Keep it up!", input.PlayerName),
 				fmt.Sprintf("Hey %s, with rolls like that, you might just survive this game!", input.PlayerName),
 				fmt.Sprintf("Don't tell the others, but I'm rooting for you, %s! That was a good one!", input.PlayerName),
+				fmt.Sprintf("*whispers* %s, that's what I call a solid roll. Not quite the DANGER ZONE, but close!", input.PlayerName),
+				fmt.Sprintf("Between us, %s, that %d is like Woodhouse - reliable but not exciting.", input.PlayerName, input.RollValue),
+				fmt.Sprintf("*quietly* %s, you're entering the... zone of... adequate rolling? I had something for this.", input.PlayerName),
+				fmt.Sprintf("Sploosh! Well, more like a splash. Nice %d, %s.", input.RollValue, input.PlayerName),
+				fmt.Sprintf("*whispers* %s, that roll was like a turtle neck - tactically solid but not flashy.", input.PlayerName),
 			}
 		}
 	}
@@ -651,6 +717,9 @@ func (s *service) GetPayDrinkMessage(ctx context.Context, input *GetPayDrinkMess
 		"Drink Settled!",
 		"Cheers to That!",
 		"Bottoms Up!",
+		"DANGER ZONE!",
+		"Phrasing!",
+		"Sploosh!",
 	}
 
 	// Fun messages for paying drinks
@@ -665,6 +734,14 @@ func (s *service) GetPayDrinkMessage(ctx context.Context, input *GetPayDrinkMess
 		fmt.Sprintf("A moment of silence as %s downs their drink... and it's gone! 💨", input.PlayerName),
 		fmt.Sprintf("%s proves they're a player of honor by paying their drink debt! 🎖️", input.PlayerName),
 		fmt.Sprintf("The drinking gods are pleased with %s's sacrifice! 🔱", input.PlayerName),
+		fmt.Sprintf("%s enters the DANGER ZONE of drunkenness! 🚨", input.PlayerName),
+		fmt.Sprintf("%s: \"I swear I had something for this...\" *chugs drink* 🍺", input.PlayerName),
+		fmt.Sprintf("Holy shitsnacks! %s actually paid their drink! 🎉", input.PlayerName),
+		fmt.Sprintf("%s drinks like a champion! Just the tip... of the glass! 🥃", input.PlayerName),
+		fmt.Sprintf("Sploosh! %s downs that drink like a pro! 💦", input.PlayerName),
+		fmt.Sprintf("%s drinks like Pam on a Tuesday morning! Impressive! 🏆", input.PlayerName),
+		fmt.Sprintf("Do you want hangovers? Because that's how %s gets hangovers! 🤢", input.PlayerName),
+		fmt.Sprintf("%s: \"Lana. Lana. LANA! LANAAAA!\" *drinks* \"...Danger Zone.\" 🥴", input.PlayerName),
 	}
 
 	// Select random title and message
