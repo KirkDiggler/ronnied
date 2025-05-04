@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/rand"
 	"sort"
+	"time"
 
 	"github.com/KirkDiggler/ronnied/internal/models"
 	"github.com/KirkDiggler/ronnied/internal/services/game"
@@ -554,6 +556,9 @@ func renderGameMessage(s *discordgo.Session, game *models.Game, leaderboard *gam
 }
 
 func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkLedger, leaderboardEntries []game.LeaderboardEntry, sessionLeaderboardEntries []game.LeaderboardEntry, rollOffGame *models.Game, parentGame *models.Game) (*discordgo.MessageEdit, error) {
+	// Initialize random number generator for selecting random comments
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	
 	// Create the embed with a more dynamic title based on game status
 	embed := &discordgo.MessageEmbed{
 		Title: getGameTitle(game),
@@ -678,21 +683,45 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 			rollInfo = " (🎲 Not rolled yet)"
 		}
 		
-		// Add a fun comment based on roll value
+		// Add a fun comment based on roll value - these appear in the shared message
 		var rollComment string
 		if p.RollValue == 6 {
-			rollComment = "\n  *\"Feeling powerful today!\"*"
+			// Archer-inspired comments for critical hits
+			archerComments := []string{
+				"\n    *\"Feeling powerful today!\"*",
+				"\n    *\"DANGER ZONE!\"*",
+				"\n    *\"Sploosh!\"*",
+				"\n    *\"Do you want drunk people? Because that's how you get drunk people!\"*",
+				"\n    *\"Just the tip... of greatness!\"*",
+			}
+			rollComment = archerComments[r.Intn(len(archerComments))]
 		} else if p.RollValue == 1 {
-			rollComment = "\n  *\"Ouch, better luck next time!\"*"
+			// Archer-inspired comments for critical fails
+			archerComments := []string{
+				"\n    *\"Ouch, better luck next time!\"*",
+				"\n    *\"That's how you get ants.\"*",
+				"\n    *\"Phrasing! Wait, that doesn't work here.\"*",
+				"\n    *\"I swear I had something for this...\"*",
+				"\n    *\"Classic Cyril move.\"*",
+			}
+			rollComment = archerComments[r.Intn(len(archerComments))]
 		} else if p.RollValue == 5 {
-			rollComment = "\n  *\"So close to greatness!\"*"
+			// Comments for high rolls
+			archerComments := []string{
+				"\n    *\"So close to greatness!\"*",
+				"\n    *\"Almost entered the danger zone!\"*",
+				"\n    *\"Not quite a sploosh, but close!\"*",
+			}
+			rollComment = archerComments[r.Intn(len(archerComments))]
 		} else if p.RollValue > 0 {
-			rollComment = "" // No comment for average rolls
+			// No comment for average rolls
+			rollComment = ""
 		}
 		
-		participantList += fmt.Sprintf("• **%s**%s%s\n", p.PlayerName, rollInfo, rollComment)
+		// Add spacing between participants
+		participantList += fmt.Sprintf("• **%s**%s%s\n\n", p.PlayerName, rollInfo, rollComment)
 	}
-
+	
 	if participantList != "" {
 		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
 			Name:  "👥 Participants & Rolls",
@@ -752,10 +781,10 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 				// Create mini progress bar for each player
 				playerProgress := createMiniProgressBar(entry.PaidCount, entry.DrinkCount)
 				
-				leaderboardText += fmt.Sprintf("%s**%s**: %d paid, %d owed %s\n%s\n", 
+				leaderboardText += fmt.Sprintf("%s**%s**: %d paid, %d owed %s\n%s\n\n", 
 					rankEmoji, entry.PlayerName, entry.PaidCount, remaining, statusEmoji, playerProgress)
 			} else {
-				leaderboardText += fmt.Sprintf("%s**%s**: No drinks owed %s\n", rankEmoji, entry.PlayerName, statusEmoji)
+				leaderboardText += fmt.Sprintf("%s**%s**: No drinks owed %s\n\n", rankEmoji, entry.PlayerName, statusEmoji)
 			}
 		}
 
