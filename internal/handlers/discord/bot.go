@@ -354,9 +354,9 @@ func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.Interacti
 	// If the game was force-started, add a metadata field to the game
 	if startOutput.ForceStarted && startOutput.CreatorName != "" {
 		// Create a special message for the shared game message
-		forceStartMsg := fmt.Sprintf("⚠️ Game force-started by %s! %s took too long to start the game and has been assigned a drink.", 
+		forceStartMsg := fmt.Sprintf("⚠️ Game force-started by %s! %s took too long to start the game and has been assigned a drink.",
 			s.State.User.Username, startOutput.CreatorName)
-		
+
 		// Update the game message with the force-start information
 		b.updateGameMessageWithForceStart(s, channelID, existingGame.Game.ID, forceStartMsg)
 	} else {
@@ -382,7 +382,7 @@ func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.Interacti
 
 	// Default message if the messaging service fails
 	gameStartedMessage := "Game Started! Click the button below to roll your dice."
-	
+
 	// If the game was force-started, add information about the original creator
 	if startOutput.ForceStarted && startOutput.CreatorName != "" {
 		gameStartedMessage = fmt.Sprintf("Game force-started! %s took too long to start the game and has been assigned a drink. Click the button below to roll your dice.", startOutput.CreatorName)
@@ -442,40 +442,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		return err
 	}
 
-	// Check if there's an active roll-off game for this player
-	rollOffGame, rollOffErr := b.gameService.FindActiveRollOffGame(ctx, userID, existingGame.Game.ID)
-	if rollOffErr == nil && rollOffGame != nil {
-		// Player should be rolling in the roll-off game instead
-		log.Printf("Player %s should be rolling in roll-off game %s instead of main game %s", 
-			userID, rollOffGame.ID, existingGame.Game.ID)
-		
-		// Roll the dice in the roll-off game
-		rollOutput, err := b.gameService.RollDice(ctx, &game.RollDiceInput{
-			GameID:   rollOffGame.ID,
-			PlayerID: userID,
-		})
-		
-		if err != nil {
-			_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-				Content: fmt.Sprintf("Failed to roll in roll-off game: %v", err),
-				Flags:   discordgo.MessageFlagsEphemeral,
-			})
-			return err
-		}
-		
-		// Update both the roll-off game message and the main game message
-		b.updateGameMessage(s, channelID, rollOffGame.ID)
-		b.updateGameMessage(s, channelID, existingGame.Game.ID)
-		
-		// Create a response for the player
-		_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-			Content: fmt.Sprintf("⚔️ **ROLL-OFF ROLL!** You rolled a **%d** in the tie-breaker! Check the game message to see if you won the roll-off.", rollOutput.RollValue),
-			Flags:   discordgo.MessageFlagsEphemeral,
-		})
-		return err
-	}
-
-	// Roll the dice in the main game
+	// Roll the dice - the service will handle all the logic
 	rollOutput, err := b.gameService.RollDice(ctx, &game.RollDiceInput{
 		GameID:   existingGame.Game.ID,
 		PlayerID: userID,
@@ -483,23 +450,6 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 
 	// Handle errors
 	if err != nil {
-		// Check if we need to redirect to a roll-off game
-		if errors.Is(err, game.ErrPlayerNotInGame) || errors.Is(err, game.ErrPlayerAlreadyRolled) || errors.Is(err, game.ErrInvalidGameState) {
-			// Check again for an active roll-off game (in case one was created between our earlier check and now)
-			rollOffGame, rollOffErr := b.gameService.FindActiveRollOffGame(ctx, userID, existingGame.Game.ID)
-			if rollOffErr == nil && rollOffGame != nil {
-				// Player should be rolling in a roll-off game
-				_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-					Content: "You need to roll in a roll-off game! Use the Roll button on the game message to continue.",
-					Flags:   discordgo.MessageFlagsEphemeral,
-				})
-				
-				// Update the game message to make the roll-off more visible
-				b.updateGameMessage(s, channelID, existingGame.Game.ID)
-				return err
-			}
-		}
-
 		// Map the error to an error type for the messaging service
 		var errorType string
 		switch err {
@@ -516,6 +466,16 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 				Content: "You are not part of this game.",
 				Flags:   discordgo.MessageFlagsEphemeral,
 			})
+			return err
+		case game.ErrPlayerInRollOff:
+			// The player needs to roll in a roll-off game
+			_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+				Content: "You need to roll in a roll-off game! Use the Roll button on the game message to continue.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			})
+
+			// Update the game message to make the roll-off more visible
+			b.updateGameMessage(s, channelID, existingGame.Game.ID)
 			return err
 		default:
 			// For any other error, just return the error message
@@ -545,16 +505,21 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		return err
 	}
 
-	// Update the game message in the channel
-	b.updateGameMessage(s, channelID, existingGame.Game.ID)
-
-	// Check if the player should be redirected to a roll-off game
-	if rollOutput.ActiveRollOffGameID != "" {
+	// If the player needs to roll in a roll-off game instead
+	if rollOutput.NeedsToRollInRollOff {
 		_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-			Content: "⚔️ **ROLL-OFF REQUIRED!** You need to roll again to break the tie. Use the Roll button to continue.",
+			Content: "You need to roll in a roll-off game! Use the Roll button on the game message to continue.",
 			Flags:   discordgo.MessageFlagsEphemeral,
 		})
+
+		// Update the game message to make the roll-off more visible
+		b.updateGameMessage(s, channelID, existingGame.Game.ID)
 		return err
+	}
+
+	// Update all game messages that need updating
+	for _, gameID := range rollOutput.GameIDsToUpdate {
+		b.updateGameMessage(s, channelID, gameID)
 	}
 
 	// Determine color based on roll result
@@ -613,7 +578,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 	}
 
 	// Add the whisper message as a second embed if available
-	if whisperErr == nil {
+	if whisperErr == nil && rollWhisperOutput.Message != "" {
 		whisperEmbed := &discordgo.MessageEmbed{
 			Title:       "Ronnie whispers...",
 			Description: rollWhisperOutput.Message,

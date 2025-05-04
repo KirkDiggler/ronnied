@@ -381,6 +381,22 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		return nil, fmt.Errorf("failed to get game: %w", err)
 	}
 
+	// Check if this is a main game and if the player should be in a roll-off instead
+	if game.Status != models.GameStatusRollOff {
+		rollOffGame, err := s.FindActiveRollOffGame(ctx, input.PlayerID, input.GameID)
+		if err == nil && rollOffGame != nil {
+			// Player should be rolling in the roll-off game
+			return &RollDiceOutput{
+				PlayerID: input.PlayerID,
+				NeedsToRollInRollOff: true,
+				RollOffGameID: rollOffGame.ID,
+				GameIDsToUpdate: []string{input.GameID}, // Update main game to show roll-off status
+				IsRollOffRoll: true,
+				ParentGameID: rollOffGame.ParentGameID,
+			}, nil
+		}
+	}
+
 	// If this is a roll-off game, check if there's a nested roll-off the player should be in
 	if game.Status == models.GameStatusRollOff && game.ParentGameID != "" {
 		rollOffGame, err := s.FindActiveRollOffGame(ctx, input.PlayerID, input.GameID)
@@ -504,7 +520,6 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 	// Prepare domain result information
 	result := ""
 	details := ""
-	activeRollOffGameID := ""
 	var eligiblePlayers []PlayerOption
 
 	// Get the player name
@@ -558,10 +573,16 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		details = "Your roll has been recorded."
 	}
 
-	// Check if the player should be redirected to a roll-off game
+	// Determine which game IDs need to be updated
+	gameIDsToUpdate := []string{input.GameID}
+	
+	// If this is a roll-off game, also update the parent game
 	if game.Status == models.GameStatusRollOff && game.ParentGameID != "" {
-		activeRollOffGameID = game.ID
+		gameIDsToUpdate = append(gameIDsToUpdate, game.ParentGameID)
 	}
+
+	// Check if this is a roll-off roll
+	isRollOffRoll := game.Status == models.GameStatusRollOff
 
 	return &RollDiceOutput{
 		// Basic roll information
@@ -579,9 +600,15 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		// Domain result information
 		Result:              result,
 		Details:             details,
-		ActiveRollOffGameID: activeRollOffGameID,
+		ActiveRollOffGameID: rollOffGameID,
 		EligiblePlayers:     eligiblePlayers,
 		Game:                game,
+		
+		// Enhanced fields for roll-off handling
+		IsRollOffRoll:       isRollOffRoll,
+		ParentGameID:        game.ParentGameID,
+		NeedsToRollInRollOff: false, // We're already rolling in the right game
+		GameIDsToUpdate:     gameIDsToUpdate,
 	}, nil
 }
 

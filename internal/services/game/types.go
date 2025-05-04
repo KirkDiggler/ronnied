@@ -208,6 +208,20 @@ type RollDiceOutput struct {
 
 	// Game is the current game state
 	Game *models.Game
+
+	// Enhanced fields for roll-off handling
+	
+	// IsRollOffRoll indicates if this roll was in a roll-off game
+	IsRollOffRoll bool
+	
+	// ParentGameID is the ID of the parent game if this is a roll-off
+	ParentGameID string
+	
+	// NeedsToRollInRollOff indicates if the player needs to roll in a roll-off
+	NeedsToRollInRollOff bool
+	
+	// GameIDsToUpdate is a list of game IDs that should be updated after this roll
+	GameIDsToUpdate []string
 }
 
 // AssignDrinkInput contains parameters for assigning a drink
