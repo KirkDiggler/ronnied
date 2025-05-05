@@ -654,24 +654,30 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		})
 	}
 
-	// Always respond with an ephemeral message to the player who rolled
-	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content:    contentText,
-			Embeds:     embeds,
-			Components: messageComponents,
-			Flags:      discordgo.MessageFlagsEphemeral,
-		},
+	// First, send the ephemeral message with the roll result and whisper
+	_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+		Content:    contentText,
+		Embeds:     embeds,
+		Flags:      discordgo.MessageFlagsEphemeral,
 	})
 	if err != nil {
-		log.Printf("Error responding to interaction: %v", err)
+		log.Printf("Error sending ephemeral roll result: %v", err)
+	}
+
+	// Then, update the original interaction with the components for drink assignment
+	// This ensures the dropdown for critical hits works properly
+	_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+		Content:    &contentText,
+		Embeds:     &embeds,
+		Components: &messageComponents,
+	})
+	if err != nil {
+		log.Printf("Error updating interaction response: %v", err)
 		return err
 	}
 
 	// Update the game message in the channel
 	// This is a separate update to the shared message that everyone can see
-	// Note: This might not always happen if there's no game message ID
 	if existingGame.Game.MessageID != "" {
 		b.updateGameMessage(s, channelID, existingGame.Game.ID)
 	} else {
