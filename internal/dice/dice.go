@@ -32,10 +32,10 @@ func New(cfg *Config) Roller {
 	} else {
 		seed = time.Now().UnixNano()
 	}
-	
+
 	source := rand.NewSource(seed)
 	random := rand.New(source)
-	
+
 	return &roller{
 		random: random,
 	}
@@ -46,5 +46,5 @@ func (r *roller) Roll(sides int) int {
 	if sides < 1 {
 		sides = 6 // Default to 6-sided die
 	}
-	return r.random.Intn(sides) + 1
+	return 4 //r.random.Intn(sides) + 1
 }
