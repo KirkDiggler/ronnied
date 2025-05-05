@@ -185,9 +185,48 @@ type GetPayDrinkMessageInput struct {
 
 // GetPayDrinkMessageOutput contains the output for a pay drink message
 type GetPayDrinkMessageOutput struct {
-	// Title is a short title for the message
+	// Title is the title of the message
 	Title string
 	
+	// Message is the body of the message
+	Message string
+}
+
+// GetRollCommentInput contains parameters for getting a roll comment for the shared message
+type GetRollCommentInput struct {
+	// PlayerName is the name of the player who rolled
+	PlayerName string
+	
+	// RollValue is the value of the roll
+	RollValue int
+	
+	// IsCriticalHit indicates if the roll was a critical hit (6)
+	IsCriticalHit bool
+	
+	// IsCriticalFail indicates if the roll was a critical fail (1)
+	IsCriticalFail bool
+}
+
+// GetRollCommentOutput contains the result of getting a roll comment
+type GetRollCommentOutput struct {
+	// Comment is the generated comment
+	Comment string
+}
+
+// GetDrinkAssignmentMessageInput contains parameters for getting a drink assignment message
+type GetDrinkAssignmentMessageInput struct {
+	// FromPlayerName is the name of the player assigning the drink
+	FromPlayerName string
+	
+	// ToPlayerName is the name of the player receiving the drink
+	ToPlayerName string
+	
+	// Reason is why the drink was assigned
+	Reason models.DrinkReason
+}
+
+// GetDrinkAssignmentMessageOutput contains the result of getting a drink assignment message
+type GetDrinkAssignmentMessageOutput struct {
 	// Message is the generated message
 	Message string
 }

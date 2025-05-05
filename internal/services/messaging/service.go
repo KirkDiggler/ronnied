@@ -710,11 +710,13 @@ func (s *service) GetPayDrinkMessage(ctx context.Context, input *GetPayDrinkMess
 		return nil, errors.New("input cannot be nil")
 	}
 
-	// Fun titles for paying drinks
+	var title, message string
+
+	// Archer-themed drink payment messages
 	titles := []string{
-		"Debt Cleared!",
-		"Tab Paid!",
-		"Drink Settled!",
+		"Drink Paid! 🍻",
+		"Tab Cleared! 💸",
+		"Debt Settled! 🥃",
 		"Cheers to That!",
 		"Bottoms Up!",
 		"DANGER ZONE!",
@@ -722,34 +724,140 @@ func (s *service) GetPayDrinkMessage(ctx context.Context, input *GetPayDrinkMess
 		"Sploosh!",
 	}
 
-	// Fun messages for paying drinks
 	messages := []string{
-		fmt.Sprintf("%s chugs with dignity and honor! 🍻", input.PlayerName),
-		fmt.Sprintf("%s takes their medicine like a champ! 💪", input.PlayerName),
-		fmt.Sprintf("%s settles their tab with the drinking gods! 🙏", input.PlayerName),
-		fmt.Sprintf("%s drinks up and lives to roll another day! 🎲", input.PlayerName),
-		fmt.Sprintf("The bartender nods approvingly as %s pays their dues! 🍸", input.PlayerName),
-		fmt.Sprintf("%s raises their glass in a toast to bad luck and good friends! 🥂", input.PlayerName),
-		fmt.Sprintf("%s accepts defeat gracefully and drinks up! 🏳️", input.PlayerName),
-		fmt.Sprintf("A moment of silence as %s downs their drink... and it's gone! 💨", input.PlayerName),
-		fmt.Sprintf("%s proves they're a player of honor by paying their drink debt! 🎖️", input.PlayerName),
-		fmt.Sprintf("The drinking gods are pleased with %s's sacrifice! 🔱", input.PlayerName),
-		fmt.Sprintf("%s enters the DANGER ZONE of drunkenness! 🚨", input.PlayerName),
-		fmt.Sprintf("%s: \"I swear I had something for this...\" *chugs drink* 🍺", input.PlayerName),
-		fmt.Sprintf("Holy shitsnacks! %s actually paid their drink! 🎉", input.PlayerName),
-		fmt.Sprintf("%s drinks like a champion! Just the tip... of the glass! 🥃", input.PlayerName),
-		fmt.Sprintf("Sploosh! %s downs that drink like a pro! 💦", input.PlayerName),
-		fmt.Sprintf("%s drinks like Pam on a Tuesday morning! Impressive! 🏆", input.PlayerName),
-		fmt.Sprintf("Do you want hangovers? Because that's how %s gets hangovers! 🤢", input.PlayerName),
-		fmt.Sprintf("%s: \"Lana. Lana. LANA! LANAAAA!\" *drinks* \"...Danger Zone.\" 🥴", input.PlayerName),
+		fmt.Sprintf("**%s** paid a drink! *\"That's how you avoid getting ants!\"*", input.PlayerName),
+		fmt.Sprintf("**%s** settled their tab! *\"Just the tip... of fiscal responsibility!\"*", input.PlayerName),
+		fmt.Sprintf("**%s** paid up! *\"DANGER ZONE averted!\"*", input.PlayerName),
+		fmt.Sprintf("**%s** paid a drink! *\"Sploosh! That's how you handle your debts!\"*", input.PlayerName),
+		fmt.Sprintf("**%s** cleared their debt! *\"Other Barry approves of your responsibility!\"*", input.PlayerName),
+		fmt.Sprintf("**%s** paid a drink! *\"Phrasing! But yes, good job paying up!\"*", input.PlayerName),
+		fmt.Sprintf("**%s** paid up! *\"Do you want to be debt-free? Because that's how you get debt-free!\"*", input.PlayerName),
 	}
 
 	// Select random title and message
-	selectedTitle := titles[s.rand.Intn(len(titles))]
-	selectedMessage := messages[s.rand.Intn(len(messages))]
+	title = titles[s.rand.Intn(len(titles))]
+	message = messages[s.rand.Intn(len(messages))]
+
+	if input.DrinkCount > 1 {
+		message += fmt.Sprintf(" (%d/%d drinks paid)", input.DrinkCount, input.DrinkCount)
+	}
 
 	return &GetPayDrinkMessageOutput{
-		Title:   selectedTitle,
-		Message: selectedMessage,
+		Title:   title,
+		Message: message,
+	}, nil
+}
+
+// GetRollComment returns a comment for a roll in the shared game message
+func (s *service) GetRollComment(ctx context.Context, input *GetRollCommentInput) (*GetRollCommentOutput, error) {
+	if input == nil {
+		return nil, errors.New("input cannot be nil")
+	}
+
+	var comment string
+
+	// Select comment based on roll value
+	switch {
+	case input.RollValue == 6:
+		// Archer-inspired comments for critical hits
+		archerComments := []string{
+			"\n    *\"Feeling powerful today!\"*",
+			"\n    *\"DANGER ZONE!\"*",
+			"\n    *\"Sploosh!\"*",
+			"\n    *\"Do you want drunk people? Because that's how you get drunk people!\"*",
+			"\n    *\"Just the tip... of greatness!\"*",
+			"\n    *\"Welcome to the DANGER ZONE!\"*",
+			"\n    *\"That's how you roll dice! Other Barry would be proud.\"*",
+			"\n    *\"Enters the danger zone with a killer roll!\"*",
+			"\n    *\"Just got a seat on the highway to the DANGER ZONE!\"*",
+		}
+		comment = archerComments[s.rand.Intn(len(archerComments))]
+	case input.RollValue == 1:
+		// Archer-inspired comments for critical fails
+		archerComments := []string{
+			"\n    *\"Ouch, better luck next time!\"*",
+			"\n    *\"That's how you get ants.\"*",
+			"\n    *\"Phrasing! Wait, that doesn't work here.\"*",
+			"\n    *\"I swear I had something for this...\"*",
+			"\n    *\"Classic Cyril move.\"*",
+			"\n    *\"Holy shitsnacks! That was... not great.\"*",
+			"\n    *\"Entered a whole new DANGER ZONE of failure!\"*",
+			"\n    *\"Raises their glass in a toast to bad luck and good friends! 🥂\"*",
+			"\n    *\"That roll was like a sad handjob. Nobody's excited about it.\"*",
+		}
+		comment = archerComments[s.rand.Intn(len(archerComments))]
+	case input.RollValue == 5:
+		// Comments for high rolls
+		archerComments := []string{
+			"\n    *\"So close to greatness!\"*",
+			"\n    *\"Almost entered the danger zone!\"*",
+			"\n    *\"Not quite a sploosh, but close!\"*",
+			"\n    *\"That roll was like a turtle neck - tactically solid but not flashy.\"*",
+			"\n    *\"Sploosh! Well, more like a splash.\"*",
+		}
+		comment = archerComments[s.rand.Intn(len(archerComments))]
+	default:
+		// Comments for average rolls
+		archerComments := []string{
+			"\n    *\"Not great, not terrible.\"*",
+			"\n    *\"I had something for this... something about mediocrity?\"*",
+			"\n    *\"That's what I call a solid roll.\"*",
+		}
+		comment = archerComments[s.rand.Intn(len(archerComments))]
+	}
+
+	return &GetRollCommentOutput{
+		Comment: comment,
+	}, nil
+}
+
+// GetDrinkAssignmentMessage returns a message for a drink assignment in the shared game message
+func (s *service) GetDrinkAssignmentMessage(ctx context.Context, input *GetDrinkAssignmentMessageInput) (*GetDrinkAssignmentMessageOutput, error) {
+	if input == nil {
+		return nil, errors.New("input cannot be nil")
+	}
+
+	var message string
+
+	// Select message based on reason
+	switch input.Reason {
+	case models.DrinkReasonCriticalHit:
+		archerAssignments := []string{
+			"🔥 **%s** assigned a drink to **%s**! *\"Boom! That's how you get them!\"*",
+			"🔥 **%s** made **%s** drink! *\"Sploosh! Right in the danger zone!\"*",
+			"🔥 **%s** told **%s** to drink! *\"Do you want drunk people? Because that's how you get drunk people!\"*",
+			"🔥 **%s** → **%s** *\"Just the tip... of their glass!\"*",
+			"🔥 **%s** → **%s** *\"Phrasing! But yes, drink up!\"*",
+			"🔥 **%s** ordered **%s** to drink! *\"Welcome to the DANGER ZONE!\"*",
+			"🔥 **%s** picked **%s** to drink! *\"Other Barry says you should drink!\"*",
+			"🔥 **%s** → **%s** *\"Sploosh! That's how you assign a drink!\"*",
+			"🔥 **%s** chose **%s** for a drink! *\"I swear I had something for this... Oh yeah, DRINK!\"*",
+		}
+		message = fmt.Sprintf(archerAssignments[s.rand.Intn(len(archerAssignments))], input.FromPlayerName, input.ToPlayerName)
+	case models.DrinkReasonCriticalFail:
+		archerFailMessages := []string{
+			"💀 **%s** rolled a 1 and had to drink! *\"That's how you get ants!\"*",
+			"💀 **%s** rolled a 1! *\"Classic Cyril move right there!\"*",
+			"💀 **%s** critically failed! *\"Entered a whole new DANGER ZONE of failure!\"*",
+			"💀 **%s** rolled a 1 and drinks! *\"Holy shitsnacks! That was... not great.\"*",
+			"💀 **%s** rolled a 1! *\"Raises their glass in a toast to bad luck and good friends! 🥂\"*",
+			"💀 **%s** rolled a 1! *\"I swear I had something for this...\"*",
+		}
+		message = fmt.Sprintf(archerFailMessages[s.rand.Intn(len(archerFailMessages))], input.FromPlayerName)
+	case models.DrinkReasonLowestRoll:
+		archerLowestMessages := []string{
+			"👇 **%s** had the lowest roll and had to drink! *\"Womp womp!\"*",
+			"👇 **%s** rolled lowest! *\"That's what we call a 'Pam after five drinks' level of performance.\"*",
+			"👇 **%s** got the lowest roll! *\"Do you want to be last place? Because that's how you get last place!\"*",
+			"👇 **%s** rolled lowest and drinks! *\"Just the tip... of disappointment!\"*",
+			"👇 **%s** had the lowest roll! *\"I'd say that roll was disappointing, but that would imply I expected more.\"*",
+		}
+		message = fmt.Sprintf(archerLowestMessages[s.rand.Intn(len(archerLowestMessages))], input.FromPlayerName)
+	default:
+		message = fmt.Sprintf("🍺 **%s** → **%s**", input.FromPlayerName, input.ToPlayerName)
+	}
+
+	return &GetDrinkAssignmentMessageOutput{
+		Message: message,
 	}, nil
 }

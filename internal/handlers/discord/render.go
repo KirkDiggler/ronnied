@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math/rand"
 	"sort"
-	"time"
 
 	"github.com/KirkDiggler/ronnied/internal/models"
 	"github.com/KirkDiggler/ronnied/internal/services/game"
@@ -368,8 +366,7 @@ func renderGameMessage(s *discordgo.Session, game *models.Game, leaderboard *gam
 
 	case models.GameStatusRollOff:
 		embed.Description = "🔄 **ROLL-OFF IN PROGRESS!** Players in the roll-off need to roll again to break the tie."
-		embed.Color = 0xff9900 // Orange color for roll-offs to make them stand out
-
+		
 		// Add fields for roll-off status
 		embed.Fields = []*discordgo.MessageEmbedField{
 			{
@@ -556,9 +553,6 @@ func renderGameMessage(s *discordgo.Session, game *models.Game, leaderboard *gam
 }
 
 func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkLedger, leaderboardEntries []game.LeaderboardEntry, sessionLeaderboardEntries []game.LeaderboardEntry, rollOffGame *models.Game, parentGame *models.Game) (*discordgo.MessageEdit, error) {
-	// Initialize random number generator for selecting random comments
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	
 	// Create the embed with a more dynamic title based on game status
 	embed := &discordgo.MessageEmbed{
 		Title: getGameTitle(game),
@@ -683,39 +677,20 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 			rollInfo = " (🎲 Not rolled yet)"
 		}
 		
-		// Add a fun comment based on roll value - these appear in the shared message
+		// Get roll comment from messaging service
 		var rollComment string
-		if p.RollValue == 6 {
-			// Archer-inspired comments for critical hits
-			archerComments := []string{
-				"\n    *\"Feeling powerful today!\"*",
-				"\n    *\"DANGER ZONE!\"*",
-				"\n    *\"Sploosh!\"*",
-				"\n    *\"Do you want drunk people? Because that's how you get drunk people!\"*",
-				"\n    *\"Just the tip... of greatness!\"*",
+		if p.RollValue > 0 {
+			// Get the comment from the messaging service
+			rollCommentOutput, err := b.messagingService.GetRollComment(context.Background(), &messaging.GetRollCommentInput{
+				PlayerName:     p.PlayerName,
+				RollValue:      p.RollValue,
+				IsCriticalHit:  p.RollValue == 6,
+				IsCriticalFail: p.RollValue == 1,
+			})
+			
+			if err == nil && rollCommentOutput != nil {
+				rollComment = rollCommentOutput.Comment
 			}
-			rollComment = archerComments[r.Intn(len(archerComments))]
-		} else if p.RollValue == 1 {
-			// Archer-inspired comments for critical fails
-			archerComments := []string{
-				"\n    *\"Ouch, better luck next time!\"*",
-				"\n    *\"That's how you get ants.\"*",
-				"\n    *\"Phrasing! Wait, that doesn't work here.\"*",
-				"\n    *\"I swear I had something for this...\"*",
-				"\n    *\"Classic Cyril move.\"*",
-			}
-			rollComment = archerComments[r.Intn(len(archerComments))]
-		} else if p.RollValue == 5 {
-			// Comments for high rolls
-			archerComments := []string{
-				"\n    *\"So close to greatness!\"*",
-				"\n    *\"Almost entered the danger zone!\"*",
-				"\n    *\"Not quite a sploosh, but close!\"*",
-			}
-			rollComment = archerComments[r.Intn(len(archerComments))]
-		} else if p.RollValue > 0 {
-			// No comment for average rolls
-			rollComment = ""
 		}
 		
 		// Add spacing between participants
@@ -744,7 +719,7 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 			recentCount = len(drinkRecords)
 		}
 		
-		// Build the drink assignments text with Archer-themed messages
+		// Build the drink assignments text with messages from the service
 		for i := 0; i < recentCount; i++ {
 			record := drinkRecords[i]
 			
@@ -760,31 +735,20 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 			}
 			
 			// Skip if we couldn't find the player names
-			if fromPlayerName == "" || toPlayerName == "" {
+			if fromPlayerName == "" || (toPlayerName == "" && record.Reason == models.DrinkReasonCriticalHit) {
 				continue
 			}
 			
-			// Add Archer-themed message based on reason
-			var assignmentMessage string
-			switch record.Reason {
-			case models.DrinkReasonCriticalHit:
-				archerAssignments := []string{
-					"🔥 **%s** assigned a drink to **%s**! *\"Boom! That's how you get them!\"*",
-					"🔥 **%s** made **%s** drink! *\"Sploosh! Right in the danger zone!\"*",
-					"🔥 **%s** told **%s** to drink! *\"Do you want drunk people? Because that's how you get drunk people!\"*",
-					"🔥 **%s** → **%s** *\"Just the tip... of their glass!\"*",
-					"🔥 **%s** → **%s** *\"Phrasing! But yes, drink up!\"*",
-				}
-				assignmentMessage = fmt.Sprintf(archerAssignments[r.Intn(len(archerAssignments))], fromPlayerName, toPlayerName)
-			case models.DrinkReasonCriticalFail:
-				assignmentMessage = fmt.Sprintf("💀 **%s** rolled a 1 and had to drink! *\"That's how you get ants!\"*", fromPlayerName)
-			case models.DrinkReasonLowestRoll:
-				assignmentMessage = fmt.Sprintf("👇 **%s** had the lowest roll and had to drink! *\"Womp womp!\"*", fromPlayerName)
-			default:
-				assignmentMessage = fmt.Sprintf("🍺 **%s** → **%s**", fromPlayerName, toPlayerName)
-			}
+			// Get the message from the messaging service
+			assignmentOutput, err := b.messagingService.GetDrinkAssignmentMessage(context.Background(), &messaging.GetDrinkAssignmentMessageInput{
+				FromPlayerName: fromPlayerName,
+				ToPlayerName:   toPlayerName,
+				Reason:         record.Reason,
+			})
 			
-			drinkAssignments += assignmentMessage + "\n\n"
+			if err == nil && assignmentOutput != nil {
+				drinkAssignments += assignmentOutput.Message + "\n\n"
+			}
 		}
 		
 		if drinkAssignments != "" {
