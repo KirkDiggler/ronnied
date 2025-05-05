@@ -199,29 +199,37 @@ type RollDiceOutput struct {
 	// Details provides additional context about the roll result
 	Details string
 
-	// ActiveRollOffGameID is the ID of an active roll-off game the player should participate in
-	// If empty, the player should roll in the current game
+	// ActiveRollOffGameID is the ID of an active roll-off game (if any)
 	ActiveRollOffGameID string
 
-	// EligiblePlayers is a list of players who can be assigned a drink (for critical hits)
+	// EligiblePlayers is a list of players who can be assigned drinks
 	EligiblePlayers []PlayerOption
 
-	// Game is the current game state
+	// Game is the game object after the roll has been processed
 	Game *models.Game
 
-	// Enhanced fields for roll-off handling
-	
-	// IsRollOffRoll indicates if this roll was in a roll-off game
+	// IsRollOffRoll indicates if this roll was made in a roll-off game
 	IsRollOffRoll bool
-	
-	// ParentGameID is the ID of the parent game if this is a roll-off
+
+	// ParentGameID is the ID of the parent game (if this is a roll-off)
 	ParentGameID string
-	
-	// NeedsToRollInRollOff indicates if the player needs to roll in a roll-off
+
+	// NeedsToRollInRollOff indicates if the player should be rolling in a roll-off
 	NeedsToRollInRollOff bool
-	
-	// GameIDsToUpdate is a list of game IDs that should be updated after this roll
+
+	// GameIDsToUpdate is a list of game IDs that need their UI updated
 	GameIDsToUpdate []string
+
+	// --- Enhanced Roll-Off Information ---
+
+	// RollOffGame contains the roll-off game if this roll was part of a roll-off
+	RollOffGame *models.Game
+
+	// MainGame contains the main game if this roll was part of a roll-off
+	MainGame *models.Game
+
+	// RollOffParticipants contains information about players in the roll-off
+	RollOffParticipants []*models.Participant
 }
 
 // AssignDrinkInput contains parameters for assigning a drink

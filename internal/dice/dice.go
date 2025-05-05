@@ -46,5 +46,5 @@ func (r *roller) Roll(sides int) int {
 	if sides < 1 {
 		sides = 6 // Default to 6-sided die
 	}
-	return 4 //r.random.Intn(sides) + 1
+	return 4 // r.random.Intn(sides) + 1
 }

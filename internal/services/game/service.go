@@ -372,52 +372,60 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		return nil, errors.New("player ID cannot be empty")
 	}
 
-	// Get the game
-	game, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
+	// Get the main game
+	mainGame, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
 		GameID: input.GameID,
 	})
 	if err != nil {
-		// Return the actual error instead of swallowing it
 		return nil, fmt.Errorf("failed to get game: %w", err)
 	}
 
+	// Initialize variables for tracking roll-off state
+	var rollOffGame *models.Game
+	var targetGame *models.Game = mainGame
+	var isRollOffRoll bool
+	var gameIDsToUpdate []string = []string{input.GameID}
+	
 	// Check if this is a main game and if the player should be in a roll-off instead
-	if game.Status != models.GameStatusRollOff {
-		rollOffGame, err := s.FindActiveRollOffGame(ctx, input.PlayerID, input.GameID)
-		if err == nil && rollOffGame != nil {
-			// Player should be rolling in the roll-off game
-			return &RollDiceOutput{
-				PlayerID: input.PlayerID,
-				NeedsToRollInRollOff: true,
-				RollOffGameID: rollOffGame.ID,
-				GameIDsToUpdate: []string{input.GameID}, // Update main game to show roll-off status
-				IsRollOffRoll: true,
-				ParentGameID: rollOffGame.ParentGameID,
-			}, nil
+	if !mainGame.Status.IsRollOff() {
+		// Look for active roll-offs where this player is a participant
+		activeRollOffGame, err := s.FindActiveRollOffGame(ctx, input.PlayerID, input.GameID)
+		if err == nil && activeRollOffGame != nil {
+			// Found an active roll-off game for this player
+			rollOffGame = activeRollOffGame
+			targetGame = activeRollOffGame
+			isRollOffRoll = true
+			
+			// Add the roll-off game ID to the list of games to update
+			gameIDsToUpdate = append(gameIDsToUpdate, activeRollOffGame.ID)
 		}
-	}
-
-	// If this is a roll-off game, check if there's a nested roll-off the player should be in
-	if game.Status == models.GameStatusRollOff && game.ParentGameID != "" {
-		rollOffGame, err := s.FindActiveRollOffGame(ctx, input.PlayerID, input.GameID)
-		if err != nil && !errors.Is(err, ErrRollOffGameNotFound) {
-			return nil, fmt.Errorf("failed to check for nested roll-off games: %w", err)
+	} else {
+		// This is already a roll-off game
+		rollOffGame = mainGame
+		isRollOffRoll = true
+		
+		// Check if there's a parent game to update
+		if mainGame.ParentGameID != "" {
+			gameIDsToUpdate = append(gameIDsToUpdate, mainGame.ParentGameID)
 		}
-
-		// If a nested roll-off game was found, use that instead
-		if rollOffGame != nil {
-			input.GameID = rollOffGame.ID
-			game = rollOffGame
+		
+		// Check if there's a nested roll-off the player should be in
+		nestedRollOff, err := s.FindActiveRollOffGame(ctx, input.PlayerID, mainGame.ID)
+		if err == nil && nestedRollOff != nil {
+			// Use the nested roll-off instead
+			rollOffGame = nestedRollOff
+			targetGame = nestedRollOff
+			gameIDsToUpdate = append(gameIDsToUpdate, nestedRollOff.ID)
 		}
 	}
 
 	// Check if game is in a valid state for rolling
-	if !isValidGameStateForRolling(game.Status) {
-		return nil, fmt.Errorf("%w: game status is %s", ErrInvalidGameState, game.Status)
+	if !isValidGameStateForRolling(targetGame.Status) {
+		return nil, fmt.Errorf("%w: game status is %s", ErrInvalidGameState, targetGame.Status)
 	}
 
 	// Find the participant in the game
-	participant := game.GetParticipant(input.PlayerID)
+	participant := targetGame.GetParticipant(input.PlayerID)
 	if participant == nil {
 		return nil, ErrPlayerNotInGame
 	}
@@ -454,7 +462,7 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 				ToPlayerID:   input.PlayerID,
 				Reason:       models.DrinkReasonCriticalFail,
 				Timestamp:    now,
-				SessionID:    s.getSessionIDForChannel(ctx, game.ChannelID),
+				SessionID:    s.getSessionIDForChannel(ctx, targetGame.ChannelID),
 			})
 
 			if err != nil {
@@ -465,9 +473,9 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 	}
 
 	// Update the game
-	game.UpdatedAt = now
+	targetGame.UpdatedAt = now
 	err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
-		Game: game,
+		Game: targetGame,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to save game: %w", err)
@@ -475,7 +483,7 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 
 	// Check if all players have rolled
 	allPlayersRolled := true
-	for _, p := range game.Participants {
+	for _, p := range targetGame.Participants {
 		if p.RollTime == nil {
 			allPlayersRolled = false
 			break
@@ -491,7 +499,7 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 	if allPlayersRolled {
 		// Check if any players need to assign drinks
 		allDrinksAssigned := true
-		for _, p := range game.Participants {
+		for _, p := range targetGame.Participants {
 			if p.Status == models.ParticipantStatusNeedsToAssign {
 				allDrinksAssigned = false
 				break
@@ -501,7 +509,7 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		// Only try to end the game if all drinks are assigned
 		if allDrinksAssigned {
 			endGameOutput, err = s.EndGame(ctx, &EndGameInput{
-				Game: game,
+				Game: targetGame,
 			})
 
 			if err == nil {
@@ -524,7 +532,7 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 
 	// Get the player name
 	playerName := ""
-	for _, p := range game.Participants {
+	for _, p := range targetGame.Participants {
 		if p.PlayerID == input.PlayerID {
 			playerName = p.PlayerName
 			break
@@ -537,7 +545,7 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		details = "Select a player to assign a drink:"
 
 		// Get eligible players for drink assignment
-		for _, p := range game.Participants {
+		for _, p := range targetGame.Participants {
 			isCurrentPlayer := p.PlayerID == input.PlayerID
 
 			// For critical hits, include all players except the current player initially
@@ -553,7 +561,7 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		// If there are no other players, include the current player
 		if len(eligiblePlayers) == 0 {
 			// Find the current player
-			for _, p := range game.Participants {
+			for _, p := range targetGame.Participants {
 				if p.PlayerID == input.PlayerID {
 					eligiblePlayers = append(eligiblePlayers, PlayerOption{
 						PlayerID:        p.PlayerID,
@@ -574,15 +582,21 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 	}
 
 	// Determine which game IDs need to be updated
-	gameIDsToUpdate := []string{input.GameID}
+	gameIDsToUpdate = []string{input.GameID}
 	
 	// If this is a roll-off game, also update the parent game
-	if game.Status == models.GameStatusRollOff && game.ParentGameID != "" {
-		gameIDsToUpdate = append(gameIDsToUpdate, game.ParentGameID)
+	if targetGame.Status == models.GameStatusRollOff && targetGame.ParentGameID != "" {
+		gameIDsToUpdate = append(gameIDsToUpdate, targetGame.ParentGameID)
 	}
 
-	// Check if this is a roll-off roll
-	isRollOffRoll := game.Status == models.GameStatusRollOff
+	// Check if this is a roll-off roll - use the existing variable instead of redeclaring
+	isRollOffRoll = targetGame.Status == models.GameStatusRollOff
+
+	// Add the enhanced roll-off information to the output
+	var rollOffParticipants []*models.Participant
+	if rollOffGame != nil {
+		rollOffParticipants = rollOffGame.Participants
+	}
 
 	return &RollDiceOutput{
 		// Basic roll information
@@ -602,13 +616,18 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		Details:             details,
 		ActiveRollOffGameID: rollOffGameID,
 		EligiblePlayers:     eligiblePlayers,
-		Game:                game,
+		Game:                targetGame,
 		
 		// Enhanced fields for roll-off handling
 		IsRollOffRoll:       isRollOffRoll,
-		ParentGameID:        game.ParentGameID,
+		ParentGameID:        targetGame.ParentGameID,
 		NeedsToRollInRollOff: false, // We're already rolling in the right game
 		GameIDsToUpdate:     gameIDsToUpdate,
+		
+		// Enhanced roll-off information
+		RollOffGame:         rollOffGame,
+		MainGame:            mainGame,
+		RollOffParticipants: rollOffParticipants,
 	}, nil
 }
 
