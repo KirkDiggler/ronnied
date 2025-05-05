@@ -442,7 +442,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		return err
 	}
 
-	// Roll the dice - the service will handle all the logic including routing to roll-offs
+	// Roll the dice - the service will handle all the logic
 	rollOutput, err := b.gameService.RollDice(ctx, &game.RollDiceInput{
 		GameID:   existingGame.Game.ID,
 		PlayerID: userID,
@@ -466,6 +466,16 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 				Content: "You are not part of this game.",
 				Flags:   discordgo.MessageFlagsEphemeral,
 			})
+			return err
+		case game.ErrPlayerInRollOff:
+			// The player needs to roll in a roll-off game
+			_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+				Content: "You need to roll in a roll-off game! Use the Roll button on the game message to continue.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			})
+
+			// Update the game message to make the roll-off more visible
+			b.updateGameMessage(s, channelID, existingGame.Game.ID)
 			return err
 		default:
 			// For any other error, just return the error message
@@ -492,6 +502,18 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 			Content: errorMsgOutput.Message,
 			Flags:   discordgo.MessageFlagsEphemeral,
 		})
+		return err
+	}
+
+	// If the player needs to roll in a roll-off game instead
+	if rollOutput.NeedsToRollInRollOff {
+		_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+			Content: "You need to roll in a roll-off game! Use the Roll button on the game message to continue.",
+			Flags:   discordgo.MessageFlagsEphemeral,
+		})
+
+		// Update the game message to make the roll-off more visible
+		b.updateGameMessage(s, channelID, existingGame.Game.ID)
 		return err
 	}
 
@@ -542,22 +564,6 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		embeds = append(embeds, whisperEmbed)
 	}
 
-	// Add roll-off information if this was a roll in a roll-off game
-	if rollOutput.IsRollOffRoll && rollOutput.RollOffGame != nil {
-		rollOffEmbed := &discordgo.MessageEmbed{
-			Title:       "⚔️ Roll-Off in Progress",
-			Description: "You rolled in a roll-off to break a tie!",
-			Color:       0xf39c12, // Orange color for roll-offs
-			Fields: []*discordgo.MessageEmbedField{
-				{
-					Name:  "Your Roll",
-					Value: fmt.Sprintf("**%d**", rollOutput.RollValue),
-				},
-			},
-		}
-		embeds = append(embeds, rollOffEmbed)
-	}
-
 	// Create roll again button for non-critical hits
 	rollButton := discordgo.Button{
 		Label:    "Roll Again",
@@ -603,9 +609,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 					Options:     playerOptions,
 				}
 
-				messageComponents = append(messageComponents, discordgo.ActionsRow{
-					Components: []discordgo.MessageComponent{playerSelect},
-				})
+				messageComponents = append(messageComponents, playerSelect)
 			}
 		} else {
 			// Add both buttons
@@ -625,6 +629,14 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 	if err != nil {
 		log.Printf("Error updating interaction response: %v", err)
 		return err
+	}
+
+	// Update the game message in the channel
+	// This is a separate update to the shared message that everyone can see
+	if existingGame.Game.MessageID != "" {
+		b.updateGameMessage(s, channelID, existingGame.Game.ID)
+	} else {
+		log.Printf("No message ID found for game %s, skipping update", existingGame.Game.ID)
 	}
 
 	return nil
@@ -1093,9 +1105,6 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 		if err == nil {
 			rollOffGame = rollOffGameOutput.Game
 		}
-	} else if len(gameOutput.ActiveRollOffGames) > 0 {
-		// Use the first active roll-off game
-		rollOffGame = gameOutput.ActiveRollOffGames[0]
 	}
 
 	// Get drink records
@@ -1181,9 +1190,6 @@ func (b *Bot) updateGameMessageWithForceStart(s *discordgo.Session, channelID st
 		if err == nil {
 			rollOffGame = rollOffGameOutput.Game
 		}
-	} else if len(gameOutput.ActiveRollOffGames) > 0 {
-		// Use the first active roll-off game
-		rollOffGame = gameOutput.ActiveRollOffGames[0]
 	}
 
 	// Get drink records

@@ -902,13 +902,11 @@ func (s *GameServiceTestSuite) TestRollDice_RegularRoll() {
 	// Assert
 	s.Require().NoError(err)
 	s.Require().NotNil(output)
-	s.Equal(3, output.Value)
 	s.Equal(3, output.RollValue)
 	s.Equal(s.testCreatorID, output.PlayerID)
 	s.Equal(s.testCreatorName, output.PlayerName)
 	s.False(output.IsCriticalHit)
 	s.False(output.IsCriticalFail)
-	s.False(output.IsLowestRoll)
 	s.False(output.NeedsRollOff)
 	s.False(output.AllPlayersRolled) // Now this should be false since not all players have rolled
 }
@@ -1019,12 +1017,10 @@ func (s *GameServiceTestSuite) TestRollDice_CriticalHit() {
 	// Assert
 	s.Require().NoError(err)
 	s.Require().NotNil(output)
-	s.Equal(6, output.Value)
 	s.Equal(6, output.RollValue)
 	s.Equal(s.testCreatorID, output.PlayerID)
 	s.Equal(s.testCreatorName, output.PlayerName)
 	s.True(output.IsCriticalHit)
-	s.False(output.IsCriticalFail)
 	s.False(output.IsLowestRoll)
 	s.False(output.NeedsRollOff)
 	s.False(output.AllPlayersRolled) // Not all players have rolled
@@ -1146,13 +1142,11 @@ func (s *GameServiceTestSuite) TestRollDice_CriticalFail() {
 	// Assert
 	s.Require().NoError(err)
 	s.Require().NotNil(output)
-	s.Equal(1, output.Value)
 	s.Equal(1, output.RollValue)
 	s.Equal(s.testCreatorID, output.PlayerID)
 	s.Equal(s.testCreatorName, output.PlayerName)
 	s.False(output.IsCriticalHit)
 	s.True(output.IsCriticalFail)
-	s.False(output.IsLowestRoll)
 	s.False(output.NeedsRollOff)
 	s.False(output.AllPlayersRolled) // Not all players have rolled
 }

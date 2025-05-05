@@ -366,7 +366,7 @@ func renderGameMessage(s *discordgo.Session, game *models.Game, leaderboard *gam
 
 	case models.GameStatusRollOff:
 		embed.Description = "🔄 **ROLL-OFF IN PROGRESS!** Players in the roll-off need to roll again to break the tie."
-		
+
 		// Add fields for roll-off status
 		embed.Fields = []*discordgo.MessageEmbedField{
 			{
@@ -590,28 +590,10 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 				Inline: true,
 			},
 		}
-		
-		// If there's a roll-off game in progress, add a special field for it
-		if rollOffGame != nil {
-			// Create a list of players in the roll-off
-			var rollOffPlayersList string
-			for _, p := range rollOffGame.Participants {
-				if p.RollTime == nil {
-					rollOffPlayersList += fmt.Sprintf("• **%s** - 🎯 NEEDS TO ROLL! 🎲\n", p.PlayerName)
-				} else {
-					rollOffPlayersList += fmt.Sprintf("• %s - ✅ Already rolled\n", p.PlayerName)
-				}
-			}
-			
-			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
-				Name:  "⚔️ ROLL-OFF IN PROGRESS!",
-				Value: "The following players need to roll again to break a tie:\n" + rollOffPlayersList,
-			})
-		}
 
 	case models.GameStatusRollOff:
 		embed.Description = "⚔️ **ROLL-OFF IN PROGRESS!** Players in the roll-off need to roll again to break the tie.\n*May the odds be ever in your favor!*"
-		
+
 		// Add fields for roll-off status
 		embed.Fields = []*discordgo.MessageEmbedField{
 			{
@@ -628,43 +610,26 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 
 		// If this is a roll-off game, add info about the parent game
 		if parentGame != nil {
-			// Determine roll-off type based on parent game
-			rollOffTypeText := "Tie-breaker roll-off"
-			if parentGame.Status == models.GameStatusActive {
-				rollOffTypeText = "This is a tie-breaker roll-off for the main game"
-			}
-			
 			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
 				Name:  "🔄 Roll-Off Type",
-				Value: rollOffTypeText,
+				Value: "This is a tie-breaker roll-off",
 			})
 		}
 
 		// Add a special field highlighting who needs to roll
 		var pendingRollers string
-		var rolledPlayers string
-		
 		for _, p := range game.Participants {
 			if p.RollTime == nil {
 				pendingRollers += fmt.Sprintf("• **%s** - 🎯 NEEDS TO ROLL! 🎲\n", p.PlayerName)
 			} else {
-				rolledPlayers += fmt.Sprintf("• %s - ✅ Rolled a **%d**\n", p.PlayerName, p.RollValue)
+				pendingRollers += fmt.Sprintf("• %s - ✅ Already rolled\n", p.PlayerName)
 			}
 		}
-		
-		rollOffStatusText := ""
-		if pendingRollers != "" {
-			rollOffStatusText += "**Waiting for rolls from:**\n" + pendingRollers + "\n"
-		}
-		
-		if rolledPlayers != "" {
-			rollOffStatusText += "**Already rolled:**\n" + rolledPlayers
-		}
 
-		if rollOffStatusText != "" {
+		if pendingRollers != "" {
 			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
-				Name:  "🎲 Roll-Off Status",
-				Value: rollOffStatusText,
+				Name:  "🎲 Roll-Off Participants",
+				Value: pendingRollers,
 			})
 		}
 
@@ -686,13 +651,13 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 
 	// Add participant list with enhanced information
 	var participantList string
-	
+
 	// Build the participant list with roll info and enhanced visuals
 	for _, p := range game.Participants {
 		// Create roll info with emoji based on roll value
 		var rollInfo string
 		var rollEmoji string
-		
+
 		if p.RollValue > 0 {
 			// Select emoji based on roll value
 			switch p.RollValue {
@@ -711,7 +676,7 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 		} else {
 			rollInfo = " (🎲 Not rolled yet)"
 		}
-		
+
 		// Get roll comment from messaging service
 		var rollComment string
 		if p.RollValue > 0 {
@@ -722,16 +687,16 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 				IsCriticalHit:  p.RollValue == 6,
 				IsCriticalFail: p.RollValue == 1,
 			})
-			
+
 			if err == nil && rollCommentOutput != nil {
 				rollComment = rollCommentOutput.Comment
 			}
 		}
-		
+
 		// Add spacing between participants
 		participantList += fmt.Sprintf("• **%s**%s%s\n\n", p.PlayerName, rollInfo, rollComment)
 	}
-	
+
 	if participantList != "" {
 		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
 			Name:  "👥 Participants & Rolls",
@@ -742,22 +707,22 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 	// Add recent drink assignments section if there are any drink records
 	if len(drinkRecords) > 0 {
 		var drinkAssignments string
-		
+
 		// Sort drink records by time (newest first)
 		sort.Slice(drinkRecords, func(i, j int) bool {
 			return drinkRecords[i].Timestamp.After(drinkRecords[j].Timestamp)
 		})
-		
+
 		// Take only the 5 most recent drink assignments
 		recentCount := 5
 		if len(drinkRecords) < recentCount {
 			recentCount = len(drinkRecords)
 		}
-		
+
 		// Build the drink assignments text with messages from the service
 		for i := 0; i < recentCount; i++ {
 			record := drinkRecords[i]
-			
+
 			// Find player names
 			var fromPlayerName, toPlayerName string
 			for _, p := range game.Participants {
@@ -768,24 +733,24 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 					toPlayerName = p.PlayerName
 				}
 			}
-			
+
 			// Skip if we couldn't find the player names
 			if fromPlayerName == "" || (toPlayerName == "" && record.Reason == models.DrinkReasonCriticalHit) {
 				continue
 			}
-			
+
 			// Get the message from the messaging service
 			assignmentOutput, err := b.messagingService.GetDrinkAssignmentMessage(context.Background(), &messaging.GetDrinkAssignmentMessageInput{
 				FromPlayerName: fromPlayerName,
 				ToPlayerName:   toPlayerName,
 				Reason:         record.Reason,
 			})
-			
+
 			if err == nil && assignmentOutput != nil {
 				drinkAssignments += assignmentOutput.Message + "\n\n"
 			}
 		}
-		
+
 		if drinkAssignments != "" {
 			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
 				Name:  "🍻 Recent Drink Assignments",
@@ -845,8 +810,8 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 			if entry.DrinkCount > 0 {
 				// Create mini progress bar for each player
 				playerProgress := createMiniProgressBar(entry.PaidCount, entry.DrinkCount)
-				
-				leaderboardText += fmt.Sprintf("%s**%s**: %d paid, %d owed %s\n%s\n\n", 
+
+				leaderboardText += fmt.Sprintf("%s**%s**: %d paid, %d owed %s\n%s\n\n",
 					rankEmoji, entry.PlayerName, entry.PaidCount, remaining, statusEmoji, playerProgress)
 			} else {
 				leaderboardText += fmt.Sprintf("%s**%s**: No drinks owed %s\n\n", rankEmoji, entry.PlayerName, statusEmoji)
@@ -869,7 +834,7 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 		sort.Slice(leaderboardEntries, func(i, j int) bool {
 			return leaderboardEntries[i].PaidCount > leaderboardEntries[j].PaidCount
 		})
-		
+
 		var leaderboardText string
 		for i, entry := range leaderboardEntries {
 			var rankEmoji string
@@ -882,7 +847,7 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 			} else {
 				rankEmoji = "• "
 			}
-			
+
 			leaderboardText += fmt.Sprintf("%s**%s**: %d drinks paid\n", rankEmoji, entry.PlayerName, entry.PaidCount)
 		}
 
@@ -947,7 +912,7 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 				Name: "🎲",
 			},
 		}
-		
+
 		// Add Pay Drink button
 		payDrinkButton := discordgo.Button{
 			Label:    "Pay Drink",
@@ -957,7 +922,7 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 				Name: "💸",
 			},
 		}
-		
+
 		components = append(components, discordgo.ActionsRow{
 			Components: []discordgo.MessageComponent{
 				rollButton,

@@ -155,81 +155,44 @@ type PlayerOption struct {
 	IsCurrentPlayer bool
 }
 
-// RollDiceOutput contains the result of a dice roll
+// RollDiceOutput contains the result of rolling dice
 type RollDiceOutput struct {
-	// Value is the result of the dice roll
-	Value int
-
-	// RollValue is an alias for Value to maintain compatibility
-	RollValue int
-
-	// PlayerID is the ID of the player who rolled
-	PlayerID string
-
-	// PlayerName is the name of the player who rolled
+	// Basic roll information
+	PlayerID   string
 	PlayerName string
-
-	// IsCriticalHit indicates if the roll was a critical hit
-	IsCriticalHit bool
-
-	// IsCriticalFail indicates if the roll was a critical fail
+	RollValue  int
+	
+	// Game state information
+	Game       *models.Game
+	
+	// Roll outcome flags
+	IsCriticalHit  bool
 	IsCriticalFail bool
-
-	// IsLowestRoll indicates if the roll was the lowest in the game
-	// This will be false initially and may be updated after all players roll
-	IsLowestRoll bool
-
-	// NeedsRollOff indicates if a roll-off is needed
-	NeedsRollOff bool
-
-	// RollOffType indicates the type of roll-off needed (if any)
-	RollOffType RollOffType
-
-	// RollOffGameID is the ID of the roll-off game (if created)
-	RollOffGameID string
-
-	// AllPlayersRolled indicates if all players in the game have rolled
-	AllPlayersRolled bool
-
-	// --- Domain Result Information ---
-
-	// Result is the primary outcome message of the roll
-	Result string
-
-	// Details provides additional context about the roll result
-	Details string
-
-	// ActiveRollOffGameID is the ID of an active roll-off game (if any)
-	ActiveRollOffGameID string
-
-	// EligiblePlayers is a list of players who can be assigned drinks
-	EligiblePlayers []PlayerOption
-
-	// Game is the game object after the roll has been processed
-	Game *models.Game
-
-	// IsRollOffRoll indicates if this roll was made in a roll-off game
-	IsRollOffRoll bool
-
-	// ParentGameID is the ID of the parent game (if this is a roll-off)
-	ParentGameID string
-
-	// NeedsToRollInRollOff indicates if the player should be rolling in a roll-off
-	NeedsToRollInRollOff bool
-
-	// GameIDsToUpdate is a list of game IDs that need their UI updated
+	
+	// Roll-off related information
+	IsRollOffRoll bool // Was this roll in a roll-off game?
+	ParentGameID  string // If this is a roll-off, what's the parent game ID?
+	
+	// Game state indicators
+	AllPlayersRolled bool // Have all players rolled in this game?
+	
+	// Roll-off indicators
+	NeedsRollOff  bool // Does this game need a roll-off now?
+	RollOffType   RollOffType // Type of roll-off needed (if any)
+	RollOffGameID string // ID of the roll-off game (if created)
+	
+	// Redirect indicators
+	NeedsToRollInRollOff bool // Should player be rolling in a roll-off instead?
+	
+	// Game IDs that need UI updates
 	GameIDsToUpdate []string
-
-	// --- Enhanced Roll-Off Information ---
-
-	// RollOffGame contains the roll-off game if this roll was part of a roll-off
-	RollOffGame *models.Game
-
-	// MainGame contains the main game if this roll was part of a roll-off
-	MainGame *models.Game
-
-	// RollOffParticipants contains information about players in the roll-off
-	RollOffParticipants []*models.Participant
+	
+	// Player options for critical hit (who can receive a drink)
+	EligiblePlayers []PlayerOption
+	
+	// User-friendly messages (for handler convenience)
+	Result  string // Primary outcome message
+	Details string // Additional context about the result
 }
 
 // AssignDrinkInput contains parameters for assigning a drink
@@ -342,10 +305,10 @@ type StartGameInput struct {
 // StartGameOutput contains the result of starting a game
 type StartGameOutput struct {
 	// Success indicates if the game was successfully started
-	Success       bool
-	ForceStarted  bool   // Whether the game was force-started by a non-creator
-	CreatorID     string // The ID of the original creator who delayed starting
-	CreatorName   string // The name of the original creator
+	Success      bool
+	ForceStarted bool   // Whether the game was force-started by a non-creator
+	CreatorID    string // The ID of the original creator who delayed starting
+	CreatorName  string // The name of the original creator
 }
 
 // HandleRollOffInput contains parameters for handling a roll-off
@@ -386,8 +349,6 @@ type GetGameByChannelInput struct {
 // GetGameByChannelOutput defines the output for retrieving a game by channel ID
 type GetGameByChannelOutput struct {
 	Game *models.Game
-	// ActiveRollOffGames contains a list of active roll-off games associated with this game
-	ActiveRollOffGames []*models.Game
 }
 
 // GetLeaderboardInput defines the input for retrieving a game's leaderboard
@@ -446,8 +407,6 @@ type GetGameInput struct {
 type GetGameOutput struct {
 	// Game is the retrieved game
 	Game *models.Game
-	// ActiveRollOffGames contains a list of active roll-off games associated with this game
-	ActiveRollOffGames []*models.Game
 }
 
 // GetDrinkRecordsInput contains parameters for retrieving drink records for a game
