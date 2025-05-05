@@ -522,137 +522,101 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		b.updateGameMessage(s, channelID, gameID)
 	}
 
-	// Determine color based on roll result
-	var embedColor int
-	if rollOutput.IsCriticalHit {
-		embedColor = 0xe74c3c // Red for critical hit
-	} else if rollOutput.IsCriticalFail {
-		embedColor = 0x3498db // Blue for critical fail
-	} else {
-		embedColor = 0x2ecc71 // Green for normal roll
-	}
-
 	// Get fun roll result message from messaging service
-	var rollResultOutput *messaging.GetRollResultMessageOutput
-	var whisperErr error
-	var rollWhisperOutput *messaging.GetRollWhisperMessageOutput
-
-	// Always try to get both the roll result and whisper messages
-	rollResultOutput, err = b.messagingService.GetRollResultMessage(ctx, &messaging.GetRollResultMessageInput{
+	rollResultOutput, err := b.messagingService.GetRollResultMessage(ctx, &messaging.GetRollResultMessageInput{
 		RollValue:      rollOutput.RollValue,
 		IsCriticalHit:  rollOutput.IsCriticalHit,
 		IsCriticalFail: rollOutput.IsCriticalFail,
 		PlayerName:     rollOutput.PlayerName,
 	})
-
-	// Always try to get the whisper message
-	rollWhisperOutput, whisperErr = b.messagingService.GetRollWhisperMessage(ctx, &messaging.GetRollWhisperMessageInput{
-		RollValue:      rollOutput.RollValue,
-		IsCriticalHit:  rollOutput.IsCriticalHit,
-		IsCriticalFail: rollOutput.IsCriticalFail,
-		PlayerName:     rollOutput.PlayerName,
-	})
-
-	// Create embeds - either with messaging service output or fallback to static content
-	var embeds []*discordgo.MessageEmbed
-	var contentText string
-
 	if err != nil {
-		// Fallback to static description if messaging service fails
-		embeds = []*discordgo.MessageEmbed{
-			{
-				Title:       rollOutput.Result,
-				Description: rollOutput.Details,
-				Color:       embedColor,
-			},
-		}
-		contentText = rollOutput.Result
-	} else {
-		// Use the fun message from the messaging service
-		contentText = rollResultOutput.Title
-
-		// Create an embed with the fun message
-		// embed := &discordgo.MessageEmbed{
-		// 	Title:       rollResultOutput.Title,
-		// 	Description: rollResultOutput.Message,
-		// 	Color:       embedColor,
-		// }
-
-		// embeds = append(embeds, embed)
+		log.Printf("Error getting roll result message: %v", err)
+		return RespondWithEphemeralMessage(s, i, "Our hamster got tired and needed a break. Please try again later.")
 	}
 
-	// Add the whisper message as a second embed if available
-	var whisperEmbed *discordgo.MessageEmbed
-	if whisperErr == nil && rollWhisperOutput.Message != "" {
-		whisperEmbed = &discordgo.MessageEmbed{
+	// Get the whisper message
+	rollWhisperOutput, whisperErr := b.messagingService.GetRollWhisperMessage(ctx, &messaging.GetRollWhisperMessageInput{
+		RollValue:      rollOutput.RollValue,
+		IsCriticalHit:  rollOutput.IsCriticalHit,
+		IsCriticalFail: rollOutput.IsCriticalFail,
+		PlayerName:     rollOutput.PlayerName,
+	})
+	if whisperErr != nil {
+		log.Printf("Error getting roll whisper message: %v", whisperErr)
+		// Continue without whisper message - this is non-critical
+	}
+
+	// Create embeds for the response
+	var embeds []*discordgo.MessageEmbed
+	contentText := rollResultOutput.Title
+
+	// Add the whisper message as an embed if available
+	if whisperErr == nil {
+		whisperEmbed := &discordgo.MessageEmbed{
 			Title:       "Ronnie whispers...",
 			Description: rollWhisperOutput.Message,
 			Color:       0x95a5a6, // Gray color for whispers
 			Footer: &discordgo.MessageEmbedFooter{
 				Text:    "Just between us...",
-				IconURL: "https://cdn.discordapp.com/emojis/854901327381135410.webp?size=96&animated=true", // Optional: Add a whisper emoji
+				IconURL: "https://cdn.discordapp.com/emojis/854901327381135410.webp?size=96&animated=true",
 			},
 		}
 		embeds = append(embeds, whisperEmbed)
 	}
 
-	// Build components based on the roll result
-	var components []discordgo.MessageComponent
-	if rollOutput.IsCriticalHit {
-		// Create player selection dropdown for critical hits
-		if len(rollOutput.EligiblePlayers) > 0 {
-			var playerOptions []discordgo.SelectMenuOption
+	// Create roll again button for non-critical hits
+	rollButton := discordgo.Button{
+		Label:    "Roll Again",
+		Style:    discordgo.PrimaryButton,
+		CustomID: ButtonRollDice,
+		Emoji: discordgo.ComponentEmoji{
+			Name: "🎲",
+		},
+	}
 
-			for _, player := range rollOutput.EligiblePlayers {
-				playerOptions = append(playerOptions, discordgo.SelectMenuOption{
-					Label:       player.PlayerName,
-					Value:       player.PlayerID,
-					Description: "Assign a drink to this player",
-					Emoji: discordgo.ComponentEmoji{
-						Name: "🍺",
-					},
-				})
-			}
-
-			playerSelect := discordgo.SelectMenu{
-				CustomID:    SelectAssignDrink,
-				Placeholder: "Select a player to drink",
-				Options:     playerOptions,
-			}
-
-			components = append(components, playerSelect)
-		}
-	} else {
-		// Create roll again button for non-critical hits
-		rollButton := discordgo.Button{
-			Label:    "Roll Again",
-			Style:    discordgo.PrimaryButton,
-			CustomID: ButtonRollDice,
-			Emoji: discordgo.ComponentEmoji{
-				Name: "🎲",
-			},
-		}
-
-		// Add Pay Drink button
-		payDrinkButton := discordgo.Button{
-			Label:    "Pay Drink",
-			Style:    discordgo.SuccessButton,
-			CustomID: ButtonPayDrink,
-			Emoji: discordgo.ComponentEmoji{
-				Name: "💸",
-			},
-		}
-
-		// Add both buttons
-		components = append(components, rollButton, payDrinkButton)
+	// Add Pay Drink button
+	payDrinkButton := discordgo.Button{
+		Label:    "Pay Drink",
+		Style:    discordgo.SuccessButton,
+		CustomID: ButtonPayDrink,
+		Emoji: discordgo.ComponentEmoji{
+			Name: "💸",
+		},
 	}
 
 	// Create action row for components if we have any
 	var messageComponents []discordgo.MessageComponent
-	if len(components) > 0 {
-		messageComponents = append(messageComponents, discordgo.ActionsRow{
-			Components: components,
-		})
+	if len(embeds) > 0 || rollOutput.IsCriticalHit {
+		if rollOutput.IsCriticalHit {
+			// Create player selection dropdown for critical hits
+			if len(rollOutput.EligiblePlayers) > 0 {
+				var playerOptions []discordgo.SelectMenuOption
+
+				for _, player := range rollOutput.EligiblePlayers {
+					playerOptions = append(playerOptions, discordgo.SelectMenuOption{
+						Label:       player.PlayerName,
+						Value:       player.PlayerID,
+						Description: "Assign a drink to this player",
+						Emoji: discordgo.ComponentEmoji{
+							Name: "🍺",
+						},
+					})
+				}
+
+				playerSelect := discordgo.SelectMenu{
+					CustomID:    SelectAssignDrink,
+					Placeholder: "Select a player to drink",
+					Options:     playerOptions,
+				}
+
+				messageComponents = append(messageComponents, playerSelect)
+			}
+		} else {
+			// Add both buttons
+			messageComponents = append(messageComponents, discordgo.ActionsRow{
+				Components: []discordgo.MessageComponent{rollButton, payDrinkButton},
+			})
+		}
 	}
 
 	// Update the original interaction with the roll result, whisper, and components
