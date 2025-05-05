@@ -582,8 +582,9 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 	}
 
 	// Add the whisper message as a second embed if available
+	var whisperEmbed *discordgo.MessageEmbed
 	if whisperErr == nil && rollWhisperOutput.Message != "" {
-		whisperEmbed := &discordgo.MessageEmbed{
+		whisperEmbed = &discordgo.MessageEmbed{
 			Title:       "Ronnie whispers...",
 			Description: rollWhisperOutput.Message,
 			Color:       0x95a5a6, // Gray color for whispers
@@ -654,14 +655,16 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		})
 	}
 
-	// First, send the ephemeral message with the roll result and whisper
-	_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-		Content:    contentText,
-		Embeds:     embeds,
-		Flags:      discordgo.MessageFlagsEphemeral,
-	})
-	if err != nil {
-		log.Printf("Error sending ephemeral roll result: %v", err)
+	// Send an ephemeral message with the whisper if available
+	if whisperEmbed != nil {
+		_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+			Content:    "Ronnie whispers to you...",
+			Embeds:     []*discordgo.MessageEmbed{whisperEmbed},
+			Flags:      discordgo.MessageFlagsEphemeral,
+		})
+		if err != nil {
+			log.Printf("Error sending ephemeral whisper message: %v", err)
+		}
 	}
 
 	// Then, update the original interaction with the components for drink assignment
