@@ -539,18 +539,18 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 
 	// Always try to get both the roll result and whisper messages
 	rollResultOutput, err = b.messagingService.GetRollResultMessage(ctx, &messaging.GetRollResultMessageInput{
-		RollValue:     rollOutput.RollValue,
-		IsCriticalHit: rollOutput.IsCriticalHit,
+		RollValue:      rollOutput.RollValue,
+		IsCriticalHit:  rollOutput.IsCriticalHit,
 		IsCriticalFail: rollOutput.IsCriticalFail,
-		PlayerName:    rollOutput.PlayerName,
+		PlayerName:     rollOutput.PlayerName,
 	})
 
 	// Always try to get the whisper message
 	rollWhisperOutput, whisperErr = b.messagingService.GetRollWhisperMessage(ctx, &messaging.GetRollWhisperMessageInput{
-		RollValue:     rollOutput.RollValue,
-		IsCriticalHit: rollOutput.IsCriticalHit,
+		RollValue:      rollOutput.RollValue,
+		IsCriticalHit:  rollOutput.IsCriticalHit,
 		IsCriticalFail: rollOutput.IsCriticalFail,
-		PlayerName:    rollOutput.PlayerName,
+		PlayerName:     rollOutput.PlayerName,
 	})
 
 	// Create embeds - either with messaging service output or fallback to static content
@@ -572,13 +572,13 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		contentText = rollResultOutput.Title
 
 		// Create an embed with the fun message
-		embed := &discordgo.MessageEmbed{
-			Title:       rollResultOutput.Title,
-			Description: rollResultOutput.Message,
-			Color:       embedColor,
-		}
+		// embed := &discordgo.MessageEmbed{
+		// 	Title:       rollResultOutput.Title,
+		// 	Description: rollResultOutput.Message,
+		// 	Color:       embedColor,
+		// }
 
-		embeds = append(embeds, embed)
+		// embeds = append(embeds, embed)
 	}
 
 	// Add the whisper message as a second embed if available
@@ -590,7 +590,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 			Color:       0x95a5a6, // Gray color for whispers
 			Footer: &discordgo.MessageEmbedFooter{
 				Text:    "Just between us...",
-				IconURL: "https://cdn.discordapp.com/emojis/839903382661799966.png", // Optional: Add a whisper emoji
+				IconURL: "https://cdn.discordapp.com/emojis/854901327381135410.webp?size=96&animated=true", // Optional: Add a whisper emoji
 			},
 		}
 		embeds = append(embeds, whisperEmbed)
