@@ -1382,8 +1382,26 @@ func (s *service) GetGameByChannel(ctx context.Context, input *GetGameByChannelI
 		return nil, fmt.Errorf("failed to get game by channel: %w", err)
 	}
 
+	// Get active roll-off games if this is a main game
+	var activeRollOffGames []*models.Game
+	if !game.Status.IsRollOff() {
+		// Get all roll-off games with this game as parent
+		rollOffGames, err := s.gameRepo.GetGamesByParent(ctx, &gameRepo.GetGamesByParentInput{
+			ParentGameID: game.ID,
+		})
+		if err == nil && len(rollOffGames) > 0 {
+			// Filter for active roll-off games
+			for _, rollOffGame := range rollOffGames {
+				if rollOffGame.Status == models.GameStatusRollOff {
+					activeRollOffGames = append(activeRollOffGames, rollOffGame)
+				}
+			}
+		}
+	}
+
 	return &GetGameByChannelOutput{
-		Game: game,
+		Game:              game,
+		ActiveRollOffGames: activeRollOffGames,
 	}, nil
 }
 
@@ -1582,8 +1600,26 @@ func (s *service) GetGame(ctx context.Context, input *GetGameInput) (*GetGameOut
 		return nil, fmt.Errorf("failed to get game: %w", err)
 	}
 
+	// Get active roll-off games if this is a main game
+	var activeRollOffGames []*models.Game
+	if !game.Status.IsRollOff() {
+		// Get all roll-off games with this game as parent
+		rollOffGames, err := s.gameRepo.GetGamesByParent(ctx, &gameRepo.GetGamesByParentInput{
+			ParentGameID: game.ID,
+		})
+		if err == nil && len(rollOffGames) > 0 {
+			// Filter for active roll-off games
+			for _, rollOffGame := range rollOffGames {
+				if rollOffGame.Status == models.GameStatusRollOff {
+					activeRollOffGames = append(activeRollOffGames, rollOffGame)
+				}
+			}
+		}
+	}
+
 	return &GetGameOutput{
-		Game: game,
+		Game:              game,
+		ActiveRollOffGames: activeRollOffGames,
 	}, nil
 }
 

@@ -590,6 +590,24 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 				Inline: true,
 			},
 		}
+		
+		// If there's a roll-off game in progress, add a special field for it
+		if rollOffGame != nil {
+			// Create a list of players in the roll-off
+			var rollOffPlayersList string
+			for _, p := range rollOffGame.Participants {
+				if p.RollTime == nil {
+					rollOffPlayersList += fmt.Sprintf("• **%s** - 🎯 NEEDS TO ROLL! 🎲\n", p.PlayerName)
+				} else {
+					rollOffPlayersList += fmt.Sprintf("• %s - ✅ Already rolled\n", p.PlayerName)
+				}
+			}
+			
+			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+				Name:  "⚔️ ROLL-OFF IN PROGRESS!",
+				Value: "The following players need to roll again to break a tie:\n" + rollOffPlayersList,
+			})
+		}
 
 	case models.GameStatusRollOff:
 		embed.Description = "⚔️ **ROLL-OFF IN PROGRESS!** Players in the roll-off need to roll again to break the tie.\n*May the odds be ever in your favor!*"
@@ -610,26 +628,43 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 
 		// If this is a roll-off game, add info about the parent game
 		if parentGame != nil {
+			// Determine roll-off type based on parent game
+			rollOffTypeText := "Tie-breaker roll-off"
+			if parentGame.Status == models.GameStatusActive {
+				rollOffTypeText = "This is a tie-breaker roll-off for the main game"
+			}
+			
 			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
 				Name:  "🔄 Roll-Off Type",
-				Value: "This is a tie-breaker roll-off",
+				Value: rollOffTypeText,
 			})
 		}
 
 		// Add a special field highlighting who needs to roll
 		var pendingRollers string
+		var rolledPlayers string
+		
 		for _, p := range game.Participants {
 			if p.RollTime == nil {
 				pendingRollers += fmt.Sprintf("• **%s** - 🎯 NEEDS TO ROLL! 🎲\n", p.PlayerName)
 			} else {
-				pendingRollers += fmt.Sprintf("• %s - ✅ Already rolled\n", p.PlayerName)
+				rolledPlayers += fmt.Sprintf("• %s - ✅ Rolled a **%d**\n", p.PlayerName, p.RollValue)
 			}
 		}
-
+		
+		rollOffStatusText := ""
 		if pendingRollers != "" {
+			rollOffStatusText += "**Waiting for rolls from:**\n" + pendingRollers + "\n"
+		}
+		
+		if rolledPlayers != "" {
+			rollOffStatusText += "**Already rolled:**\n" + rolledPlayers
+		}
+
+		if rollOffStatusText != "" {
 			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
-				Name:  "🎲 Roll-Off Participants",
-				Value: pendingRollers,
+				Name:  "🎲 Roll-Off Status",
+				Value: rollOffStatusText,
 			})
 		}
 

@@ -378,6 +378,8 @@ type GetGameByChannelInput struct {
 // GetGameByChannelOutput defines the output for retrieving a game by channel ID
 type GetGameByChannelOutput struct {
 	Game *models.Game
+	// ActiveRollOffGames contains a list of active roll-off games associated with this game
+	ActiveRollOffGames []*models.Game
 }
 
 // GetLeaderboardInput defines the input for retrieving a game's leaderboard
@@ -436,6 +438,8 @@ type GetGameInput struct {
 type GetGameOutput struct {
 	// Game is the retrieved game
 	Game *models.Game
+	// ActiveRollOffGames contains a list of active roll-off games associated with this game
+	ActiveRollOffGames []*models.Game
 }
 
 // GetDrinkRecordsInput contains parameters for retrieving drink records for a game

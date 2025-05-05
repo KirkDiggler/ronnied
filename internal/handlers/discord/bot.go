@@ -1105,6 +1105,9 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 		if err == nil {
 			rollOffGame = rollOffGameOutput.Game
 		}
+	} else if len(gameOutput.ActiveRollOffGames) > 0 {
+		// Use the first active roll-off game
+		rollOffGame = gameOutput.ActiveRollOffGames[0]
 	}
 
 	// Get drink records
@@ -1190,6 +1193,9 @@ func (b *Bot) updateGameMessageWithForceStart(s *discordgo.Session, channelID st
 		if err == nil {
 			rollOffGame = rollOffGameOutput.Game
 		}
+	} else if len(gameOutput.ActiveRollOffGames) > 0 {
+		// Use the first active roll-off game
+		rollOffGame = gameOutput.ActiveRollOffGames[0]
 	}
 
 	// Get drink records
