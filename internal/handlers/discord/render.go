@@ -729,6 +729,72 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 		})
 	}
 
+	// Add recent drink assignments section if there are any drink records
+	if len(drinkRecords) > 0 {
+		var drinkAssignments string
+		
+		// Sort drink records by time (newest first)
+		sort.Slice(drinkRecords, func(i, j int) bool {
+			return drinkRecords[i].Timestamp.After(drinkRecords[j].Timestamp)
+		})
+		
+		// Take only the 5 most recent drink assignments
+		recentCount := 5
+		if len(drinkRecords) < recentCount {
+			recentCount = len(drinkRecords)
+		}
+		
+		// Build the drink assignments text with Archer-themed messages
+		for i := 0; i < recentCount; i++ {
+			record := drinkRecords[i]
+			
+			// Find player names
+			var fromPlayerName, toPlayerName string
+			for _, p := range game.Participants {
+				if p.PlayerID == record.FromPlayerID {
+					fromPlayerName = p.PlayerName
+				}
+				if p.PlayerID == record.ToPlayerID {
+					toPlayerName = p.PlayerName
+				}
+			}
+			
+			// Skip if we couldn't find the player names
+			if fromPlayerName == "" || toPlayerName == "" {
+				continue
+			}
+			
+			// Add Archer-themed message based on reason
+			var assignmentMessage string
+			switch record.Reason {
+			case models.DrinkReasonCriticalHit:
+				archerAssignments := []string{
+					"🔥 **%s** assigned a drink to **%s**! *\"Boom! That's how you get them!\"*",
+					"🔥 **%s** made **%s** drink! *\"Sploosh! Right in the danger zone!\"*",
+					"🔥 **%s** told **%s** to drink! *\"Do you want drunk people? Because that's how you get drunk people!\"*",
+					"🔥 **%s** → **%s** *\"Just the tip... of their glass!\"*",
+					"🔥 **%s** → **%s** *\"Phrasing! But yes, drink up!\"*",
+				}
+				assignmentMessage = fmt.Sprintf(archerAssignments[r.Intn(len(archerAssignments))], fromPlayerName, toPlayerName)
+			case models.DrinkReasonCriticalFail:
+				assignmentMessage = fmt.Sprintf("💀 **%s** rolled a 1 and had to drink! *\"That's how you get ants!\"*", fromPlayerName)
+			case models.DrinkReasonLowestRoll:
+				assignmentMessage = fmt.Sprintf("👇 **%s** had the lowest roll and had to drink! *\"Womp womp!\"*", fromPlayerName)
+			default:
+				assignmentMessage = fmt.Sprintf("🍺 **%s** → **%s**", fromPlayerName, toPlayerName)
+			}
+			
+			drinkAssignments += assignmentMessage + "\n\n"
+		}
+		
+		if drinkAssignments != "" {
+			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+				Name:  "🍻 Recent Drink Assignments",
+				Value: drinkAssignments,
+			})
+		}
+	}
+
 	// Add drink leaderboard if available - sort by PAID drinks instead of total
 	if len(sessionLeaderboardEntries) > 0 {
 		// Sort entries by PAID count (descending) - this is the key change

@@ -525,28 +525,32 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 	// Determine color based on roll result
 	var embedColor int
 	if rollOutput.IsCriticalHit {
-		embedColor = 0x2ecc71 // Green for critical hits
-	} else if rollOutput.RollValue == 1 {
-		embedColor = 0xe74c3c // Red for critical fails
+		embedColor = 0xe74c3c // Red for critical hit
+	} else if rollOutput.IsCriticalFail {
+		embedColor = 0x3498db // Blue for critical fail
 	} else {
-		embedColor = 0x3498db // Blue for normal rolls
+		embedColor = 0x2ecc71 // Green for normal roll
 	}
 
-	// Get a dynamic roll result message from the messaging service
-	rollResultOutput, err := b.messagingService.GetRollResultMessage(ctx, &messaging.GetRollResultMessageInput{
-		PlayerName:        rollOutput.PlayerName,
-		RollValue:         rollOutput.RollValue,
-		IsCriticalHit:     rollOutput.IsCriticalHit,
-		IsCriticalFail:    rollOutput.RollValue == 1, // Assuming 1 is critical fail
-		IsPersonalMessage: true,                      // This is an ephemeral message to the player
+	// Get fun roll result message from messaging service
+	var rollResultOutput *messaging.GetRollResultMessageOutput
+	var whisperErr error
+	var rollWhisperOutput *messaging.GetRollWhisperMessageOutput
+
+	// Always try to get both the roll result and whisper messages
+	rollResultOutput, err = b.messagingService.GetRollResultMessage(ctx, &messaging.GetRollResultMessageInput{
+		RollValue:     rollOutput.RollValue,
+		IsCriticalHit: rollOutput.IsCriticalHit,
+		IsCriticalFail: rollOutput.IsCriticalFail,
+		PlayerName:    rollOutput.PlayerName,
 	})
 
-	// Get a supportive whisper message from Ronnie
-	rollWhisperOutput, whisperErr := b.messagingService.GetRollWhisperMessage(ctx, &messaging.GetRollWhisperMessageInput{
-		PlayerName:     rollOutput.PlayerName,
-		RollValue:      rollOutput.RollValue,
-		IsCriticalHit:  rollOutput.IsCriticalHit,
-		IsCriticalFail: rollOutput.RollValue == 1, // Assuming 1 is critical fail
+	// Always try to get the whisper message
+	rollWhisperOutput, whisperErr = b.messagingService.GetRollWhisperMessage(ctx, &messaging.GetRollWhisperMessageInput{
+		RollValue:     rollOutput.RollValue,
+		IsCriticalHit: rollOutput.IsCriticalHit,
+		IsCriticalFail: rollOutput.IsCriticalFail,
+		PlayerName:    rollOutput.PlayerName,
 	})
 
 	// Create embeds - either with messaging service output or fallback to static content
@@ -650,14 +654,31 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		})
 	}
 
-	// Edit the original message with the updated content
-	_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-		Content:    &contentText,
-		Embeds:     &embeds,
-		Components: &messageComponents,
+	// Always respond with an ephemeral message to the player who rolled
+	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content:    contentText,
+			Embeds:     embeds,
+			Components: messageComponents,
+			Flags:      discordgo.MessageFlagsEphemeral,
+		},
 	})
+	if err != nil {
+		log.Printf("Error responding to interaction: %v", err)
+		return err
+	}
 
-	return err
+	// Update the game message in the channel
+	// This is a separate update to the shared message that everyone can see
+	// Note: This might not always happen if there's no game message ID
+	if existingGame.Game.MessageID != "" {
+		b.updateGameMessage(s, channelID, existingGame.Game.ID)
+	} else {
+		log.Printf("No message ID found for game %s, skipping update", existingGame.Game.ID)
+	}
+
+	return nil
 }
 
 // handleAssignDrinkSelect handles the assign drink dropdown selection
