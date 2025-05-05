@@ -208,6 +208,20 @@ type RollDiceOutput struct {
 
 	// Game is the current game state
 	Game *models.Game
+
+	// Enhanced fields for roll-off handling
+	
+	// IsRollOffRoll indicates if this roll was in a roll-off game
+	IsRollOffRoll bool
+	
+	// ParentGameID is the ID of the parent game if this is a roll-off
+	ParentGameID string
+	
+	// NeedsToRollInRollOff indicates if the player needs to roll in a roll-off
+	NeedsToRollInRollOff bool
+	
+	// GameIDsToUpdate is a list of game IDs that should be updated after this roll
+	GameIDsToUpdate []string
 }
 
 // AssignDrinkInput contains parameters for assigning a drink
@@ -310,20 +324,20 @@ type EndGameOutput struct {
 	SessionLeaderboard []LeaderboardEntry
 }
 
-// StartGameInput contains parameters for starting a game
+// StartGameInput defines the input for starting a game
 type StartGameInput struct {
-	// GameID is the unique identifier for the game
-	GameID string
-
-	// PlayerID is the Discord user ID of the player starting the game
-	// This should match the game's creator ID
-	PlayerID string
+	GameID     string
+	PlayerID   string
+	ForceStart bool // Set to true when a non-creator tries to start the game after timeout
 }
 
 // StartGameOutput contains the result of starting a game
 type StartGameOutput struct {
 	// Success indicates if the game was successfully started
-	Success bool
+	Success       bool
+	ForceStarted  bool   // Whether the game was force-started by a non-creator
+	CreatorID     string // The ID of the original creator who delayed starting
+	CreatorName   string // The name of the original creator
 }
 
 // HandleRollOffInput contains parameters for handling a roll-off
@@ -562,7 +576,7 @@ type ResetGameTabOutput struct {
 type PayDrinkInput struct {
 	// GameID is the ID of the game
 	GameID string
-	
+
 	// PlayerID is the ID of the player paying the drink
 	PlayerID string
 }
@@ -571,10 +585,10 @@ type PayDrinkInput struct {
 type PayDrinkOutput struct {
 	// Success indicates whether the drink was successfully paid
 	Success bool
-	
+
 	// Game is the game the drink was paid in
 	Game *models.Game
-	
+
 	// DrinkRecord is the drink record that was marked as paid
 	DrinkRecord *models.DrinkLedger
 }
@@ -583,7 +597,7 @@ type PayDrinkOutput struct {
 type CreateSessionInput struct {
 	// ChannelID is the Discord channel ID for this session
 	ChannelID string
-	
+
 	// CreatedBy is the user ID who created the session
 	CreatedBy string
 }
@@ -592,7 +606,7 @@ type CreateSessionInput struct {
 type CreateSessionOutput struct {
 	// Success indicates whether the session was successfully created
 	Success bool
-	
+
 	// Session is the newly created session
 	Session *models.Session
 }
@@ -602,7 +616,7 @@ type GetSessionLeaderboardInput struct {
 	// ChannelID is the Discord channel ID to get the leaderboard for
 	// If specified, will use the current session for this channel
 	ChannelID string
-	
+
 	// SessionID is the specific session ID to get the leaderboard for
 	// If specified, will override ChannelID
 	SessionID string
@@ -612,10 +626,10 @@ type GetSessionLeaderboardInput struct {
 type GetSessionLeaderboardOutput struct {
 	// Success indicates whether the leaderboard was successfully retrieved
 	Success bool
-	
+
 	// Session is the session this leaderboard is for
 	Session *models.Session
-	
+
 	// Entries is the list of leaderboard entries
 	Entries []LeaderboardEntry
 }
@@ -628,7 +642,7 @@ type StartNewSessionInput struct {
 
 // StartNewSessionOutput is the output for StartNewSession
 type StartNewSessionOutput struct {
-	Success     bool
-	Session     *models.Session
-	SessionID   string
+	Success   bool
+	Session   *models.Session
+	SessionID string
 }

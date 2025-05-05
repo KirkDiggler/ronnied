@@ -1,6 +1,9 @@
 package game
 
-import "context"
+import (
+	"context"
+	"github.com/KirkDiggler/ronnied/internal/models"
+)
 
 // Service defines the interface for game operations
 type Service interface {
@@ -24,6 +27,9 @@ type Service interface {
 
 	// HandleRollOff manages roll-offs for tied players
 	HandleRollOff(ctx context.Context, input *HandleRollOffInput) (*HandleRollOffOutput, error)
+
+	// FindActiveRollOffGame finds an active roll-off game for a player in a main game's chain
+	FindActiveRollOffGame(ctx context.Context, playerID string, mainGameID string) (*models.Game, error)
 
 	// GetGameByChannel retrieves a game by its Discord channel ID
 	GetGameByChannel(ctx context.Context, input *GetGameByChannelInput) (*GetGameByChannelOutput, error)
@@ -57,7 +63,7 @@ type Service interface {
 
 	// GetSessionLeaderboard retrieves the leaderboard for the current session
 	GetSessionLeaderboard(ctx context.Context, input *GetSessionLeaderboardInput) (*GetSessionLeaderboardOutput, error)
-	
+
 	// StartNewSession creates a new drinking session for a channel (alias for CreateSession with a clearer name)
 	StartNewSession(ctx context.Context, input *StartNewSessionInput) (*StartNewSessionOutput, error)
 }

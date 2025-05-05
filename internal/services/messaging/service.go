@@ -96,6 +96,11 @@ func (s *service) GetJoinGameMessage(ctx context.Context, input *GetJoinGameMess
 			"Fresh meat! Er, I mean... welcome to the game!",
 			"A new challenger appears! Get ready to roll those dice.",
 			"Look who decided to join! The dice gods await your tribute.",
+			"Do you want drunk people? Because that's how you get drunk people!",
+			"Welcome to the DANGER ZONE! Grab a drink and prepare to roll.",
+			"Holy shitsnacks! A new player has joined the game!",
+			"Phrasing! But seriously, welcome to the game.",
+			"Just the tip... of the iceberg of fun you're about to have!",
 		}
 	}
 
@@ -178,13 +183,12 @@ func (s *service) GetGameStatusMessage(ctx context.Context, input *GetGameStatus
 			"Gather 'round, brave souls! The dice await your courage (and your liver).",
 			"A new drinking game is forming. Join now or forever hold your sobriety!",
 			"Looking for players who can roll dice better than they can hold their liquor.",
-			fmt.Sprintf("We've got %d player(s) so far. The more the merrier (and drunker)!", input.ParticipantCount),
 			"Game night is loading... Please wait while we prepare the regrets for tomorrow morning.",
 		}
 	case models.GameStatusActive:
 		messages = []string{
 			"The game is afoot! Roll those dice and pray to the drinking gods.",
-			"May the odds be ever in your favor (but the drinks against you).",
+			"May the odds be ever in your favor! Roll your dice!",
 			"It's rolling time! Remember: a 6 means you're lucky, a 1 means you're thirsty.",
 			"Game in progress! Roll well or prepare to drink well.",
 			"The dice are hot, and soon your throat will be too! Roll wisely.",
@@ -245,6 +249,8 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				"Nat 6!",
 				"Perfect Roll!",
 				"MAXIMUM DAMAGE!",
+				"DANGER ZONE!",
+				"PHRASING!",
 			}
 
 			messages := []string{
@@ -253,6 +259,11 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				"You're on fire! This means someone's about to get thirsty!",
 				"The dice gods favor you today! That's a 6! Choose your victim!",
 				"CRIT! You have the power to make someone drink!",
+				"WOOOO! That's how you get ants! And by ants, I mean drinks for someone else!",
+				"Holy shitsnacks! You rolled a 6! Time to make someone drink!",
+				"Sploosh! That's a 6! You get to choose who drinks!",
+				"Do you want drunk people? Because that's how you get drunk people!",
+				"Lana. Lana. LANA! LANAAAA! You rolled a 6!",
 			}
 
 			title = titles[rand.Intn(len(titles))]
@@ -264,6 +275,8 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				"Nat 6!",
 				"Perfect Roll!",
 				"MAXIMUM DAMAGE!",
+				"DANGER ZONE!",
+				"PHRASING!",
 			}
 
 			messages := []string{
@@ -279,6 +292,12 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				fmt.Sprintf("The chosen one! %s now wields the power of drink assignment!", input.PlayerName),
 				fmt.Sprintf("Against all odds, %s somehow managed to roll a 6! Must be their birthday!", input.PlayerName),
 				fmt.Sprintf("%s's 6 is the universe's way of saying someone needs to drink more!", input.PlayerName),
+				fmt.Sprintf("%s just entered the DANGER ZONE with that 6! Time to assign a drink!", input.PlayerName),
+				fmt.Sprintf("Holy shitsnacks! %s rolled a 6! Someone's about to get wasted!", input.PlayerName),
+				fmt.Sprintf("Do you want drunk people? Because that's how %s gets drunk people! With a 6!", input.PlayerName),
+				fmt.Sprintf("%s rolled a 6! Just the tip... of greatness!", input.PlayerName),
+				fmt.Sprintf("Sploosh! %s rolled a 6 and gets to make someone drink!", input.PlayerName),
+				fmt.Sprintf("%s: 'I swear I had something for this...' *rolls a 6*", input.PlayerName),
 			}
 
 			title = titles[rand.Intn(len(titles))]
@@ -295,6 +314,8 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				"MINIMUM DAMAGE!",
 				"Better luck next time!",
 				"I didn't see it, was it a good roll?",
+				"DANGER ZONE!",
+				"PHRASING!",
 			}
 
 			messages := []string{
@@ -303,6 +324,11 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				"You angered the dice gods with that 1! Drink up, friend!",
 				"Ronnie has spoken! You rolled a 1 and must take a drink!",
 				"CRITICAL FAIL! You rolled a 1 and have to drink!",
+				"Wow, that's... just... wow. You rolled a 1. Drink until you forget that happened.",
+				"That's what I call a 'Pam-level' roll. A 1! Drink up!",
+				"You rolled a 1! Do you want to get ants? Because that's how you get ants.",
+				"That's a 1! I had something for this... something about drinking?",
+				"Nooope! You rolled a 1. Time to drink away the shame.",
 			}
 
 			title = titles[rand.Intn(len(titles))]
@@ -315,6 +341,8 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				"MINIMUM DAMAGE!",
 				"Better luck next time!",
 				":trumpet: Sad Trumpet :(",
+				"DANGER ZONE!",
+				"PHRASING!",
 			}
 
 			messages := []string{
@@ -330,6 +358,12 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				fmt.Sprintf("The universe has spoken: %s rolled a 1 and needs alcohol to cope with it!", input.PlayerName),
 				fmt.Sprintf("Even the dice are laughing at %s's pathetic 1! Drink up, buddy!", input.PlayerName),
 				fmt.Sprintf("%s just proved they can't even roll dice properly with that 1! Drink to forget!", input.PlayerName),
+				fmt.Sprintf("Wow, that's... just... wow. %s rolled a 1. Drink until you forget that happened.", input.PlayerName),
+				fmt.Sprintf("%s rolled a 1! Guess they'll be entering the DANGER ZONE of drunkenness soon!", input.PlayerName),
+				fmt.Sprintf("Holy shitsnacks! %s rolled a 1! That's like, the worst possible outcome!", input.PlayerName),
+				fmt.Sprintf("%s: 'Wait, I had something for this...' *rolls a 1* 'Dammit!'", input.PlayerName),
+				fmt.Sprintf("That's what I call a 'Pam-level' roll from %s. A 1! Drink up!", input.PlayerName),
+				fmt.Sprintf("%s rolled a 1! Do you want to get drunk? Because that's how you get drunk.", input.PlayerName),
 			}
 
 			title = titles[rand.Intn(len(titles))]
@@ -345,6 +379,8 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				fmt.Sprintf("%d Points!", input.RollValue),
 				fmt.Sprintf("Roll: %d", input.RollValue),
 				fmt.Sprintf("The dice shows %d", input.RollValue),
+				"Meh.",
+				"Just the tip... of the dice.",
 			}
 
 			messages := []string{
@@ -353,6 +389,11 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				fmt.Sprintf("Your roll: %d - Keep trying!", input.RollValue),
 				fmt.Sprintf("A solid %d! That works for you in your income bracket", input.RollValue),
 				fmt.Sprintf("You rolled %d. The game continues!", input.RollValue),
+				fmt.Sprintf("You rolled a %d. Are we not doing 'phrasing' anymore?", input.RollValue),
+				fmt.Sprintf("A %d? I swear I had something for this...", input.RollValue),
+				fmt.Sprintf("You rolled a %d. That's what we call a 'Cyril-level' performance.", input.RollValue),
+				fmt.Sprintf("A %d. Not great, not terrible. Like a sad handjob.", input.RollValue),
+				fmt.Sprintf("You rolled a %d. Meh, I've seen better. I've seen worse, but I've definitely seen better.", input.RollValue),
 			}
 
 			title = titles[rand.Intn(len(titles))]
@@ -364,6 +405,8 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				fmt.Sprintf("%d Points!", input.RollValue),
 				fmt.Sprintf("Roll: %d", input.RollValue),
 				fmt.Sprintf("The dice shows %d", input.RollValue),
+				"Meh.",
+				"Just the tip... of the dice.",
 			}
 
 			messages := []string{
@@ -382,6 +425,11 @@ func (s *service) GetRollResultMessage(ctx context.Context, input *GetRollResult
 				fmt.Sprintf("%s rolled a %d. Let's all pretend to be impressed.", input.PlayerName, input.RollValue),
 				fmt.Sprintf("The dice gave %s a %d. The dice never lie about a person's true worth.", input.PlayerName, input.RollValue),
 				fmt.Sprintf("%s's %d is about as impressive as their choice of clothes tonight.", input.PlayerName, input.RollValue),
+				fmt.Sprintf("%s rolled a %d. Are we not doing 'phrasing' anymore?", input.PlayerName, input.RollValue),
+				fmt.Sprintf("%s: 'I swear I had something for this...' *rolls a %d*", input.PlayerName, input.RollValue),
+				fmt.Sprintf("A %d from %s. Not great, not terrible. Like a sad handjob.", input.RollValue, input.PlayerName),
+				fmt.Sprintf("%s rolled a %d. That's what we call a 'Cyril-level' performance.", input.PlayerName, input.RollValue),
+				fmt.Sprintf("%s got a %d. Meh, I've seen better. I've seen worse, but I've definitely seen better.", input.PlayerName, input.RollValue),
 			}
 
 			title = titles[rand.Intn(len(titles))]
@@ -404,12 +452,10 @@ func (s *service) GetGameStartedMessage(ctx context.Context, input *GetGameStart
 	// Create a variety of fun messages for when a game is started
 	messages := []string{
 		"Game Started! Click the button below to roll your dice.",
-		fmt.Sprintf("The game is ON! %d players are ready to roll. Your turn now!", input.PlayerCount),
 		"Let the dice decide your fate! Roll now!",
 		"Time to test your luck! Click to roll the dice!",
 		"The game has begun! Roll the dice and see what destiny has in store!",
 		"Ready, set, ROLL! Click the button to throw your dice!",
-		fmt.Sprintf("Game's on! You and %d other brave souls are about to tempt fate!", input.PlayerCount-1),
 		"May the odds be ever in your favor! Roll your dice!",
 		"It's dice time! Click to roll and see if luck is on your side today!",
 		"Game started! Will you roll a critical hit or a critical fail? Find out now!",
@@ -531,6 +577,11 @@ func (s *service) GetRollWhisperMessage(ctx context.Context, input *GetRollWhisp
 			fmt.Sprintf("Don't tell anyone, but that's the best roll I've seen all day, %s!", input.PlayerName),
 			fmt.Sprintf("*quietly* %s, you're my favorite player. That 6 was destiny!", input.PlayerName),
 			fmt.Sprintf("Just between us, %s, I might have nudged that dice a little for you. Our secret!", input.PlayerName),
+			fmt.Sprintf("*whispers* Welcome to the DANGER ZONE, %s! That 6 is your ticket to power!", input.PlayerName),
+			fmt.Sprintf("Hey %s, do you want drunk people? Because that's how you get drunk people! Nice 6!", input.PlayerName),
+			fmt.Sprintf("*quietly* Sploosh! That 6 was amazing, %s. Now make someone pay!", input.PlayerName),
+			fmt.Sprintf("Between us, %s, I'm pretty sure that roll just got you a seat on the highway to the DANGER ZONE!", input.PlayerName),
+			fmt.Sprintf("*whispers* That's how you roll dice, %s! Other Barry would be proud.", input.PlayerName),
 		}
 
 	case input.IsCriticalFail:
@@ -541,6 +592,11 @@ func (s *service) GetRollWhisperMessage(ctx context.Context, input *GetRollWhisp
 			fmt.Sprintf("*quietly* %s, that drink might help you forget that terrible roll!", input.PlayerName),
 			fmt.Sprintf("Don't let the others see you sweat, %s. Act like you meant to roll that 1!", input.PlayerName),
 			fmt.Sprintf("Hey %s, at least you're consistent! Consistently unlucky, but still...", input.PlayerName),
+			fmt.Sprintf("*whispers* Holy shitsnacks, %s! That was... not great. Drink to forget!", input.PlayerName),
+			fmt.Sprintf("Between us, %s, that roll was what I call a classic Cyril. Total failure.", input.PlayerName),
+			fmt.Sprintf("*quietly* %s, you just entered a whole new DANGER ZONE of failure with that 1!", input.PlayerName),
+			fmt.Sprintf("Phrasing! But seriously %s, that 1 was pretty bad. Have a drink, you need it.", input.PlayerName),
+			fmt.Sprintf("*whispers* %s, I'd say that roll was disappointing, but that would imply I expected more from you.", input.PlayerName),
 		}
 
 	default:
@@ -553,6 +609,11 @@ func (s *service) GetRollWhisperMessage(ctx context.Context, input *GetRollWhisp
 				fmt.Sprintf("*quietly* %s, I've seen you roll worse. This is practically a win!", input.PlayerName),
 				fmt.Sprintf("Hey %s, at least it wasn't a 1! Small victories, right?", input.PlayerName),
 				fmt.Sprintf("Don't tell anyone, but I think the dice are warming up to you, %s!", input.PlayerName),
+				fmt.Sprintf("*whispers* %s, that roll was like a sad handjob. Nobody's excited about it.", input.PlayerName),
+				fmt.Sprintf("Between us, %s, that %d is what we call a 'Pam after five drinks' level of performance.", input.PlayerName, input.RollValue),
+				fmt.Sprintf("*quietly* %s, I had something for this... something about mediocrity?", input.PlayerName),
+				fmt.Sprintf("Do you want to be average? Because that's how you get average, %s.", input.PlayerName),
+				fmt.Sprintf("*whispers* Just the tip... of mediocrity with that %d, %s.", input.RollValue, input.PlayerName),
 			}
 		} else {
 			// Higher normal rolls
@@ -562,6 +623,11 @@ func (s *service) GetRollWhisperMessage(ctx context.Context, input *GetRollWhisp
 				fmt.Sprintf("*quietly* %s, you're getting better at this! Keep it up!", input.PlayerName),
 				fmt.Sprintf("Hey %s, with rolls like that, you might just survive this game!", input.PlayerName),
 				fmt.Sprintf("Don't tell the others, but I'm rooting for you, %s! That was a good one!", input.PlayerName),
+				fmt.Sprintf("*whispers* %s, that's what I call a solid roll. Not quite the DANGER ZONE, but close!", input.PlayerName),
+				fmt.Sprintf("Between us, %s, that %d is like Woodhouse - reliable but not exciting.", input.PlayerName, input.RollValue),
+				fmt.Sprintf("*quietly* %s, you're entering the... zone of... adequate rolling? I had something for this.", input.PlayerName),
+				fmt.Sprintf("Sploosh! Well, more like a splash. Nice %d, %s.", input.RollValue, input.PlayerName),
+				fmt.Sprintf("*whispers* %s, that roll was like a turtle neck - tactically solid but not flashy.", input.PlayerName),
 			}
 		}
 	}
@@ -644,35 +710,222 @@ func (s *service) GetPayDrinkMessage(ctx context.Context, input *GetPayDrinkMess
 		return nil, errors.New("input cannot be nil")
 	}
 
-	// Fun titles for paying drinks
+	var title, message string
+
+	// Archer-themed drink payment messages
 	titles := []string{
-		"Debt Cleared!",
-		"Tab Paid!",
-		"Drink Settled!",
+		"Drink Paid! 🍻",
+		"Tab Cleared! 💸",
+		"Debt Settled! 🥃",
 		"Cheers to That!",
 		"Bottoms Up!",
+		"DANGER ZONE!",
+		"Phrasing!",
+		"Sploosh!",
 	}
 
-	// Fun messages for paying drinks
 	messages := []string{
-		fmt.Sprintf("%s chugs with dignity and honor! 🍻", input.PlayerName),
-		fmt.Sprintf("%s takes their medicine like a champ! 💪", input.PlayerName),
-		fmt.Sprintf("%s settles their tab with the drinking gods! 🙏", input.PlayerName),
-		fmt.Sprintf("%s drinks up and lives to roll another day! 🎲", input.PlayerName),
-		fmt.Sprintf("The bartender nods approvingly as %s pays their dues! 🍸", input.PlayerName),
-		fmt.Sprintf("%s raises their glass in a toast to bad luck and good friends! 🥂", input.PlayerName),
-		fmt.Sprintf("%s accepts defeat gracefully and drinks up! 🏳️", input.PlayerName),
-		fmt.Sprintf("A moment of silence as %s downs their drink... and it's gone! 💨", input.PlayerName),
-		fmt.Sprintf("%s proves they're a player of honor by paying their drink debt! 🎖️", input.PlayerName),
-		fmt.Sprintf("The drinking gods are pleased with %s's sacrifice! 🔱", input.PlayerName),
+		fmt.Sprintf("**%s** paid a drink! *\"That's how you avoid getting ants!\"*", input.PlayerName),
+		fmt.Sprintf("**%s** settled their tab! *\"Just the tip... of fiscal responsibility!\"*", input.PlayerName),
+		fmt.Sprintf("**%s** paid up! *\"DANGER ZONE averted!\"*", input.PlayerName),
+		fmt.Sprintf("**%s** paid a drink! *\"Sploosh! That's how you handle your debts!\"*", input.PlayerName),
+		fmt.Sprintf("**%s** cleared their debt! *\"Other Barry approves of your responsibility!\"*", input.PlayerName),
+		fmt.Sprintf("**%s** paid a drink! *\"Phrasing! But yes, good job paying up!\"*", input.PlayerName),
+		fmt.Sprintf("**%s** paid up! *\"Do you want to be debt-free? Because that's how you get debt-free!\"*", input.PlayerName),
 	}
 
 	// Select random title and message
-	selectedTitle := titles[s.rand.Intn(len(titles))]
-	selectedMessage := messages[s.rand.Intn(len(messages))]
+	title = titles[s.rand.Intn(len(titles))]
+	message = messages[s.rand.Intn(len(messages))]
+
+	if input.DrinkCount > 1 {
+		message += fmt.Sprintf(" (%d/%d drinks paid)", input.DrinkCount, input.DrinkCount)
+	}
 
 	return &GetPayDrinkMessageOutput{
-		Title:   selectedTitle,
-		Message: selectedMessage,
+		Title:   title,
+		Message: message,
+	}, nil
+}
+
+// GetRollComment returns a comment for a roll in the shared game message
+func (s *service) GetRollComment(ctx context.Context, input *GetRollCommentInput) (*GetRollCommentOutput, error) {
+	if input == nil {
+		return nil, errors.New("input cannot be nil")
+	}
+
+	var comment string
+
+	// Select comment based on roll value
+	switch {
+	case input.RollValue == 6:
+		// Archer-inspired comments for critical hits
+		archerComments := []string{
+			"\n    *\"Feeling powerful today!\"*",
+			"\n    *\"DANGER ZONE!\"*",
+			"\n    *\"Sploosh!\"*",
+			"\n    *\"Do you want drunk people? Because that's how you get drunk people!\"*",
+			"\n    *\"Just the tip... of greatness!\"*",
+			"\n    *\"Welcome to the DANGER ZONE!\"*",
+			"\n    *\"That's how you roll dice! Other Barry would be proud.\"*",
+			"\n    *\"Enters the danger zone with a killer roll!\"*",
+			"\n    *\"Just got a seat on the highway to the DANGER ZONE!\"*",
+			"\n    *\"Holy shitsnacks! That's a perfect roll!\"*",
+			"\n    *\"Boom! Phrasing! But also, boom!\"*",
+			"\n    *\"Are we not doing 'phrasing' anymore? Because that roll deserves a 'phrasing'!\"*",
+			"\n    *\"That's what I call a roll with authority!\"*",
+			"\n    *\"Lana. Lana. LANAAA! Look at this amazing roll!\"*",
+			"\n    *\"Rolls like that are how you get invited to Whore Island!\"*",
+			"\n    *\"Tactleneck-level precision on that roll!\"*",
+			"\n    *\"Rolls dice like they're on Groovy Bears!\"*",
+			"\n    *\"That roll was like my fifth of scotch - perfect!\"*",
+			"\n    *\"Yuuup! That's how it's done!\"*",
+			"\n    *\"Burt Reynolds would be proud of that roll!\"*",
+		}
+		comment = archerComments[s.rand.Intn(len(archerComments))]
+	case input.RollValue == 1:
+		// Archer-inspired comments for critical fails
+		archerComments := []string{
+			"\n    *\"Ouch, better luck next time!\"*",
+			"\n    *\"That's how you get ants.\"*",
+			"\n    *\"Phrasing! Wait, that doesn't work here.\"*",
+			"\n    *\"I swear I had something for this...\"*",
+			"\n    *\"Classic Cyril move.\"*",
+			"\n    *\"Holy shitsnacks! That was... not great.\"*",
+			"\n    *\"Entered a whole new DANGER ZONE of failure!\"*",
+			"\n    *\"Raises their glass in a toast to bad luck and good friends! 🥂\"*",
+			"\n    *\"That roll was like a sad handjob. Nobody's excited about it.\"*",
+			"\n    *\"Womp womp!\"*",
+			"\n    *\"Looks like someone's eating a big bowl of spider webs tonight!\"*",
+			"\n    *\"That roll was worse than Brett getting shot... again.\"*",
+			"\n    *\"Lana. Lana. LANAAA! This roll is terrible!\"*",
+			"\n    *\"That's what I call a Cyril-grade performance.\"*",
+			"\n    *\"Looks like someone's been drinking Glengoolie... Brown.\"*",
+			"\n    *\"Do you want to lose? Because that's how you lose!\"*",
+			"\n    *\"That roll was like Milton's toast - burnt to a crisp.\"*",
+			"\n    *\"Rolls dice like they're wearing Krieger's virtual girlfriend!\"*",
+			"\n    *\"That roll was so bad, even Woodhouse wouldn't pick it up.\"*",
+			"\n    *\"Nooope! That's not how it's done!\"*",
+		}
+		comment = archerComments[s.rand.Intn(len(archerComments))]
+	case input.RollValue >= 4:
+		// Comments for high rolls (4-5)
+		archerComments := []string{
+			"\n    *\"So close to greatness!\"*",
+			"\n    *\"Almost entered the danger zone!\"*",
+			"\n    *\"Not quite a sploosh, but close!\"*",
+			"\n    *\"That roll was like a turtle neck - tactically solid but not flashy.\"*",
+			"\n    *\"Sploosh! Well, more like a splash.\"*",
+			"\n    *\"That's what I call a Woodhouse-grade roll - reliable but not exciting.\"*",
+			"\n    *\"Entering the... zone of... adequate rolling? I had something for this.\"*",
+			"\n    *\"That roll was like a slightly less black turtleneck. A... slightly darker black turtleneck.\"*",
+			"\n    *\"Not quite Burt Reynolds, more like Rip Riley level.\"*",
+			"\n    *\"That roll was like mid-shelf bourbon - pretty good, not amazing.\"*",
+			"\n    *\"You're on the edge of the DANGER ZONE with that roll!\"*",
+			"\n    *\"That's what I call a Barry-grade roll. Not Other Barry, just regular Barry.\"*",
+			"\n    *\"That roll was like Pam's dolphin puppet - surprisingly effective.\"*",
+			"\n    *\"Rolls dice like they're on a modest amount of Groovy Bears.\"*",
+			"\n    *\"That's a 'meh plus' on the Archer scale of excellence.\"*",
+		}
+		comment = archerComments[s.rand.Intn(len(archerComments))]
+	default:
+		// Comments for low rolls (2-3)
+		archerComments := []string{
+			"\n    *\"Not great, not terrible.\"*",
+			"\n    *\"I had something for this... something about mediocrity?\"*",
+			"\n    *\"That's what I call a solid roll.\"*",
+			"\n    *\"Do you want ants? Because that's how you get ants.\"*",
+			"\n    *\"That roll was like Cyril's leadership - technically functional but uninspiring.\"*",
+			"\n    *\"That roll was like a sad handjob. Technically does the job, but nobody's excited about it.\"*",
+			"\n    *\"That's what we call a 'Pam after five drinks' level of performance.\"*",
+			"\n    *\"Just the tip... of mediocrity with that roll.\"*",
+			"\n    *\"That roll was like Krieger's experiments - questionable at best.\"*",
+			"\n    *\"That roll was like Cheryl/Carol's sanity - barely hanging in there.\"*",
+			"\n    *\"That roll was like Ray's legs - functional but problematic.\"*",
+			"\n    *\"That roll was like Malory's parenting - present but not impressive.\"*",
+			"\n    *\"That roll was like Archer's emotional growth - minimal but technically exists.\"*",
+			"\n    *\"That roll was like Lana's patience - stretched pretty thin.\"*",
+			"\n    *\"That roll was like Brett's ability to not get shot - not great.\"*",
+		}
+		comment = archerComments[s.rand.Intn(len(archerComments))]
+	}
+
+	return &GetRollCommentOutput{
+		Comment: comment,
+	}, nil
+}
+
+// GetDrinkAssignmentMessage returns a message for a drink assignment in the shared game message
+func (s *service) GetDrinkAssignmentMessage(ctx context.Context, input *GetDrinkAssignmentMessageInput) (*GetDrinkAssignmentMessageOutput, error) {
+	if input == nil {
+		return nil, errors.New("input cannot be nil")
+	}
+
+	var message string
+
+	// Select message based on reason
+	switch input.Reason {
+	case models.DrinkReasonCriticalHit:
+		archerAssignments := []string{
+			"🔥 **%s** assigned a drink to **%s**! *\"Boom! That's how you get them!\"*",
+			"🔥 **%s** made **%s** drink! *\"Sploosh! Right in the danger zone!\"*",
+			"🔥 **%s** told **%s** to drink! *\"Do you want drunk people? Because that's how you get drunk people!\"*",
+			"🔥 **%s** → **%s** *\"Just the tip... of their glass!\"*",
+			"🔥 **%s** → **%s** *\"Phrasing! But yes, drink up!\"*",
+			"🔥 **%s** ordered **%s** to drink! *\"Welcome to the DANGER ZONE!\"*",
+			"🔥 **%s** picked **%s** to drink! *\"Other Barry says you should drink!\"*",
+			"🔥 **%s** → **%s** *\"Sploosh! That's how you assign a drink!\"*",
+			"🔥 **%s** chose **%s** for a drink! *\"I swear I had something for this... Oh yeah, DRINK!\"*",
+			"🔥 **%s** made **%s** drink! *\"Lana. Lana. LANAAA! Look who's drinking!\"*",
+			"🔥 **%s** → **%s** *\"Tactleneck-level precision on that drink assignment!\"*",
+			"🔥 **%s** picked **%s** to drink! *\"Yuuup! That's how it's done!\"*",
+			"🔥 **%s** made **%s** drink! *\"Holy shitsnacks! Time to drink!\"*",
+			"🔥 **%s** → **%s** *\"Are we not doing 'phrasing' anymore? Because that drink deserves a 'phrasing'!\"*",
+			"🔥 **%s** ordered **%s** to drink! *\"That's what I call a drink with authority!\"*",
+			"🔥 **%s** chose **%s** for a drink! *\"Burt Reynolds would be proud of that drink assignment!\"*",
+			"🔥 **%s** → **%s** *\"That drink assignment was like my fifth of scotch - perfect!\"*",
+		}
+		message = fmt.Sprintf(archerAssignments[s.rand.Intn(len(archerAssignments))], input.FromPlayerName, input.ToPlayerName)
+	case models.DrinkReasonCriticalFail:
+		archerFailMessages := []string{
+			"💀 **%s** rolled a 1 and had to drink! *\"That's how you get ants!\"*",
+			"💀 **%s** rolled a 1! *\"Classic Cyril move right there!\"*",
+			"💀 **%s** critically failed! *\"Entered a whole new DANGER ZONE of failure!\"*",
+			"💀 **%s** rolled a 1 and drinks! *\"Holy shitsnacks! That was... not great.\"*",
+			"💀 **%s** rolled a 1! *\"Raises their glass in a toast to bad luck and good friends! 🥂\"*",
+			"💀 **%s** rolled a 1! *\"I swear I had something for this...\"*",
+			"💀 **%s** rolled a 1! *\"Womp womp!\"*",
+			"💀 **%s** rolled a 1 and drinks! *\"Looks like someone's eating a big bowl of spider webs tonight!\"*",
+			"💀 **%s** critically failed! *\"That roll was worse than Brett getting shot... again.\"*",
+			"💀 **%s** rolled a 1! *\"Lana. Lana. LANAAA! This roll is terrible!\"*",
+			"💀 **%s** rolled a 1 and drinks! *\"That's what I call a Cyril-grade performance.\"*",
+			"💀 **%s** critically failed! *\"Looks like someone's been drinking Glengoolie... Brown.\"*",
+			"💀 **%s** rolled a 1! *\"Do you want to lose? Because that's how you lose!\"*",
+			"💀 **%s** rolled a 1 and drinks! *\"That roll was like Milton's toast - burnt to a crisp.\"*",
+			"💀 **%s** critically failed! *\"That roll was so bad, even Woodhouse wouldn't pick it up.\"*",
+		}
+		message = fmt.Sprintf(archerFailMessages[s.rand.Intn(len(archerFailMessages))], input.FromPlayerName)
+	case models.DrinkReasonLowestRoll:
+		archerLowestMessages := []string{
+			"👇 **%s** had the lowest roll and had to drink! *\"Womp womp!\"*",
+			"👇 **%s** rolled lowest! *\"That's what we call a 'Pam after five drinks' level of performance.\"*",
+			"👇 **%s** got the lowest roll! *\"Do you want to be last place? Because that's how you get last place!\"*",
+			"👇 **%s** had the lowest roll! *\"Classic Cyril move right there!\"*",
+			"👇 **%s** rolled lowest and drinks! *\"Holy shitsnacks! That was... not great.\"*",
+			"👇 **%s** got the lowest roll! *\"I swear I had something for this...\"*",
+			"👇 **%s** had the lowest roll! *\"That roll was like Brett's ability to not get shot - not great.\"*",
+			"👇 **%s** rolled lowest and drinks! *\"That roll was like Cheryl/Carol's sanity - barely hanging in there.\"*",
+			"👇 **%s** got the lowest roll! *\"That roll was like Ray's legs - functional but problematic.\"*",
+			"👇 **%s** had the lowest roll! *\"That roll was like Malory's parenting - present but not impressive.\"*",
+			"👇 **%s** rolled lowest and drinks! *\"That roll was like Archer's emotional growth - minimal but technically exists.\"*",
+			"👇 **%s** got the lowest roll! *\"That roll was like Lana's patience - stretched pretty thin.\"*",
+		}
+		message = fmt.Sprintf(archerLowestMessages[s.rand.Intn(len(archerLowestMessages))], input.FromPlayerName)
+	default:
+		message = fmt.Sprintf("🍺 **%s** → **%s**", input.FromPlayerName, input.ToPlayerName)
+	}
+
+	return &GetDrinkAssignmentMessageOutput{
+		Message: message,
 	}, nil
 }

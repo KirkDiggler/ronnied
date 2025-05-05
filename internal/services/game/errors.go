@@ -35,4 +35,5 @@ const (
 	ErrInvalidRollOffType  GameError = "invalid roll-off type"
 	ErrInvalidDrinkReason  GameError = "invalid drink reason"
 	ErrNotCreator          GameError = "not creator"
+	ErrPlayerInRollOff     GameError = "player should be rolling in a roll-off game"
 )

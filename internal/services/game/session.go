@@ -4,12 +4,26 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 
 	"github.com/KirkDiggler/ronnied/internal/models"
 	ledgerRepo "github.com/KirkDiggler/ronnied/internal/repositories/drink_ledger"
 	playerRepo "github.com/KirkDiggler/ronnied/internal/repositories/player"
 )
+
+// extractGuildIDFromChannel extracts the guild ID from a Discord channel ID
+// In Discord, channel IDs are unique, but we can use a simple mapping for now
+// In a real implementation, this would use the Discord API to get the guild ID for a channel
+func (s *service) extractGuildIDFromChannel(ctx context.Context, channelID string) string {
+	// For now, we'll use a simple approach - in a real implementation,
+	// this would query Discord API or use a cached mapping
+	
+	// If we have a mapping service or Discord client, we'd use it here
+	// For now, we'll just use the channel ID as the guild ID
+	// This is a placeholder until proper Discord API integration
+	return channelID
+}
 
 // getSessionIDForChannel gets the current session ID for a channel
 // If no session exists, it creates a new one
@@ -18,16 +32,22 @@ func (s *service) getSessionIDForChannel(ctx context.Context, channelID string) 
 		return ""
 	}
 
-	// Try to get the current session for the channel
+	// Extract the guild ID from the channel ID
+	guildID := s.extractGuildIDFromChannel(ctx, channelID)
+	if guildID == "" {
+		return ""
+	}
+
+	// Try to get the current session for the guild
 	currentSessionOutput, err := s.drinkLedgerRepo.GetCurrentSession(ctx, &ledgerRepo.GetCurrentSessionInput{
-		ChannelID: channelID,
+		GuildID: guildID,
 	})
 	
 	// If there's an error or no session exists, create a new one
 	if err != nil || currentSessionOutput.Session == nil {
 		// Create a new session
 		sessionOutput, err := s.drinkLedgerRepo.CreateSession(ctx, &ledgerRepo.CreateSessionInput{
-			ChannelID: channelID,
+			GuildID:   guildID,
 			CreatedBy: "system", // Default to system since we don't have a user ID here
 		})
 		
@@ -52,9 +72,15 @@ func (s *service) CreateSession(ctx context.Context, input *CreateSessionInput) 
 		return nil, errors.New("channel ID is required")
 	}
 
+	// Extract the guild ID from the channel ID
+	guildID := s.extractGuildIDFromChannel(ctx, input.ChannelID)
+	if guildID == "" {
+		return nil, errors.New("failed to extract guild ID from channel")
+	}
+
 	// Create a new session using the repository
 	sessionOutput, err := s.drinkLedgerRepo.CreateSession(ctx, &ledgerRepo.CreateSessionInput{
-		ChannelID: input.ChannelID,
+		GuildID:   guildID,
 		CreatedBy: input.CreatedBy,
 	})
 	if err != nil {
@@ -74,21 +100,40 @@ func (s *service) GetSessionLeaderboard(ctx context.Context, input *GetSessionLe
 	}
 
 	var sessionID string
+	var session *models.Session
 
 	// If a specific session ID is provided, use that
 	if input.SessionID != "" {
 		sessionID = input.SessionID
+		// We don't have a direct method to get a session by ID, so we'll need to use what we have
+		// This is a limitation in the current API
 	} else if input.ChannelID != "" {
-		// Otherwise, get the current session for the channel
-		sessionID = s.getSessionIDForChannel(ctx, input.ChannelID)
-		if sessionID == "" {
-			// No active session for this channel
+		// Extract the guild ID from the channel ID
+		guildID := s.extractGuildIDFromChannel(ctx, input.ChannelID)
+		if guildID == "" {
+			return nil, errors.New("failed to extract guild ID from channel")
+		}
+
+		// Get the current session for the guild
+		currentSessionOutput, err := s.drinkLedgerRepo.GetCurrentSession(ctx, &ledgerRepo.GetCurrentSessionInput{
+			GuildID: guildID,
+		})
+		
+		if err != nil || currentSessionOutput.Session == nil {
+			// No active session for this guild
 			return &GetSessionLeaderboardOutput{
 				Success: true,
 				Session: nil,
 				Entries: []LeaderboardEntry{},
 			}, nil
 		}
+		
+		sessionID = currentSessionOutput.Session.ID
+		session = currentSessionOutput.Session
+		
+		// Log the session details for debugging
+		log.Printf("GetSessionLeaderboard: Found session %s with CreatedAt %v", 
+			session.ID, session.CreatedAt)
 	} else {
 		return nil, errors.New("either channel ID or session ID must be provided")
 	}
@@ -102,8 +147,8 @@ func (s *service) GetSessionLeaderboard(ctx context.Context, input *GetSessionLe
 	}
 
 	// Build maps to track drinks and payment status
-	drinkCounts := make(map[string]int) // Total drinks owed
-	paidCounts := make(map[string]int)  // Drinks paid
+	drinkCounts := make(map[string]int)    // Total drinks owed
+	paidCounts := make(map[string]int)     // Drinks paid
 	playerNames := make(map[string]string) // Player names cache
 
 	// Process all drink records
@@ -145,9 +190,14 @@ func (s *service) GetSessionLeaderboard(ctx context.Context, input *GetSessionLe
 		return entries[i].DrinkCount > entries[j].DrinkCount
 	})
 
+	// If we have a session ID but no session object (from direct ID lookup), create a minimal session
+	if session == nil && sessionID != "" {
+		session = &models.Session{ID: sessionID}
+	}
+
 	return &GetSessionLeaderboardOutput{
 		Success: true,
-		Session: &models.Session{ID: sessionID},
+		Session: session,
 		Entries: entries,
 	}, nil
 }
@@ -162,8 +212,14 @@ func (s *service) StartNewSession(ctx context.Context, input *StartNewSessionInp
 		return nil, errors.New("channel ID cannot be empty")
 	}
 
+	// Extract the guild ID from the channel ID
+	guildID := s.extractGuildIDFromChannel(ctx, input.ChannelID)
+	if guildID == "" {
+		return nil, errors.New("failed to extract guild ID from channel")
+	}
+
 	// Create the session using CreateSession
-	createSessionOutput, err := s.CreateSession(ctx, &CreateSessionInput{
+	sessionOutput, err := s.CreateSession(ctx, &CreateSessionInput{
 		ChannelID: input.ChannelID,
 		CreatedBy: input.CreatorID,
 	})
@@ -171,10 +227,9 @@ func (s *service) StartNewSession(ctx context.Context, input *StartNewSessionInp
 		return nil, err
 	}
 
-	// Map the output to StartNewSessionOutput
 	return &StartNewSessionOutput{
-		Success:   createSessionOutput.Success,
-		Session:   createSessionOutput.Session,
-		SessionID: createSessionOutput.Session.ID,
+		Success:   true,
+		Session:   sessionOutput.Session,
+		SessionID: sessionOutput.Session.ID,
 	}, nil
 }

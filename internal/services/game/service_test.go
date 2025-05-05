@@ -138,7 +138,7 @@ func (s *GameServiceTestSuite) SetupTest() {
 	// Session model
 	s.expectedSession = &models.Session{
 		ID:        s.testSessionID,
-		ChannelID: s.testChannelID,
+		GuildID:   s.testChannelID, // Using channel ID as guild ID for testing
 		CreatedAt: s.testTime,
 		CreatedBy: "system",
 		Active:    true,
@@ -196,7 +196,7 @@ func (s *GameServiceTestSuite) setupSessionExpectations() {
 	// Expect GetCurrentSession to be called for the channel
 	s.mockDrinkRepo.EXPECT().
 		GetCurrentSession(gomock.Any(), &ledgerRepo.GetCurrentSessionInput{
-			ChannelID: s.testChannelID,
+			GuildID: s.testChannelID,
 		}).
 		Return(&ledgerRepo.GetCurrentSessionOutput{
 			Session: s.expectedSession,
@@ -2634,7 +2634,7 @@ func (s *GameServiceTestSuite) TestPayDrink_HappyPath() {
 	
 	// Get the session ID for the channel
 	s.mockDrinkRepo.EXPECT().GetCurrentSession(s.ctx, &ledgerRepo.GetCurrentSessionInput{
-		ChannelID: s.testChannelID,
+		GuildID: s.testChannelID,
 	}).Return(&ledgerRepo.GetCurrentSessionOutput{
 		Session: &models.Session{
 			ID: s.testSessionID,
@@ -2690,7 +2690,7 @@ func (s *GameServiceTestSuite) TestPayDrink_NoUnpaidDrinks() {
 	
 	// Get the session ID for the channel
 	s.mockDrinkRepo.EXPECT().GetCurrentSession(s.ctx, &ledgerRepo.GetCurrentSessionInput{
-		ChannelID: s.testChannelID,
+		GuildID: s.testChannelID,
 	}).Return(&ledgerRepo.GetCurrentSessionOutput{
 		Session: &models.Session{
 			ID: s.testSessionID,

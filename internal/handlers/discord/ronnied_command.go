@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"time"
 
@@ -24,7 +25,7 @@ func NewRonniedCommand(gameService game.Service) *RonniedCommand {
 	return &RonniedCommand{
 		BaseCommand: BaseCommand{
 			Name:        "ronnied",
-			Description: "Start a new dice rolling drinking game",
+			Description: "Dice rolling drinking game commands",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
@@ -33,38 +34,18 @@ func NewRonniedCommand(gameService game.Service) *RonniedCommand {
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
-					Name:        "join",
-					Description: "Join the current game",
-				},
-				{
-					Type:        discordgo.ApplicationCommandOptionSubCommand,
-					Name:        "begin",
-					Description: "Begin the game after players have joined",
-				},
-				{
-					Type:        discordgo.ApplicationCommandOptionSubCommand,
-					Name:        "roll",
-					Description: "Roll the dice",
-				},
-				{
-					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "leaderboard",
-					Description: "Show the current game leaderboard",
-				},
-				{
-					Type:        discordgo.ApplicationCommandOptionSubCommand,
-					Name:        "sessionboard",
-					Description: "Show the session leaderboard (drinks across all games)",
+					Description: "Show the current session leaderboard",
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "newsession",
-					Description: "Start a new drinking session (resets the session leaderboard)",
+					Description: "Start a new drinking session",
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "abandon",
-					Description: "Abandon the current game (for debugging)",
+					Description: "Abandon the current game",
 				},
 			},
 		},
@@ -74,45 +55,39 @@ func NewRonniedCommand(gameService game.Service) *RonniedCommand {
 
 // Handle processes a Discord interaction for the ronnied command
 func (c *RonniedCommand) Handle(s *discordgo.Session, i *discordgo.InteractionCreate) error {
-	// Get the subcommand
-	options := i.ApplicationCommandData().Options
-	if len(options) == 0 {
-		return RespondWithError(s, i, "Please specify a subcommand")
+	if i.Type != discordgo.InteractionApplicationCommand {
+		return nil
 	}
 
-	subcommand := options[0].Name
+	data := i.ApplicationCommandData()
+	if data.Name != c.Name {
+		return nil
+	}
 
-	// Get the channel ID
+	// Get the channel ID and user information
 	channelID := i.ChannelID
-
-	// Get the user ID
 	userID := i.Member.User.ID
 	username := i.Member.User.Username
 	if i.Member.Nick != "" {
 		username = i.Member.Nick
 	}
 
-	// Handle the subcommand
-	switch subcommand {
+	// Handle the appropriate subcommand
+	var err error
+	switch data.Options[0].Name {
 	case "start":
-		return c.handleStart(s, i, channelID, userID, username)
-	case "join":
-		return c.handleJoin(s, i, channelID, userID, username)
-	case "begin":
-		return c.handleBegin(s, i, channelID, userID)
-	case "roll":
-		return c.handleRoll(s, i, channelID, userID)
+		err = c.handleStart(s, i, channelID, userID, username)
 	case "leaderboard":
-		return c.handleLeaderboard(s, i, channelID)
-	case "sessionboard":
-		return c.handleSessionboard(s, i, channelID)
+		err = c.handleSessionboard(s, i, channelID)
 	case "newsession":
-		return c.handleNewSession(s, i, channelID)
+		err = c.handleNewSession(s, i, channelID)
 	case "abandon":
-		return c.handleAbandon(s, i, channelID, userID)
+		err = c.handleAbandon(s, i, channelID, userID)
 	default:
-		return RespondWithError(s, i, fmt.Sprintf("Unknown subcommand: %s", subcommand))
+		err = errors.New("unknown subcommand")
 	}
+
+	return err
 }
 
 // handleStart handles the start subcommand
@@ -251,341 +226,6 @@ func (c *RonniedCommand) handleStart(s *discordgo.Session, i *discordgo.Interact
 	return nil
 }
 
-// handleJoin handles the join subcommand
-func (c *RonniedCommand) handleJoin(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID, username string) error {
-	ctx := context.Background()
-
-	// Get the game in this channel
-	existingGame, err := c.gameService.GetGameByChannel(ctx, &game.GetGameByChannelInput{
-		ChannelID: channelID,
-	})
-
-	// Handle errors or missing game
-	if err != nil {
-		if errors.Is(err, game.ErrGameNotFound) {
-			return RespondWithError(s, i, "No game found in this channel. Use `/ronnied start` to create a new game.")
-		}
-		log.Printf("Error getting game: %v", err)
-		return RespondWithError(s, i, fmt.Sprintf("Error getting game: %v", err))
-	}
-
-	// Check if the game is in a state where players can join
-	if existingGame.Game.Status != models.GameStatusWaiting {
-		return RespondWithError(s, i, "Cannot join game. Game is not in waiting state.")
-	}
-
-	// Join the game
-	_, err = c.gameService.JoinGame(ctx, &game.JoinGameInput{
-		GameID:     existingGame.Game.ID,
-		PlayerID:   userID,
-		PlayerName: username,
-	})
-	if err != nil {
-		log.Printf("Error joining game: %v", err)
-		return RespondWithError(s, i, fmt.Sprintf("Failed to join game: %v", err))
-	}
-
-	// Respond with success message
-	return RespondWithMessage(s, i, fmt.Sprintf("You've joined the game! Wait for the creator to start the game."))
-}
-
-// handleBegin handles the begin subcommand
-func (c *RonniedCommand) handleBegin(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID string) error {
-	ctx := context.Background()
-
-	// Check if there's a game in this channel
-	existingGame, err := c.gameService.GetGameByChannel(ctx, &game.GetGameByChannelInput{
-		ChannelID: channelID,
-	})
-
-	// Handle errors or missing game
-	if err != nil {
-		if errors.Is(err, game.ErrGameNotFound) {
-			return RespondWithError(s, i, "No game found in this channel. Use `/ronnied start` to create a new game.")
-		}
-		log.Printf("Error getting game: %v", err)
-		return RespondWithError(s, i, fmt.Sprintf("Error getting game: %v", err))
-	}
-
-	// Check if the game is in a state where it can be started
-	if existingGame.Game.Status != models.GameStatusWaiting {
-		return RespondWithError(s, i, "Cannot start game. Game is not in waiting state.")
-	}
-
-	// Start the game
-	startOutput, err := c.gameService.StartGame(ctx, &game.StartGameInput{
-		GameID:   existingGame.Game.ID,
-		PlayerID: userID,
-	})
-	if err != nil {
-		log.Printf("Error starting game: %v", err)
-		return RespondWithError(s, i, fmt.Sprintf("Failed to start game: %v", err))
-	}
-
-	if !startOutput.Success {
-		return RespondWithError(s, i, "Failed to start the game. Make sure you are the creator of the game.")
-	}
-
-	// Create roll button
-	rollButton := discordgo.Button{
-		Label:    "Roll Dice",
-		Style:    discordgo.PrimaryButton,
-		CustomID: ButtonRollDice,
-		Emoji: discordgo.ComponentEmoji{
-			Name: "🎲",
-		},
-	}
-
-	// Send an ephemeral message to the user who started the game
-	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: "Game Started! Click the button below to roll your dice.",
-			Flags:   discordgo.MessageFlagsEphemeral,
-			Components: []discordgo.MessageComponent{
-				discordgo.ActionsRow{
-					Components: []discordgo.MessageComponent{rollButton},
-				},
-			},
-		},
-	})
-	if err != nil {
-		log.Printf("Error sending ephemeral message: %v", err)
-		return err
-	}
-
-	// Update the main message in the channel if it exists
-	if existingGame.Game.MessageID != "" {
-		// Create fields for the updated message
-		fields := []*discordgo.MessageEmbedField{
-			{
-				Name:   "Status",
-				Value:  "Game in progress",
-				Inline: true,
-			},
-			{
-				Name:   "Players",
-				Value:  fmt.Sprintf("%d", len(existingGame.Game.Participants)),
-				Inline: true,
-			},
-		}
-
-		// Update the message to remove buttons and show game status
-		embeds := []*discordgo.MessageEmbed{
-			{
-				Title:       "Game Started!",
-				Description: "The game has begun! Each player has received a private message with a button to roll their dice.",
-				Color:       0x00ff00, // Green color
-				Fields:      fields,
-			},
-		}
-
-		components := []discordgo.MessageComponent{}
-
-		_, err = s.ChannelMessageEditComplex(&discordgo.MessageEdit{
-			Channel:    channelID,
-			ID:         existingGame.Game.MessageID,
-			Embeds:     embeds,
-			Components: components,
-		})
-		if err != nil {
-			// Just log the error and continue, this isn't critical
-			log.Printf("Error updating game message: %v", err)
-		}
-	}
-
-	// Send direct messages to other players with roll buttons
-	for _, participant := range existingGame.Game.Participants {
-		// Skip the creator as they already got the ephemeral message
-		if participant.PlayerID == userID {
-			continue
-		}
-
-		// Create a DM channel with the player
-		dmChannel, err := s.UserChannelCreate(participant.PlayerID)
-		if err != nil {
-			log.Printf("Error creating DM channel with player %s: %v", participant.PlayerID, err)
-			continue
-		}
-
-		// Send a message with the roll button
-		_, err = s.ChannelMessageSendComplex(dmChannel.ID, &discordgo.MessageSend{
-			Embeds: []*discordgo.MessageEmbed{
-				{
-					Title:       "Game Started!",
-					Description: fmt.Sprintf("A game has started in the channel. Click the button below to roll your dice."),
-					Color:       0x00ff00, // Green color
-				},
-			},
-			Components: []discordgo.MessageComponent{
-				discordgo.ActionsRow{
-					Components: []discordgo.MessageComponent{rollButton},
-				},
-			},
-		})
-		if err != nil {
-			log.Printf("Error sending DM to player %s: %v", participant.PlayerID, err)
-		}
-	}
-
-	return nil
-}
-
-// handleRoll handles the roll subcommand
-func (c *RonniedCommand) handleRoll(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID string) error {
-	ctx := context.Background()
-
-	// Get the game in this channel
-	existingGame, err := c.gameService.GetGameByChannel(ctx, &game.GetGameByChannelInput{
-		ChannelID: channelID,
-	})
-
-	// Handle errors or missing game
-	if err != nil {
-		if errors.Is(err, game.ErrGameNotFound) {
-			return RespondWithError(s, i, "No game found in this channel. Use `/ronnied start` to create a new game.")
-		}
-		log.Printf("Error getting game: %v", err)
-		return RespondWithError(s, i, fmt.Sprintf("Error getting game: %v", err))
-	}
-
-	// Check if the game is in a state where players can roll
-	if existingGame.Game.Status != models.GameStatusActive {
-		return RespondWithError(s, i, "Cannot roll dice. Game is not active.")
-	}
-
-	// Roll the dice
-	rollOutput, err := c.gameService.RollDice(ctx, &game.RollDiceInput{
-		GameID:   existingGame.Game.ID,
-		PlayerID: userID,
-	})
-	if err != nil {
-		log.Printf("Error rolling dice: %v", err)
-		return RespondWithError(s, i, fmt.Sprintf("Failed to roll dice: %v", err))
-	}
-
-	// Create roll button for the next roll
-	rollButton := discordgo.Button{
-		Label:    "Roll Again",
-		Style:    discordgo.PrimaryButton,
-		CustomID: ButtonRollDice,
-		Emoji: discordgo.ComponentEmoji{
-			Name: "🎲",
-		},
-	}
-
-	// Create pay drink button
-	payDrinkButton := discordgo.Button{
-		Label:    "Pay Drink",
-		Style:    discordgo.SuccessButton,
-		CustomID: ButtonPayDrink,
-		Emoji: discordgo.ComponentEmoji{
-			Name: "💸",
-		},
-	}
-
-	// Build the response message
-	var description string
-	if rollOutput.IsCriticalHit {
-		description = "Critical hit! You can assign a drink to another player."
-
-		// Create player selection dropdown for critical hits
-		if len(rollOutput.EligiblePlayers) > 0 {
-			var playerOptions []discordgo.SelectMenuOption
-
-			for _, player := range rollOutput.EligiblePlayers {
-				playerOptions = append(playerOptions, discordgo.SelectMenuOption{
-					Label:       player.PlayerName,
-					Value:       player.PlayerID,
-					Description: "Assign a drink to this player",
-					Emoji: discordgo.ComponentEmoji{
-						Name: "🍺",
-					},
-				})
-			}
-
-			playerSelect := discordgo.SelectMenu{
-				CustomID:    SelectAssignDrink,
-				Placeholder: "Select a player to drink",
-				Options:     playerOptions,
-			}
-
-			// Respond with the roll result and player selection dropdown
-			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseUpdateMessage,
-				Data: &discordgo.InteractionResponseData{
-					Content: fmt.Sprintf("You rolled a %d. %s", rollOutput.Value, description),
-					Flags:   discordgo.MessageFlagsEphemeral,
-					Components: []discordgo.MessageComponent{
-						discordgo.ActionsRow{
-							Components: []discordgo.MessageComponent{playerSelect},
-						},
-					},
-				},
-			})
-		}
-	} else if rollOutput.IsCriticalFail {
-		description = "Critical fail! Take a drink."
-	} else {
-		description = "You rolled the dice."
-	}
-
-	// Respond with the roll result and buttons
-	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseUpdateMessage,
-		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("You rolled a %d. %s", rollOutput.Value, description),
-			Flags:   discordgo.MessageFlagsEphemeral,
-			Components: []discordgo.MessageComponent{
-				discordgo.ActionsRow{
-					Components: []discordgo.MessageComponent{rollButton, payDrinkButton},
-				},
-			},
-		},
-	})
-}
-
-// handleLeaderboard handles the leaderboard subcommand
-func (c *RonniedCommand) handleLeaderboard(s *discordgo.Session, i *discordgo.InteractionCreate, channelID string) error {
-	ctx := context.Background()
-
-	// Get the game in this channel
-	existingGame, err := c.gameService.GetGameByChannel(ctx, &game.GetGameByChannelInput{
-		ChannelID: channelID,
-	})
-
-	// Handle errors or missing game
-	if err != nil {
-		if err == game.ErrGameNotFound {
-			return RespondWithError(s, i, "No game found in this channel. Use `/ronnied start` to create a new game.")
-		}
-		log.Printf("Error getting game: %v", err)
-		return RespondWithError(s, i, fmt.Sprintf("Error getting game: %v", err))
-	}
-
-	// Get the leaderboard
-	leaderboard, err := c.gameService.GetLeaderboard(ctx, &game.GetLeaderboardInput{
-		GameID: existingGame.Game.ID,
-	})
-	if err != nil {
-		log.Printf("Error getting leaderboard: %v", err)
-		return RespondWithError(s, i, fmt.Sprintf("Failed to get leaderboard: %v", err))
-	}
-
-	// Build the leaderboard description
-	var description strings.Builder
-	if len(leaderboard.Entries) == 0 {
-		description.WriteString("No drinks have been assigned yet.")
-	} else {
-		for _, entry := range leaderboard.Entries {
-			description.WriteString(fmt.Sprintf("**%s**: %d drinks\n", entry.PlayerName, entry.DrinkCount))
-		}
-	}
-
-	// Respond with the leaderboard
-	return RespondWithEmbed(s, i, "Leaderboard", description.String(), nil)
-}
-
 // handleSessionboard handles the sessionboard subcommand
 func (c *RonniedCommand) handleSessionboard(s *discordgo.Session, i *discordgo.InteractionCreate, channelID string) error {
 	ctx := context.Background()
@@ -601,16 +241,154 @@ func (c *RonniedCommand) handleSessionboard(s *discordgo.Session, i *discordgo.I
 
 	// Build the session leaderboard description
 	var description strings.Builder
+	
+	// Session info header
+	if sessionboard.Session != nil {
+		// Get current time and session creation time
+		now := time.Now()
+		sessionCreatedAt := sessionboard.Session.CreatedAt
+		
+		// Log for debugging
+		log.Printf("Session ID: %s, CreatedAt: %v, Now: %v", 
+			sessionboard.Session.ID, 
+			sessionCreatedAt, 
+			now)
+		
+		// Always show session creation time for reference
+			description.WriteString(fmt.Sprintf("🍻 **Session Started:** %s\n", 
+				sessionCreatedAt.Format("Jan 2 at 3:04 PM")))
+			
+			// Calculate and format the age
+			sessionAge := now.Sub(sessionCreatedAt)
+			
+			// Only show age if it's a reasonable value (positive and less than a week)
+			if sessionAge > 0 && sessionAge < 7*24*time.Hour {
+				// Format the duration in a human-readable way
+				var formattedAge string
+				hours := int(sessionAge.Hours())
+				minutes := int(sessionAge.Minutes()) % 60
+				
+				if hours > 0 {
+					if hours == 1 {
+						formattedAge = "1 hour"
+					} else {
+						formattedAge = fmt.Sprintf("%d hours", hours)
+					}
+					
+					if minutes > 0 {
+						formattedAge += fmt.Sprintf(" %d min", minutes)
+					}
+				} else if minutes > 0 {
+					formattedAge = fmt.Sprintf("%d minutes", minutes)
+				} else {
+					formattedAge = "just started"
+				}
+				
+				description.WriteString(fmt.Sprintf(" (%s ago)\n\n", formattedAge))
+			} else {
+				description.WriteString("\n\n")
+			}
+		}
+	
 	if len(sessionboard.Entries) == 0 {
-		description.WriteString("No drinks have been assigned yet.")
+		description.WriteString("🏜️ **The Sahara is less dry than this session!** No drinks have been assigned yet.")
 	} else {
+		// Find the player with the most drinks for ranking
+		maxDrinks := 0
 		for _, entry := range sessionboard.Entries {
-			description.WriteString(fmt.Sprintf("**%s**: %d drinks\n", entry.PlayerName, entry.DrinkCount))
+			if entry.DrinkCount > maxDrinks {
+				maxDrinks = entry.DrinkCount
+			}
+		}
+		
+		// Sort entries by drink count (descending)
+		sort.Slice(sessionboard.Entries, func(i, j int) bool {
+			return sessionboard.Entries[i].DrinkCount > sessionboard.Entries[j].DrinkCount
+		})
+		
+		// Add a header
+		description.WriteString("🏆 **DRINK LEADERBOARD** 🏆\n\n")
+		
+		// Add each player with rank emoji and progress bar
+		rankEmojis := []string{"🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"}
+		
+		for i, entry := range sessionboard.Entries {
+			// Rank emoji
+			rankEmoji := "🍺"
+			if i < len(rankEmojis) {
+				rankEmoji = rankEmojis[i]
+			}
+			
+			// Progress bar (10 segments)
+			progressBarLength := 10
+			filledSegments := 0
+			if maxDrinks > 0 {
+				filledSegments = (entry.DrinkCount * progressBarLength) / maxDrinks
+				if filledSegments == 0 && entry.DrinkCount > 0 {
+					filledSegments = 1 // Show at least one segment if they have any drinks
+				}
+			}
+			
+			progressBar := ""
+			for j := 0; j < progressBarLength; j++ {
+				if j < filledSegments {
+					progressBar += "🟥" // Filled segment
+				} else {
+					progressBar += "⬜" // Empty segment
+				}
+			}
+			
+			// Payment status
+			paymentStatus := ""
+			if entry.PaidCount > 0 {
+				paymentRatio := float64(entry.PaidCount) / float64(entry.DrinkCount)
+				if paymentRatio >= 1.0 {
+					paymentStatus = " ✅ **PAID IN FULL!**"
+				} else if paymentRatio >= 0.5 {
+					paymentStatus = fmt.Sprintf(" ⏳ (%d/%d paid)", entry.PaidCount, entry.DrinkCount)
+				} else {
+					paymentStatus = fmt.Sprintf(" 💸 (%d/%d paid)", entry.PaidCount, entry.DrinkCount)
+				}
+			}
+			
+			// Add the entry with all components
+			description.WriteString(fmt.Sprintf("%s **%s**: %d drinks%s\n%s\n\n", 
+				rankEmoji, 
+				entry.PlayerName, 
+				entry.DrinkCount,
+				paymentStatus,
+				progressBar))
+		}
+		
+		// Add a fun message at the end based on total drinks
+		totalDrinks := 0
+		for _, entry := range sessionboard.Entries {
+			totalDrinks += entry.DrinkCount
+		}
+		
+		description.WriteString("\n")
+		if totalDrinks > 20 {
+			description.WriteString("🔥 **LEGENDARY SESSION!** Your livers will be remembered for generations to come!")
+		} else if totalDrinks > 10 {
+			description.WriteString("🥴 **IMPRESSIVE!** Tomorrow's hangover is going to be epic!")
+		} else if totalDrinks > 5 {
+			description.WriteString("😎 **GOOD START!** Keep the drinks flowing!")
+		} else {
+			description.WriteString("🐣 **JUST WARMING UP!** The night is young!")
 		}
 	}
 
+	// Create fields for additional info
+	fields := []*discordgo.MessageEmbedField{
+		{
+			Name:   "Commands",
+			Value:  "`/ronnied newsession` - Start a new session",
+			Inline: false,
+		},
+	}
+
 	// Respond with the session leaderboard
-	return RespondWithEmbed(s, i, "Session Leaderboard", description.String(), nil)
+	return RespondWithEmbed(s, i, "🍻 Session Leaderboard 🍻", description.String(), fields)
 }
 
 // handleNewSession handles the newsession subcommand
@@ -659,4 +437,57 @@ func (c *RonniedCommand) handleAbandon(s *discordgo.Session, i *discordgo.Intera
 
 	// Respond with success message
 	return RespondWithMessage(s, i, "Game abandoned successfully. You can start a new game with `/ronnied start`.")
+}
+
+// handlePay handles the pay button interaction
+func (c *RonniedCommand) handlePay(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID string, count int) error {
+	ctx := context.Background()
+
+	// Get the game in this channel
+	existingGame, err := c.gameService.GetGameByChannel(ctx, &game.GetGameByChannelInput{
+		ChannelID: channelID,
+	})
+
+	// Handle errors or missing game
+	if err != nil {
+		if errors.Is(err, game.ErrGameNotFound) {
+			return RespondWithError(s, i, "No game found in this channel. Use `/ronnied start` to create a new game.")
+		}
+		log.Printf("Error getting game: %v", err)
+		return RespondWithError(s, i, fmt.Sprintf("Error getting game: %v", err))
+	}
+
+	// Track how many drinks were successfully paid
+	paidCount := 0
+	
+	// Pay one drink at a time
+	for j := 0; j < count; j++ {
+		_, err := c.gameService.PayDrink(ctx, &game.PayDrinkInput{
+			GameID:   existingGame.Game.ID,
+			PlayerID: userID,
+		})
+		
+		if err != nil {
+			// If we've paid at least one drink, consider it a partial success
+			if paidCount > 0 {
+				return RespondWithMessage(s, i, fmt.Sprintf("You've paid %d drinks. No more unpaid drinks found!", paidCount))
+			}
+			
+			// Check for specific error about no unpaid drinks
+			if strings.Contains(err.Error(), "no unpaid drinks found") {
+				return RespondWithMessage(s, i, "You're all caught up! No drinks to pay right now. 🎉")
+			}
+			
+			log.Printf("Error paying drink: %v", err)
+			return RespondWithError(s, i, fmt.Sprintf("Failed to pay drinks: %v", err))
+		}
+		
+		paidCount++
+	}
+
+	// Respond with success message
+	if paidCount == 1 {
+		return RespondWithMessage(s, i, "You've paid 1 drink. Cheers! 🍻")
+	}
+	return RespondWithMessage(s, i, fmt.Sprintf("You've paid %d drinks. Cheers! 🍻", paidCount))
 }

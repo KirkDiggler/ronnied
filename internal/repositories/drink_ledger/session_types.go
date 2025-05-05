@@ -6,9 +6,9 @@ import (
 
 // CreateSessionInput contains parameters for creating a new session
 type CreateSessionInput struct {
-	// ChannelID is the Discord channel this session belongs to
-	ChannelID string
-	
+	// GuildID is the Discord server/guild this session belongs to
+	GuildID string
+
 	// CreatedBy is the user ID who created the session
 	CreatedBy string
 }
@@ -21,8 +21,8 @@ type CreateSessionOutput struct {
 
 // GetCurrentSessionInput contains parameters for retrieving the current session
 type GetCurrentSessionInput struct {
-	// ChannelID is the Discord channel to get the session for
-	ChannelID string
+	// GuildID is the Discord server/guild to get the session for
+	GuildID string
 }
 
 // GetCurrentSessionOutput contains the result of retrieving the current session

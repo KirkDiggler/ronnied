@@ -365,11 +365,13 @@ func renderGameMessage(s *discordgo.Session, game *models.Game, leaderboard *gam
 		}
 
 	case models.GameStatusRollOff:
-		embed.Description = "Roll-off in progress! Players in the roll-off need to roll again."
+		embed.Description = "🔄 **ROLL-OFF IN PROGRESS!** Players in the roll-off need to roll again to break the tie."
+		
+		// Add fields for roll-off status
 		embed.Fields = []*discordgo.MessageEmbedField{
 			{
 				Name:   "Status",
-				Value:  "Roll-off",
+				Value:  "⚔️ Roll-Off",
 				Inline: true,
 			},
 			{
@@ -378,6 +380,45 @@ func renderGameMessage(s *discordgo.Session, game *models.Game, leaderboard *gam
 				Inline: true,
 			},
 		}
+
+		// If this is a roll-off game, add info about the parent game
+		if game.ParentGameID != "" {
+			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+				Name:  "Roll-Off Type",
+				Value: "This is a tie-breaker roll-off",
+			})
+		}
+
+		// Add a special field highlighting who needs to roll
+		var pendingRollers string
+		for _, p := range game.Participants {
+			if p.RollTime == nil {
+				pendingRollers += fmt.Sprintf("• **%s** - NEEDS TO ROLL! 🎲\n", p.PlayerName)
+			} else {
+				pendingRollers += fmt.Sprintf("• %s - Already rolled ✅\n", p.PlayerName)
+			}
+		}
+
+		if pendingRollers != "" {
+			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+				Name:  "Roll-Off Participants",
+				Value: pendingRollers,
+			})
+		}
+
+		rollButton := discordgo.Button{
+			Label:    "Roll Dice",
+			Style:    discordgo.DangerButton, // Red to make it stand out
+			CustomID: ButtonRollDice,
+			Emoji: discordgo.ComponentEmoji{
+				Name: "🎲",
+			},
+		}
+		components = append(components, discordgo.ActionsRow{
+			Components: []discordgo.MessageComponent{
+				rollButton,
+			},
+		})
 
 	case models.GameStatusCompleted:
 		embed.Description = "Game completed! Here are the final results."
@@ -440,16 +481,16 @@ func renderGameMessage(s *discordgo.Session, game *models.Game, leaderboard *gam
 		var leaderboardText string
 		var totalDrinks int
 		var totalPaid int
-		
+
 		// Create a visual progress bar for the session
 		for _, entry := range leaderboard.Entries {
 			totalDrinks += entry.DrinkCount
 			totalPaid += entry.PaidCount
-			
+
 			// Show drinks owed and paid for each player
 			remaining := entry.DrinkCount - entry.PaidCount
 			var statusEmoji string
-			
+
 			// Select appropriate emoji based on payment status
 			if remaining == 0 && entry.DrinkCount > 0 {
 				statusEmoji = "🎉" // Celebration emoji for all paid
@@ -464,16 +505,16 @@ func renderGameMessage(s *discordgo.Session, game *models.Game, leaderboard *gam
 			} else {
 				statusEmoji = "😇" // Angel for no drinks
 			}
-			
+
 			// Format the leaderboard entry
 			if entry.DrinkCount > 0 {
-				leaderboardText += fmt.Sprintf("• %s: %d owed, %d paid, %d remaining %s\n", 
+				leaderboardText += fmt.Sprintf("• %s: %d owed, %d paid, %d remaining %s\n",
 					entry.PlayerName, entry.DrinkCount, entry.PaidCount, remaining, statusEmoji)
 			} else {
 				leaderboardText += fmt.Sprintf("• %s: No drinks owed %s\n", entry.PlayerName, statusEmoji)
 			}
 		}
-		
+
 		// Add session progress bar if there are any drinks
 		if totalDrinks > 0 {
 			sessionProgress := createDrinkProgressBar(totalPaid, totalDrinks)
@@ -509,6 +550,439 @@ func renderGameMessage(s *discordgo.Session, game *models.Game, leaderboard *gam
 
 	_, err := s.ChannelMessageEditComplex(messageEdit)
 	return err
+}
+
+func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkLedger, leaderboardEntries []game.LeaderboardEntry, sessionLeaderboardEntries []game.LeaderboardEntry, rollOffGame *models.Game, parentGame *models.Game) (*discordgo.MessageEdit, error) {
+	// Create the embed with a more dynamic title based on game status
+	embed := &discordgo.MessageEmbed{
+		Title: getGameTitle(game),
+		Color: getGameStatusColor(game.Status),
+	}
+
+	// Add fields based on game status
+	switch game.Status {
+	case models.GameStatusWaiting:
+		embed.Description = "🎮 **Waiting for players to join the drinking game!**\n*Click the Join Game button below to participate.*"
+		embed.Fields = []*discordgo.MessageEmbedField{
+			{
+				Name:   "📊 Status",
+				Value:  "⏳ Waiting for Players",
+				Inline: true,
+			},
+			{
+				Name:   "👥 Players",
+				Value:  fmt.Sprintf("%d", len(game.Participants)),
+				Inline: true,
+			},
+		}
+
+	case models.GameStatusActive:
+		embed.Description = "🎲 **Game in progress!** Each player should roll their dice.\n*Roll a 6 to assign a drink, roll a 1 and you drink!*"
+		embed.Fields = []*discordgo.MessageEmbedField{
+			{
+				Name:   "📊 Status",
+				Value:  "🔥 Active Game",
+				Inline: true,
+			},
+			{
+				Name:   "👥 Players",
+				Value:  fmt.Sprintf("%d", len(game.Participants)),
+				Inline: true,
+			},
+		}
+
+	case models.GameStatusRollOff:
+		embed.Description = "⚔️ **ROLL-OFF IN PROGRESS!** Players in the roll-off need to roll again to break the tie.\n*May the odds be ever in your favor!*"
+		
+		// Add fields for roll-off status
+		embed.Fields = []*discordgo.MessageEmbedField{
+			{
+				Name:   "📊 Status",
+				Value:  "⚔️ Roll-Off Battle",
+				Inline: true,
+			},
+			{
+				Name:   "👥 Players",
+				Value:  fmt.Sprintf("%d", len(game.Participants)),
+				Inline: true,
+			},
+		}
+
+		// If this is a roll-off game, add info about the parent game
+		if parentGame != nil {
+			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+				Name:  "🔄 Roll-Off Type",
+				Value: "This is a tie-breaker roll-off",
+			})
+		}
+
+		// Add a special field highlighting who needs to roll
+		var pendingRollers string
+		for _, p := range game.Participants {
+			if p.RollTime == nil {
+				pendingRollers += fmt.Sprintf("• **%s** - 🎯 NEEDS TO ROLL! 🎲\n", p.PlayerName)
+			} else {
+				pendingRollers += fmt.Sprintf("• %s - ✅ Already rolled\n", p.PlayerName)
+			}
+		}
+
+		if pendingRollers != "" {
+			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+				Name:  "🎲 Roll-Off Participants",
+				Value: pendingRollers,
+			})
+		}
+
+	case models.GameStatusCompleted:
+		embed.Description = "🏆 **Game completed!** Here are the final results.\n*Start a new game to continue the fun!*"
+		embed.Fields = []*discordgo.MessageEmbedField{
+			{
+				Name:   "📊 Status",
+				Value:  "✅ Completed",
+				Inline: true,
+			},
+			{
+				Name:   "👥 Players",
+				Value:  fmt.Sprintf("%d", len(game.Participants)),
+				Inline: true,
+			},
+		}
+	}
+
+	// Add participant list with enhanced information
+	var participantList string
+	
+	// Build the participant list with roll info and enhanced visuals
+	for _, p := range game.Participants {
+		// Create roll info with emoji based on roll value
+		var rollInfo string
+		var rollEmoji string
+		
+		if p.RollValue > 0 {
+			// Select emoji based on roll value
+			switch p.RollValue {
+			case 6:
+				rollEmoji = "🔥" // Critical hit
+			case 1:
+				rollEmoji = "💀" // Critical fail
+			case 5:
+				rollEmoji = "⭐" // High roll
+			case 4:
+				rollEmoji = "✨" // Good roll
+			default:
+				rollEmoji = "🎲" // Normal roll
+			}
+			rollInfo = fmt.Sprintf(" (%s **%d**)", rollEmoji, p.RollValue)
+		} else {
+			rollInfo = " (🎲 Not rolled yet)"
+		}
+		
+		// Get roll comment from messaging service
+		var rollComment string
+		if p.RollValue > 0 {
+			// Get the comment from the messaging service
+			rollCommentOutput, err := b.messagingService.GetRollComment(context.Background(), &messaging.GetRollCommentInput{
+				PlayerName:     p.PlayerName,
+				RollValue:      p.RollValue,
+				IsCriticalHit:  p.RollValue == 6,
+				IsCriticalFail: p.RollValue == 1,
+			})
+			
+			if err == nil && rollCommentOutput != nil {
+				rollComment = rollCommentOutput.Comment
+			}
+		}
+		
+		// Add spacing between participants
+		participantList += fmt.Sprintf("• **%s**%s%s\n\n", p.PlayerName, rollInfo, rollComment)
+	}
+	
+	if participantList != "" {
+		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+			Name:  "👥 Participants & Rolls",
+			Value: participantList,
+		})
+	}
+
+	// Add recent drink assignments section if there are any drink records
+	if len(drinkRecords) > 0 {
+		var drinkAssignments string
+		
+		// Sort drink records by time (newest first)
+		sort.Slice(drinkRecords, func(i, j int) bool {
+			return drinkRecords[i].Timestamp.After(drinkRecords[j].Timestamp)
+		})
+		
+		// Take only the 5 most recent drink assignments
+		recentCount := 5
+		if len(drinkRecords) < recentCount {
+			recentCount = len(drinkRecords)
+		}
+		
+		// Build the drink assignments text with messages from the service
+		for i := 0; i < recentCount; i++ {
+			record := drinkRecords[i]
+			
+			// Find player names
+			var fromPlayerName, toPlayerName string
+			for _, p := range game.Participants {
+				if p.PlayerID == record.FromPlayerID {
+					fromPlayerName = p.PlayerName
+				}
+				if p.PlayerID == record.ToPlayerID {
+					toPlayerName = p.PlayerName
+				}
+			}
+			
+			// Skip if we couldn't find the player names
+			if fromPlayerName == "" || (toPlayerName == "" && record.Reason == models.DrinkReasonCriticalHit) {
+				continue
+			}
+			
+			// Get the message from the messaging service
+			assignmentOutput, err := b.messagingService.GetDrinkAssignmentMessage(context.Background(), &messaging.GetDrinkAssignmentMessageInput{
+				FromPlayerName: fromPlayerName,
+				ToPlayerName:   toPlayerName,
+				Reason:         record.Reason,
+			})
+			
+			if err == nil && assignmentOutput != nil {
+				drinkAssignments += assignmentOutput.Message + "\n\n"
+			}
+		}
+		
+		if drinkAssignments != "" {
+			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+				Name:  "🍻 Recent Drink Assignments",
+				Value: drinkAssignments,
+			})
+		}
+	}
+
+	// Add drink leaderboard if available - sort by PAID drinks instead of total
+	if len(sessionLeaderboardEntries) > 0 {
+		// Sort entries by PAID count (descending) - this is the key change
+		sort.Slice(sessionLeaderboardEntries, func(i, j int) bool {
+			return sessionLeaderboardEntries[i].PaidCount > sessionLeaderboardEntries[j].PaidCount
+		})
+
+		var leaderboardText string
+		var totalDrinks int
+		var totalPaid int
+
+		// Create a visual progress bar for the session
+		for i, entry := range sessionLeaderboardEntries {
+			totalDrinks += entry.DrinkCount
+			totalPaid += entry.PaidCount
+
+			// Show drinks owed and paid for each player
+			remaining := entry.DrinkCount - entry.PaidCount
+			var statusEmoji string
+			var rankEmoji string
+
+			// Add rank emoji for top 3
+			if i == 0 && entry.PaidCount > 0 {
+				rankEmoji = "🥇 " // Gold medal for first place
+			} else if i == 1 && entry.PaidCount > 0 {
+				rankEmoji = "🥈 " // Silver medal for second place
+			} else if i == 2 && entry.PaidCount > 0 {
+				rankEmoji = "🥉 " // Bronze medal for third place
+			} else {
+				rankEmoji = "• "
+			}
+
+			// Select appropriate emoji based on payment status
+			if remaining == 0 && entry.DrinkCount > 0 {
+				statusEmoji = "🎉" // Celebration emoji for all paid
+			} else if entry.DrinkCount > 0 && float64(entry.PaidCount)/float64(entry.DrinkCount) >= 0.75 {
+				statusEmoji = "🔥" // Fire emoji for almost done
+			} else if entry.DrinkCount > 0 && float64(entry.PaidCount)/float64(entry.DrinkCount) >= 0.5 {
+				statusEmoji = "👍" // Thumbs up for good progress
+			} else if entry.DrinkCount > 0 && float64(entry.PaidCount)/float64(entry.DrinkCount) >= 0.25 {
+				statusEmoji = "🍺" // Beer emoji for some progress
+			} else if entry.DrinkCount > 0 {
+				statusEmoji = "💪" // Flexed arm for just starting
+			} else {
+				statusEmoji = "😇" // Angel for no drinks
+			}
+
+			// Format the leaderboard entry
+			if entry.DrinkCount > 0 {
+				// Create mini progress bar for each player
+				playerProgress := createMiniProgressBar(entry.PaidCount, entry.DrinkCount)
+				
+				leaderboardText += fmt.Sprintf("%s**%s**: %d paid, %d owed %s\n%s\n\n", 
+					rankEmoji, entry.PlayerName, entry.PaidCount, remaining, statusEmoji, playerProgress)
+			} else {
+				leaderboardText += fmt.Sprintf("%s**%s**: No drinks owed %s\n\n", rankEmoji, entry.PlayerName, statusEmoji)
+			}
+		}
+
+		// Add session progress bar if there are any drinks
+		if totalDrinks > 0 {
+			sessionProgress := createProgressBar(totalPaid, totalDrinks)
+			leaderboardText += fmt.Sprintf("\n**Session Progress**: %s", sessionProgress)
+		}
+
+		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+			Name:  "🏆 Drink Leaderboard (By Drinks Paid)",
+			Value: leaderboardText,
+		})
+	} else if len(leaderboardEntries) > 0 {
+		// If no session leaderboard, fall back to game leaderboard
+		// Sort by paid count
+		sort.Slice(leaderboardEntries, func(i, j int) bool {
+			return leaderboardEntries[i].PaidCount > leaderboardEntries[j].PaidCount
+		})
+		
+		var leaderboardText string
+		for i, entry := range leaderboardEntries {
+			var rankEmoji string
+			if i == 0 && entry.PaidCount > 0 {
+				rankEmoji = "🥇 " // Gold medal for first place
+			} else if i == 1 && entry.PaidCount > 0 {
+				rankEmoji = "🥈 " // Silver medal for second place
+			} else if i == 2 && entry.PaidCount > 0 {
+				rankEmoji = "🥉 " // Bronze medal for third place
+			} else {
+				rankEmoji = "• "
+			}
+			
+			leaderboardText += fmt.Sprintf("%s**%s**: %d drinks paid\n", rankEmoji, entry.PlayerName, entry.PaidCount)
+		}
+
+		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+			Name:  "🏆 Drink Leaderboard",
+			Value: leaderboardText,
+		})
+	}
+
+	// Add game rules as a field for reference
+	if game.Status == models.GameStatusWaiting || game.Status == models.GameStatusActive {
+		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+			Name: "📜 Game Rules",
+			Value: "• Roll a **6** = Assign a drink to someone else! 🔥\n" +
+				"• Roll a **1** = Take a drink yourself! 💀\n" +
+				"• Lowest roll in a round = Take a drink! 👇\n" +
+				"• Ties result in a roll-off! ⚔️",
+		})
+	}
+
+	// Create embeds array
+	embeds := []*discordgo.MessageEmbed{embed}
+
+	// Create components based on game status
+	var components []discordgo.MessageComponent
+
+	switch game.Status {
+	case models.GameStatusWaiting:
+		// Add join and begin buttons
+		joinButton := discordgo.Button{
+			Label:    "Join Game",
+			Style:    discordgo.SuccessButton,
+			CustomID: ButtonJoinGame,
+			Emoji: discordgo.ComponentEmoji{
+				Name: "🎮",
+			},
+		}
+
+		beginButton := discordgo.Button{
+			Label:    "Begin Game",
+			Style:    discordgo.PrimaryButton,
+			CustomID: ButtonBeginGame,
+			Emoji: discordgo.ComponentEmoji{
+				Name: "▶️",
+			},
+		}
+
+		components = append(components, discordgo.ActionsRow{
+			Components: []discordgo.MessageComponent{
+				joinButton,
+				beginButton,
+			},
+		})
+
+	case models.GameStatusActive:
+		// Add roll dice button for active games
+		rollButton := discordgo.Button{
+			Label:    "Roll Dice",
+			Style:    discordgo.PrimaryButton,
+			CustomID: ButtonRollDice,
+			Emoji: discordgo.ComponentEmoji{
+				Name: "🎲",
+			},
+		}
+		
+		// Add Pay Drink button
+		payDrinkButton := discordgo.Button{
+			Label:    "Pay Drink",
+			Style:    discordgo.SuccessButton,
+			CustomID: ButtonPayDrink,
+			Emoji: discordgo.ComponentEmoji{
+				Name: "💸",
+			},
+		}
+		
+		components = append(components, discordgo.ActionsRow{
+			Components: []discordgo.MessageComponent{
+				rollButton,
+				payDrinkButton,
+			},
+		})
+
+	case models.GameStatusRollOff:
+		rollButton := discordgo.Button{
+			Label:    "Roll Dice",
+			Style:    discordgo.DangerButton, // Red to make it stand out
+			CustomID: ButtonRollDice,
+			Emoji: discordgo.ComponentEmoji{
+				Name: "🎲",
+			},
+		}
+		components = append(components, discordgo.ActionsRow{
+			Components: []discordgo.MessageComponent{
+				rollButton,
+			},
+		})
+
+	case models.GameStatusCompleted:
+		// Add start new game button
+		startNewGameButton := discordgo.Button{
+			Label:    "Start New Game",
+			Style:    discordgo.SuccessButton,
+			CustomID: ButtonStartNewGame,
+			Emoji: discordgo.ComponentEmoji{
+				Name: "🎮",
+			},
+		}
+
+		components = append(components, discordgo.ActionsRow{
+			Components: []discordgo.MessageComponent{
+				startNewGameButton,
+			},
+		})
+	}
+
+	// Create the message edit
+	messageEdit := &discordgo.MessageEdit{
+		Channel: game.ChannelID,
+		ID:      game.MessageID,
+		Embeds:  embeds,
+	}
+
+	// Only set Components if we have any
+	if len(components) > 0 {
+		log.Printf("Setting %d components for game %s", len(components), game.ID)
+		messageEdit.Components = components
+	} else {
+		log.Printf("No components to set for message edit for game %s (status: %s)", game.ID, game.Status)
+		// Explicitly set to nil to remove any existing components
+		var emptyComponents []discordgo.MessageComponent
+		messageEdit.Components = emptyComponents
+		log.Printf("Set empty components array for game %s to clear buttons", game.ID)
+	}
+
+	return messageEdit, nil
 }
 
 // createDrinkProgressBar creates a visual progress bar for drink payments
@@ -557,245 +1031,6 @@ func createDrinkProgressBar(paidCount int, totalDrinks int) string {
 	return progressBar
 }
 
-// renderGameMessage renders the game message based on the current game state
-func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkLedger, leaderboardEntries []game.LeaderboardEntry, sessionLeaderboardEntries []game.LeaderboardEntry, rollOffGame *models.Game, parentGame *models.Game) (*discordgo.MessageEdit, error) {
-	// Create the embed
-	embed := &discordgo.MessageEmbed{
-		Title: "Ronnied Drinking Game",
-		Color: 0x3498db, // Blue color
-	}
-
-	// Add fields based on game status
-	switch game.Status {
-	case models.GameStatusWaiting:
-		embed.Description = "Waiting for players to join..."
-		embed.Fields = []*discordgo.MessageEmbedField{
-			{
-				Name:   "Status",
-				Value:  "Waiting",
-				Inline: true,
-			},
-			{
-				Name:   "Players",
-				Value:  fmt.Sprintf("%d", len(game.Participants)),
-				Inline: true,
-			},
-		}
-
-	case models.GameStatusActive:
-		embed.Description = "Game in progress! Each player should roll their dice."
-		embed.Fields = []*discordgo.MessageEmbedField{
-			{
-				Name:   "Status",
-				Value:  "Active",
-				Inline: true,
-			},
-			{
-				Name:   "Players",
-				Value:  fmt.Sprintf("%d", len(game.Participants)),
-				Inline: true,
-			},
-		}
-
-	case models.GameStatusRollOff:
-		embed.Description = "Roll-off in progress! Players in the roll-off need to roll again."
-		embed.Fields = []*discordgo.MessageEmbedField{
-			{
-				Name:   "Status",
-				Value:  "Roll-off",
-				Inline: true,
-			},
-			{
-				Name:   "Players",
-				Value:  fmt.Sprintf("%d", len(game.Participants)),
-				Inline: true,
-			},
-		}
-
-		// If this is a roll-off game, add info about the parent game
-		if parentGame != nil {
-			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
-				Name:  "Roll-off Type",
-				Value: "This is a roll-off game",
-			})
-		}
-
-	case models.GameStatusCompleted:
-		embed.Description = "Game completed! Here are the final results."
-		embed.Fields = []*discordgo.MessageEmbedField{
-			{
-				Name:   "Status",
-				Value:  "Completed",
-				Inline: true,
-			},
-			{
-				Name:   "Players",
-				Value:  fmt.Sprintf("%d", len(game.Participants)),
-				Inline: true,
-			},
-		}
-	}
-
-	// Add participant list
-	var participantList string
-	for _, p := range game.Participants {
-		var rollInfo string
-		if p.RollValue > 0 {
-			rollInfo = fmt.Sprintf(" (Rolled: %d)", p.RollValue)
-		} else {
-			rollInfo = " (Not rolled yet)"
-		}
-		participantList += fmt.Sprintf("• %s%s\n", p.PlayerName, rollInfo)
-	}
-
-	if participantList != "" {
-		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
-			Name:  "Participants",
-			Value: participantList,
-		})
-	}
-
-	// Add drink leaderboard if available
-	if len(sessionLeaderboardEntries) > 0 {
-		// Sort entries by drink count (descending)
-		sort.Slice(sessionLeaderboardEntries, func(i, j int) bool {
-			return sessionLeaderboardEntries[i].DrinkCount > sessionLeaderboardEntries[j].DrinkCount
-		})
-
-		var leaderboardText string
-		var totalDrinks int
-		var totalPaid int
-		
-		// Create a visual progress bar for the session
-		for _, entry := range sessionLeaderboardEntries {
-			totalDrinks += entry.DrinkCount
-			totalPaid += entry.PaidCount
-			
-			// Show drinks owed and paid for each player
-			remaining := entry.DrinkCount - entry.PaidCount
-			var statusEmoji string
-			
-			// Select appropriate emoji based on payment status
-			if remaining == 0 && entry.DrinkCount > 0 {
-				statusEmoji = "🎉" // Celebration emoji for all paid
-			} else if entry.DrinkCount > 0 && float64(entry.PaidCount)/float64(entry.DrinkCount) >= 0.75 {
-				statusEmoji = "🔥" // Fire emoji for almost done
-			} else if entry.DrinkCount > 0 && float64(entry.PaidCount)/float64(entry.DrinkCount) >= 0.5 {
-				statusEmoji = "👍" // Thumbs up for good progress
-			} else if entry.DrinkCount > 0 && float64(entry.PaidCount)/float64(entry.DrinkCount) >= 0.25 {
-				statusEmoji = "🍺" // Beer emoji for some progress
-			} else if entry.DrinkCount > 0 {
-				statusEmoji = "💪" // Flexed arm for just starting
-			} else {
-				statusEmoji = "😇" // Angel for no drinks
-			}
-			
-			// Format the leaderboard entry
-			if entry.DrinkCount > 0 {
-				leaderboardText += fmt.Sprintf("• %s: %d owed, %d paid, %d remaining %s\n", 
-					entry.PlayerName, entry.DrinkCount, entry.PaidCount, remaining, statusEmoji)
-			} else {
-				leaderboardText += fmt.Sprintf("• %s: No drinks owed %s\n", entry.PlayerName, statusEmoji)
-			}
-		}
-		
-		// Add session progress bar if there are any drinks
-		if totalDrinks > 0 {
-			progressBar := createProgressBar(totalPaid, totalDrinks)
-			leaderboardText += fmt.Sprintf("\n**Session Progress**: %s", progressBar)
-		}
-
-		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
-			Name:  "Drink Leaderboard",
-			Value: leaderboardText,
-		})
-	} else if len(leaderboardEntries) > 0 {
-		// If no session leaderboard, fall back to game leaderboard
-		var leaderboardText string
-		for _, entry := range leaderboardEntries {
-			leaderboardText += fmt.Sprintf("• %s: %d drinks\n", entry.PlayerName, entry.DrinkCount)
-		}
-
-		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
-			Name:  "Drink Leaderboard",
-			Value: leaderboardText,
-		})
-	}
-
-	// Create embeds array
-	embeds := []*discordgo.MessageEmbed{embed}
-
-	// Create components based on game status
-	var components []discordgo.MessageComponent
-
-	switch game.Status {
-	case models.GameStatusWaiting:
-		// Add join and begin buttons
-		joinButton := discordgo.Button{
-			Label:    "Join Game",
-			Style:    discordgo.SuccessButton,
-			CustomID: ButtonJoinGame,
-			Emoji: discordgo.ComponentEmoji{
-				Name: "🎲",
-			},
-		}
-
-		beginButton := discordgo.Button{
-			Label:    "Begin Game",
-			Style:    discordgo.PrimaryButton,
-			CustomID: ButtonBeginGame,
-			Emoji: discordgo.ComponentEmoji{
-				Name: "▶️",
-			},
-		}
-
-		components = append(components, discordgo.ActionsRow{
-			Components: []discordgo.MessageComponent{
-				joinButton,
-				beginButton,
-			},
-		})
-
-	case models.GameStatusCompleted:
-		// Add start new game button
-		startNewGameButton := discordgo.Button{
-			Label:    "Start New Game",
-			Style:    discordgo.SuccessButton,
-			CustomID: ButtonStartNewGame,
-			Emoji: discordgo.ComponentEmoji{
-				Name: "🎮",
-			},
-		}
-
-		components = append(components, discordgo.ActionsRow{
-			Components: []discordgo.MessageComponent{
-				startNewGameButton,
-			},
-		})
-	}
-
-	// Create the message edit
-	messageEdit := &discordgo.MessageEdit{
-		Channel: game.ChannelID,
-		ID:      game.MessageID,
-		Embeds:  embeds,
-	}
-
-	// Only set Components if we have any
-	if len(components) > 0 {
-		log.Printf("Setting %d components for game %s", len(components), game.ID)
-		messageEdit.Components = components
-	} else {
-		log.Printf("No components to set for message edit for game %s (status: %s)", game.ID, game.Status)
-		// Explicitly set to nil to remove any existing components
-		var emptyComponents []discordgo.MessageComponent
-		messageEdit.Components = emptyComponents
-		log.Printf("Set empty components array for game %s to clear buttons", game.ID)
-	}
-
-	return messageEdit, nil
-}
-
 // createProgressBar creates a visual progress bar for drink payments
 func createProgressBar(paidCount int, totalDrinks int) string {
 	// Handle edge cases
@@ -842,6 +1077,39 @@ func createProgressBar(paidCount int, totalDrinks int) string {
 	return progressBar
 }
 
+// createMiniProgressBar creates a small visual progress bar for individual player drink payments
+func createMiniProgressBar(paidCount int, totalDrinks int) string {
+	// Handle edge cases
+	if totalDrinks == 0 {
+		return "No drinks to pay"
+	}
+
+	// Calculate progress
+	progress := float64(paidCount) / float64(totalDrinks)
+
+	// Select appropriate bar characters
+	filledChar := "🟩" // Green square for paid drinks
+	emptyChar := "⬜"  // White square for unpaid drinks
+
+	// Create a 5-segment bar for individual players
+	const segments = 5
+	filledSegments := int(progress * segments)
+
+	var progressBar string
+	for i := 0; i < segments; i++ {
+		if i < filledSegments {
+			progressBar += filledChar
+		} else {
+			progressBar += emptyChar
+		}
+	}
+
+	// Add percentage to the progress bar
+	progressBar += fmt.Sprintf(" (%.0f%%)", progress*100)
+
+	return progressBar
+}
+
 // getGameTitle returns a dynamic title based on game status
 func getGameTitle(game *models.Game) string {
 	switch game.Status {
@@ -855,5 +1123,21 @@ func getGameTitle(game *models.Game) string {
 		return "🏆 Ronnied Drinking Game - Game Complete"
 	default:
 		return "🎲 Ronnied Drinking Game"
+	}
+}
+
+// getGameStatusColor returns a color based on game status
+func getGameStatusColor(status models.GameStatus) int {
+	switch status {
+	case models.GameStatusWaiting:
+		return 0x3498db // Blue color
+	case models.GameStatusActive:
+		return 0x2ecc71 // Green color
+	case models.GameStatusRollOff:
+		return 0xff9900 // Orange color
+	case models.GameStatusCompleted:
+		return 0x9b59b6 // Purple color
+	default:
+		return 0x3498db // Default blue
 	}
 }

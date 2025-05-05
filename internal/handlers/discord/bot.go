@@ -338,8 +338,9 @@ func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.Interacti
 
 	// Start the game
 	startOutput, err := b.gameService.StartGame(ctx, &game.StartGameInput{
-		GameID:   existingGame.Game.ID,
-		PlayerID: userID,
+		GameID:     existingGame.Game.ID,
+		PlayerID:   userID,
+		ForceStart: true, // Always try to force start, service layer will decide if it's allowed
 	})
 	if err != nil {
 		log.Printf("Error starting game: %v", err)
@@ -350,8 +351,18 @@ func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.Interacti
 		return RespondWithEphemeralMessage(s, i, "Failed to start the game. Make sure you are the creator of the game.")
 	}
 
-	// Update the game message
-	b.updateGameMessage(s, channelID, existingGame.Game.ID)
+	// If the game was force-started, add a metadata field to the game
+	if startOutput.ForceStarted && startOutput.CreatorName != "" {
+		// Create a special message for the shared game message
+		forceStartMsg := fmt.Sprintf("⚠️ Game force-started by %s! %s took too long to start the game and has been assigned a drink.",
+			s.State.User.Username, startOutput.CreatorName)
+
+		// Update the game message with the force-start information
+		b.updateGameMessageWithForceStart(s, channelID, existingGame.Game.ID, forceStartMsg)
+	} else {
+		// Update the game message normally
+		b.updateGameMessage(s, channelID, existingGame.Game.ID)
+	}
 
 	// Create roll button
 	rollButton := discordgo.Button{
@@ -371,7 +382,11 @@ func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.Interacti
 
 	// Default message if the messaging service fails
 	gameStartedMessage := "Game Started! Click the button below to roll your dice."
-	if err == nil {
+
+	// If the game was force-started, add information about the original creator
+	if startOutput.ForceStarted && startOutput.CreatorName != "" {
+		gameStartedMessage = fmt.Sprintf("Game force-started! %s took too long to start the game and has been assigned a drink. Click the button below to roll your dice.", startOutput.CreatorName)
+	} else if err == nil {
 		gameStartedMessage = startMsgOutput.Message
 	} else {
 		log.Printf("Error getting game started message: %v", err)
@@ -427,7 +442,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		return err
 	}
 
-	// Roll the dice
+	// Roll the dice - the service will handle all the logic
 	rollOutput, err := b.gameService.RollDice(ctx, &game.RollDiceInput{
 		GameID:   existingGame.Game.ID,
 		PlayerID: userID,
@@ -435,34 +450,6 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 
 	// Handle errors
 	if err != nil {
-		// Special handling for roll-off games
-		if errors.Is(err, game.ErrPlayerAlreadyRolled) {
-			// Check if there's a roll-off game where the player hasn't rolled yet
-			if existingGame.Game.RollOffGameID != "" {
-				rollOffGameOutput, err := b.gameService.GetGame(ctx, &game.GetGameInput{
-					GameID: existingGame.Game.RollOffGameID,
-				})
-				if err == nil && rollOffGameOutput != nil {
-					// Check if the player has already rolled in the roll-off game
-					playerRolled := false
-					for _, p := range rollOffGameOutput.Game.Participants {
-						if p.PlayerID == userID && p.RollValue > 0 {
-							playerRolled = true
-							break
-						}
-					}
-					if !playerRolled {
-						// Player hasn't rolled in the roll-off game, redirect them
-						_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-							Content: "You need to roll in the roll-off game. Check the game message for details.",
-							Flags:   discordgo.MessageFlagsEphemeral,
-						})
-						return err
-					}
-				}
-			}
-		}
-
 		// Map the error to an error type for the messaging service
 		var errorType string
 		switch err {
@@ -479,6 +466,16 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 				Content: "You are not part of this game.",
 				Flags:   discordgo.MessageFlagsEphemeral,
 			})
+			return err
+		case game.ErrPlayerInRollOff:
+			// The player needs to roll in a roll-off game
+			_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+				Content: "You need to roll in a roll-off game! Use the Roll button on the game message to continue.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			})
+
+			// Update the game message to make the roll-off more visible
+			b.updateGameMessage(s, channelID, existingGame.Game.ID)
 			return err
 		default:
 			// For any other error, just return the error message
@@ -508,74 +505,52 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		return err
 	}
 
-	// Update the game message in the channel
-	b.updateGameMessage(s, channelID, existingGame.Game.ID)
-
-	// Check if the player should be redirected to a roll-off game
-	if rollOutput.ActiveRollOffGameID != "" {
+	// If the player needs to roll in a roll-off game instead
+	if rollOutput.NeedsToRollInRollOff {
 		_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-			Content: "You need to roll in the roll-off game. Check the game message for details.",
+			Content: "You need to roll in a roll-off game! Use the Roll button on the game message to continue.",
 			Flags:   discordgo.MessageFlagsEphemeral,
 		})
+
+		// Update the game message to make the roll-off more visible
+		b.updateGameMessage(s, channelID, existingGame.Game.ID)
 		return err
 	}
 
-	// Determine color based on roll result
-	var embedColor int
-	if rollOutput.IsCriticalHit {
-		embedColor = 0x2ecc71 // Green for critical hits
-	} else if rollOutput.RollValue == 1 {
-		embedColor = 0xe74c3c // Red for critical fails
-	} else {
-		embedColor = 0x3498db // Blue for normal rolls
+	// Update all game messages that need updating
+	for _, gameID := range rollOutput.GameIDsToUpdate {
+		b.updateGameMessage(s, channelID, gameID)
 	}
 
-	// Get a dynamic roll result message from the messaging service
+	// Get fun roll result message from messaging service
 	rollResultOutput, err := b.messagingService.GetRollResultMessage(ctx, &messaging.GetRollResultMessageInput{
-		PlayerName:        rollOutput.PlayerName,
-		RollValue:         rollOutput.RollValue,
-		IsCriticalHit:     rollOutput.IsCriticalHit,
-		IsCriticalFail:    rollOutput.RollValue == 1, // Assuming 1 is critical fail
-		IsPersonalMessage: true,                      // This is an ephemeral message to the player
-	})
-
-	// Get a supportive whisper message from Ronnie
-	rollWhisperOutput, whisperErr := b.messagingService.GetRollWhisperMessage(ctx, &messaging.GetRollWhisperMessageInput{
-		PlayerName:     rollOutput.PlayerName,
 		RollValue:      rollOutput.RollValue,
 		IsCriticalHit:  rollOutput.IsCriticalHit,
-		IsCriticalFail: rollOutput.RollValue == 1, // Assuming 1 is critical fail
+		IsCriticalFail: rollOutput.IsCriticalFail,
+		PlayerName:     rollOutput.PlayerName,
 	})
-
-	// Create embeds - either with messaging service output or fallback to static content
-	var embeds []*discordgo.MessageEmbed
-	var contentText string
-
 	if err != nil {
-		// Fallback to static description if messaging service fails
-		embeds = []*discordgo.MessageEmbed{
-			{
-				Title:       rollOutput.Result,
-				Description: rollOutput.Details,
-				Color:       embedColor,
-			},
-		}
-		contentText = rollOutput.Result
-	} else {
-		// Use the fun message from the messaging service
-		contentText = rollResultOutput.Title
-
-		// Create an embed with the fun message
-		embed := &discordgo.MessageEmbed{
-			Title:       rollResultOutput.Title,
-			Description: rollResultOutput.Message,
-			Color:       embedColor,
-		}
-
-		embeds = append(embeds, embed)
+		log.Printf("Error getting roll result message: %v", err)
+		return RespondWithEphemeralMessage(s, i, "Our hamster got tired and needed a break. Please try again later.")
 	}
 
-	// Add the whisper message as a second embed if available
+	// Get the whisper message
+	rollWhisperOutput, whisperErr := b.messagingService.GetRollWhisperMessage(ctx, &messaging.GetRollWhisperMessageInput{
+		RollValue:      rollOutput.RollValue,
+		IsCriticalHit:  rollOutput.IsCriticalHit,
+		IsCriticalFail: rollOutput.IsCriticalFail,
+		PlayerName:     rollOutput.PlayerName,
+	})
+	if whisperErr != nil {
+		log.Printf("Error getting roll whisper message: %v", whisperErr)
+		// Continue without whisper message - this is non-critical
+	}
+
+	// Create embeds for the response
+	var embeds []*discordgo.MessageEmbed
+	contentText := rollResultOutput.Title
+
+	// Add the whisper message as an embed if available
 	if whisperErr == nil {
 		whisperEmbed := &discordgo.MessageEmbed{
 			Title:       "Ronnie whispers...",
@@ -583,79 +558,88 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 			Color:       0x95a5a6, // Gray color for whispers
 			Footer: &discordgo.MessageEmbedFooter{
 				Text:    "Just between us...",
-				IconURL: "https://cdn.discordapp.com/emojis/839903382661799966.png", // Optional: Add a whisper emoji
+				IconURL: "https://cdn.discordapp.com/emojis/854901327381135410.webp?size=96&animated=true",
 			},
 		}
 		embeds = append(embeds, whisperEmbed)
 	}
 
-	// Build components based on the roll result
-	var components []discordgo.MessageComponent
-	if rollOutput.IsCriticalHit {
-		// Create player selection dropdown for critical hits
-		if len(rollOutput.EligiblePlayers) > 0 {
-			var playerOptions []discordgo.SelectMenuOption
+	// Create roll again button for non-critical hits
+	rollButton := discordgo.Button{
+		Label:    "Roll Again",
+		Style:    discordgo.PrimaryButton,
+		CustomID: ButtonRollDice,
+		Emoji: discordgo.ComponentEmoji{
+			Name: "🎲",
+		},
+	}
 
-			for _, player := range rollOutput.EligiblePlayers {
-				playerOptions = append(playerOptions, discordgo.SelectMenuOption{
-					Label:       player.PlayerName,
-					Value:       player.PlayerID,
-					Description: "Assign a drink to this player",
-					Emoji: discordgo.ComponentEmoji{
-						Name: "🍺",
-					},
-				})
-			}
-
-			playerSelect := discordgo.SelectMenu{
-				CustomID:    SelectAssignDrink,
-				Placeholder: "Select a player to drink",
-				Options:     playerOptions,
-			}
-
-			components = append(components, playerSelect)
-		}
-	} else {
-		// Create roll again button for non-critical hits
-		rollButton := discordgo.Button{
-			Label:    "Roll Again",
-			Style:    discordgo.PrimaryButton,
-			CustomID: ButtonRollDice,
-			Emoji: discordgo.ComponentEmoji{
-				Name: "🎲",
-			},
-		}
-
-		// Add Pay Drink button
-		payDrinkButton := discordgo.Button{
-			Label:    "Pay Drink",
-			Style:    discordgo.SuccessButton,
-			CustomID: ButtonPayDrink,
-			Emoji: discordgo.ComponentEmoji{
-				Name: "💸",
-			},
-		}
-
-		// Add both buttons
-		components = append(components, rollButton, payDrinkButton)
+	// Add Pay Drink button
+	payDrinkButton := discordgo.Button{
+		Label:    "Pay Drink",
+		Style:    discordgo.SuccessButton,
+		CustomID: ButtonPayDrink,
+		Emoji: discordgo.ComponentEmoji{
+			Name: "💸",
+		},
 	}
 
 	// Create action row for components if we have any
 	var messageComponents []discordgo.MessageComponent
-	if len(components) > 0 {
-		messageComponents = append(messageComponents, discordgo.ActionsRow{
-			Components: components,
-		})
+	if len(embeds) > 0 || rollOutput.IsCriticalHit {
+		if rollOutput.IsCriticalHit {
+			// Create player selection dropdown for critical hits
+			if len(rollOutput.EligiblePlayers) > 0 {
+				var playerOptions []discordgo.SelectMenuOption
+
+				for _, player := range rollOutput.EligiblePlayers {
+					playerOptions = append(playerOptions, discordgo.SelectMenuOption{
+						Label:       player.PlayerName,
+						Value:       player.PlayerID,
+						Description: "Assign a drink to this player",
+						Emoji: discordgo.ComponentEmoji{
+							Name: "🍺",
+						},
+					})
+				}
+
+				playerSelect := discordgo.SelectMenu{
+					CustomID:    SelectAssignDrink,
+					Placeholder: "Select a player to drink",
+					Options:     playerOptions,
+				}
+
+				messageComponents = append(messageComponents, playerSelect)
+			}
+		} else {
+			// Add both buttons
+			messageComponents = append(messageComponents, discordgo.ActionsRow{
+				Components: []discordgo.MessageComponent{rollButton, payDrinkButton},
+			})
+		}
 	}
 
-	// Edit the original message with the updated content
+	// Update the original interaction with the roll result, whisper, and components
+	// This ensures the player gets one message with everything they need
 	_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 		Content:    &contentText,
 		Embeds:     &embeds,
 		Components: &messageComponents,
 	})
+	if err != nil {
+		log.Printf("Error updating interaction response: %v", err)
+		return err
+	}
 
-	return err
+	// Update the game message in the channel
+	// This is a separate update to the shared message that everyone can see
+	if existingGame.Game.MessageID != "" {
+		b.updateGameMessage(s, channelID, existingGame.Game.ID)
+	} else {
+		log.Printf("No message ID found for game %s, skipping update", existingGame.Game.ID)
+	}
+
+	return nil
 }
 
 // handleAssignDrinkSelect handles the assign drink dropdown selection
@@ -1154,6 +1138,103 @@ func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID s
 	if err != nil {
 		log.Printf("Error rendering game message: %v", err)
 		return
+	}
+
+	// Send the message edit
+	_, err = s.ChannelMessageEditComplex(messageEdit)
+	if err != nil {
+		log.Printf("Error updating game message: %v", err)
+	}
+}
+
+// updateGameMessageWithForceStart updates the main game message in the channel with force-start information
+func (b *Bot) updateGameMessageWithForceStart(s *discordgo.Session, channelID string, gameID string, forceStartMsg string) {
+	ctx := context.Background()
+
+	// Get the game
+	gameOutput, err := b.gameService.GetGame(ctx, &game.GetGameInput{
+		GameID: gameID,
+	})
+	if err != nil {
+		log.Printf("Error getting game for message update: %v", err)
+		return
+	}
+
+	if gameOutput.Game.MessageID == "" {
+		log.Printf("Game has no message ID, cannot update")
+		return
+	}
+
+	// Get related data needed for rendering
+	var rollOffGame, parentGame *models.Game
+	var drinkRecords []*models.DrinkLedger
+	var leaderboardEntries, sessionLeaderboardEntries []game.LeaderboardEntry
+
+	// Check if this is a roll-off game
+	if gameOutput.Game.Status.IsRollOff() && gameOutput.Game.ParentGameID != "" {
+		// Get the parent game
+		parentGameOutput, err := b.gameService.GetGame(ctx, &game.GetGameInput{
+			GameID: gameOutput.Game.ParentGameID,
+		})
+		if err == nil {
+			parentGame = parentGameOutput.Game
+		}
+	}
+
+	// Check if this game has a roll-off in progress
+	if gameOutput.Game.RollOffGameID != "" {
+		// Get the roll-off game
+		rollOffGameOutput, err := b.gameService.GetGame(ctx, &game.GetGameInput{
+			GameID: gameOutput.Game.RollOffGameID,
+		})
+		if err == nil {
+			rollOffGame = rollOffGameOutput.Game
+		}
+	}
+
+	// Get drink records
+	drinkRecordsOutput, err := b.gameService.GetDrinkRecords(ctx, &game.GetDrinkRecordsInput{
+		GameID: gameID,
+	})
+	if err == nil && drinkRecordsOutput != nil {
+		drinkRecords = drinkRecordsOutput.Records
+	}
+
+	// Get leaderboard for completed games
+	if gameOutput.Game.Status.IsCompleted() {
+		leaderboardOutput, err := b.gameService.GetLeaderboard(ctx, &game.GetLeaderboardInput{
+			GameID: gameID,
+		})
+		if err == nil && leaderboardOutput != nil {
+			leaderboardEntries = leaderboardOutput.Entries
+		}
+
+		// Get session leaderboard for completed games
+		sessionOutput, err := b.gameService.GetSessionLeaderboard(ctx, &game.GetSessionLeaderboardInput{
+			ChannelID: channelID,
+		})
+		if err == nil && sessionOutput != nil {
+			sessionLeaderboardEntries = sessionOutput.Entries
+		}
+	}
+
+	// Render the game message
+	messageEdit, err := b.renderGameMessage(gameOutput.Game, drinkRecords, leaderboardEntries, sessionLeaderboardEntries, rollOffGame, parentGame)
+	if err != nil {
+		log.Printf("Error rendering game message: %v", err)
+		return
+	}
+
+	// Add the force-start message to the game message
+	if messageEdit.Embeds != nil && len(messageEdit.Embeds) > 0 {
+		messageEdit.Embeds[0].Description = forceStartMsg + "\n\n" + messageEdit.Embeds[0].Description
+	} else if messageEdit.Content != nil {
+		// Create a new content string with the force-start message
+		newContent := forceStartMsg + "\n\n" + *messageEdit.Content
+		messageEdit.Content = &newContent
+	} else {
+		// If there's no content, create a new one
+		messageEdit.Content = &forceStartMsg
 	}
 
 	// Send the message edit

@@ -3,9 +3,9 @@ package game
 import (
 	"context"
 	"errors"
-
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/KirkDiggler/ronnied/internal/common/clock"
 	"github.com/KirkDiggler/ronnied/internal/common/uuid"
@@ -150,11 +150,6 @@ func (s *service) StartGame(ctx context.Context, input *StartGameInput) (*StartG
 		return nil, ErrGameNotFound
 	}
 
-	// Verify the player is the game creator
-	if game.CreatorID != input.PlayerID {
-		return nil, ErrNotCreator
-	}
-
 	// Ensure the game is in waiting status
 	if game.Status != models.GameStatusWaiting {
 		return nil, ErrInvalidGameState
@@ -163,6 +158,55 @@ func (s *service) StartGame(ctx context.Context, input *StartGameInput) (*StartG
 	// Ensure there is at least 1 player (the creator)
 	if len(game.Participants) < 1 {
 		return nil, ErrNotEnoughPlayers
+	}
+
+	// Get the creator's name
+	creatorName := "Unknown Creator"
+	for _, p := range game.Participants {
+		if p.PlayerID == game.CreatorID {
+			creatorName = p.PlayerName
+			break
+		}
+	}
+
+	// Check if the player is the game creator
+	isCreator := game.CreatorID == input.PlayerID
+	
+	// If not the creator, check if force start is allowed
+	forceStarted := false
+	if !isCreator {
+		// Only allow force start if explicitly requested and game is older than 5 minutes
+		if !input.ForceStart {
+			return nil, ErrNotCreator
+		}
+		
+		// Calculate game age
+		gameAge := s.clock.Now().Sub(game.CreatedAt)
+		fiveMinutes := 5 * time.Minute
+		
+		// If game is less than 5 minutes old, don't allow force start
+		if gameAge < fiveMinutes {
+			return nil, fmt.Errorf("%w: game must be at least 5 minutes old for non-creator to start (current age: %v)", 
+				ErrNotCreator, gameAge.Round(time.Second))
+		}
+		
+		// Game is old enough, allow force start
+		forceStarted = true
+		
+		// Assign a drink to the creator for delaying
+		_, err = s.drinkLedgerRepo.CreateDrinkRecord(ctx, &ledgerRepo.CreateDrinkRecordInput{
+			GameID:       input.GameID,
+			FromPlayerID: input.PlayerID,
+			ToPlayerID:   game.CreatorID,
+			Reason:       models.DrinkReasonDelayedStart,
+			Timestamp:    s.clock.Now(),
+			SessionID:    s.getSessionIDForChannel(ctx, game.ChannelID),
+		})
+		
+		if err != nil {
+			// Log the error but don't fail the operation
+			log.Printf("Error assigning drink to creator for delayed start: %v", err)
+		}
 	}
 
 	// Update game status to active
@@ -196,7 +240,10 @@ func (s *service) StartGame(ctx context.Context, input *StartGameInput) (*StartG
 	}
 
 	return &StartGameOutput{
-		Success: true,
+		Success:      true,
+		ForceStarted: forceStarted,
+		CreatorID:    game.CreatorID,
+		CreatorName:  creatorName,
 	}, nil
 }
 
@@ -334,6 +381,22 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		return nil, fmt.Errorf("failed to get game: %w", err)
 	}
 
+	// Check if this is a main game and if the player should be in a roll-off instead
+	if game.Status != models.GameStatusRollOff {
+		rollOffGame, err := s.FindActiveRollOffGame(ctx, input.PlayerID, input.GameID)
+		if err == nil && rollOffGame != nil {
+			// Player should be rolling in the roll-off game
+			return &RollDiceOutput{
+				PlayerID: input.PlayerID,
+				NeedsToRollInRollOff: true,
+				RollOffGameID: rollOffGame.ID,
+				GameIDsToUpdate: []string{input.GameID}, // Update main game to show roll-off status
+				IsRollOffRoll: true,
+				ParentGameID: rollOffGame.ParentGameID,
+			}, nil
+		}
+	}
+
 	// If this is a roll-off game, check if there's a nested roll-off the player should be in
 	if game.Status == models.GameStatusRollOff && game.ParentGameID != "" {
 		rollOffGame, err := s.FindActiveRollOffGame(ctx, input.PlayerID, input.GameID)
@@ -457,7 +520,6 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 	// Prepare domain result information
 	result := ""
 	details := ""
-	activeRollOffGameID := ""
 	var eligiblePlayers []PlayerOption
 
 	// Get the player name
@@ -511,10 +573,16 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		details = "Your roll has been recorded."
 	}
 
-	// Check if the player should be redirected to a roll-off game
+	// Determine which game IDs need to be updated
+	gameIDsToUpdate := []string{input.GameID}
+	
+	// If this is a roll-off game, also update the parent game
 	if game.Status == models.GameStatusRollOff && game.ParentGameID != "" {
-		activeRollOffGameID = game.ID
+		gameIDsToUpdate = append(gameIDsToUpdate, game.ParentGameID)
 	}
+
+	// Check if this is a roll-off roll
+	isRollOffRoll := game.Status == models.GameStatusRollOff
 
 	return &RollDiceOutput{
 		// Basic roll information
@@ -532,9 +600,15 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 		// Domain result information
 		Result:              result,
 		Details:             details,
-		ActiveRollOffGameID: activeRollOffGameID,
+		ActiveRollOffGameID: rollOffGameID,
 		EligiblePlayers:     eligiblePlayers,
 		Game:                game,
+		
+		// Enhanced fields for roll-off handling
+		IsRollOffRoll:       isRollOffRoll,
+		ParentGameID:        game.ParentGameID,
+		NeedsToRollInRollOff: false, // We're already rolling in the right game
+		GameIDsToUpdate:     gameIDsToUpdate,
 	}, nil
 }
 
