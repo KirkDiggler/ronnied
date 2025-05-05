@@ -655,20 +655,8 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		})
 	}
 
-	// Send an ephemeral message with the whisper if available
-	if whisperEmbed != nil {
-		_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-			Content:    "Ronnie whispers to you...",
-			Embeds:     []*discordgo.MessageEmbed{whisperEmbed},
-			Flags:      discordgo.MessageFlagsEphemeral,
-		})
-		if err != nil {
-			log.Printf("Error sending ephemeral whisper message: %v", err)
-		}
-	}
-
-	// Then, update the original interaction with the components for drink assignment
-	// This ensures the dropdown for critical hits works properly
+	// Update the original interaction with the roll result, whisper, and components
+	// This ensures the player gets one message with everything they need
 	_, err = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 		Content:    &contentText,
 		Embeds:     &embeds,
