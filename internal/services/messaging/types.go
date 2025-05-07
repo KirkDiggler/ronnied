@@ -10,13 +10,13 @@ type MessageType string
 const (
 	// MessageTypeJoinGame represents messages when a player joins a game
 	MessageTypeJoinGame MessageType = "join_game"
-	
+
 	// MessageTypeGameStatus represents messages about the game status
 	MessageTypeGameStatus MessageType = "game_status"
-	
+
 	// MessageTypeRollResult represents messages about dice roll results
 	MessageTypeRollResult MessageType = "roll_result"
-	
+
 	// MessageTypeError represents error messages
 	MessageTypeError MessageType = "error"
 )
@@ -27,16 +27,16 @@ type MessageTone string
 const (
 	// ToneNeutral is a neutral tone
 	ToneNeutral MessageTone = "neutral"
-	
+
 	// ToneFunny is a humorous tone
 	ToneFunny MessageTone = "funny"
-	
+
 	// ToneSarcastic is a sarcastic tone
 	ToneSarcastic MessageTone = "sarcastic"
-	
+
 	// ToneEncouraging is an encouraging tone
 	ToneEncouraging MessageTone = "encouraging"
-	
+
 	// ToneCelebration is a celebratory tone
 	ToneCelebration MessageTone = "celebration"
 )
@@ -45,13 +45,13 @@ const (
 type GetJoinGameMessageInput struct {
 	// PlayerName is the name of the player joining
 	PlayerName string
-	
+
 	// GameStatus is the current status of the game
 	GameStatus models.GameStatus
-	
+
 	// AlreadyJoined indicates if the player was already in the game
 	AlreadyJoined bool
-	
+
 	// PreferredTone is the preferred tone for the message (optional)
 	PreferredTone MessageTone
 }
@@ -60,7 +60,7 @@ type GetJoinGameMessageInput struct {
 type GetJoinGameMessageOutput struct {
 	// Message is the generated message
 	Message string
-	
+
 	// Tone is the tone of the message
 	Tone MessageTone
 }
@@ -92,10 +92,10 @@ type GetGameStatusMessageOutput struct {
 
 // GetRollResultMessageInput contains the input for GetRollResultMessage
 type GetRollResultMessageInput struct {
-	PlayerName       string
-	RollValue        int
-	IsCriticalHit    bool
-	IsCriticalFail   bool
+	PlayerName        string
+	RollValue         int
+	IsCriticalHit     bool
+	IsCriticalFail    bool
 	IsPersonalMessage bool // Indicates if this is a personal/ephemeral message to the player
 }
 
@@ -120,7 +120,7 @@ type GetGameStartedMessageOutput struct {
 type GetErrorMessageInput struct {
 	// ErrorType is the type of error
 	ErrorType string
-	
+
 	// PreferredTone is the preferred tone for the message (optional)
 	PreferredTone MessageTone
 }
@@ -129,7 +129,7 @@ type GetErrorMessageInput struct {
 type GetErrorMessageOutput struct {
 	// Message is the generated message
 	Message string
-	
+
 	// Tone is the tone of the message
 	Tone MessageTone
 }
@@ -138,16 +138,16 @@ type GetErrorMessageOutput struct {
 type GetRollWhisperMessageInput struct {
 	// PlayerName is the name of the player who rolled
 	PlayerName string
-	
+
 	// RollValue is the value that was rolled
 	RollValue int
-	
+
 	// IsCriticalHit indicates if the roll was a critical hit (e.g., 6)
 	IsCriticalHit bool
-	
+
 	// IsCriticalFail indicates if the roll was a critical fail (e.g., 1)
 	IsCriticalFail bool
-	
+
 	// PreferredTone is the preferred tone for the message (optional)
 	PreferredTone MessageTone
 }
@@ -156,16 +156,16 @@ type GetRollWhisperMessageInput struct {
 type GetRollWhisperMessageOutput struct {
 	// Message is the generated whisper message
 	Message string
-	
+
 	// Tone is the tone of the message
 	Tone MessageTone
 }
 
 // GetLeaderboardMessageInput is the input for GetLeaderboardMessage
 type GetLeaderboardMessageInput struct {
-	PlayerName  string
-	DrinkCount  int
-	Rank        int
+	PlayerName   string
+	DrinkCount   int
+	Rank         int
 	TotalPlayers int
 }
 
@@ -178,7 +178,7 @@ type GetLeaderboardMessageOutput struct {
 type GetPayDrinkMessageInput struct {
 	// PlayerName is the name of the player paying the drink
 	PlayerName string
-	
+
 	// DrinkCount is the number of drinks being paid
 	DrinkCount int
 }
@@ -187,28 +187,7 @@ type GetPayDrinkMessageInput struct {
 type GetPayDrinkMessageOutput struct {
 	// Title is the title of the message
 	Title string
-	
-	// Message is the body of the message
-	Message string
-}
 
-// GetPayDrinkErrorMessageInput contains parameters for getting a pay drink error message
-type GetPayDrinkErrorMessageInput struct {
-	// PlayerName is the name of the player who tried to pay a drink
-	PlayerName string
-	
-	// ErrorType is the type of error that occurred
-	ErrorType string
-	
-	// Tone is the preferred tone for the message
-	Tone MessageTone
-}
-
-// GetPayDrinkErrorMessageOutput contains the result of getting a pay drink error message
-type GetPayDrinkErrorMessageOutput struct {
-	// Title is the title of the message
-	Title string
-	
 	// Message is the body of the message
 	Message string
 }
@@ -217,13 +196,13 @@ type GetPayDrinkErrorMessageOutput struct {
 type GetRollCommentInput struct {
 	// PlayerName is the name of the player who rolled
 	PlayerName string
-	
+
 	// RollValue is the value of the roll
 	RollValue int
-	
+
 	// IsCriticalHit indicates if the roll was a critical hit (6)
 	IsCriticalHit bool
-	
+
 	// IsCriticalFail indicates if the roll was a critical fail (1)
 	IsCriticalFail bool
 }
@@ -238,10 +217,10 @@ type GetRollCommentOutput struct {
 type GetDrinkAssignmentMessageInput struct {
 	// FromPlayerName is the name of the player assigning the drink
 	FromPlayerName string
-	
+
 	// ToPlayerName is the name of the player receiving the drink
 	ToPlayerName string
-	
+
 	// Reason is why the drink was assigned
 	Reason models.DrinkReason
 }

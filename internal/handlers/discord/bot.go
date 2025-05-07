@@ -262,16 +262,7 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 			errorType = "invalid_game_state"
 		default:
 			// For any other error, just return the error message
-			errorMsgOutput, msgErr := b.messagingService.GetJoinGameErrorMessage(ctx, &messaging.GetJoinGameErrorMessageInput{
-				PlayerName: i.Member.Nick,
-				ErrorType:  "unknown",
-				Tone:       messaging.ToneNeutral,
-			})
-			if msgErr != nil {
-				// If messaging service fails, use a generic message
-				return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to join game: %v", err))
-			}
-			return RespondWithEphemeralMessage(s, i, errorMsgOutput.Message)
+			return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to join game: %v", err))
 		}
 
 		// Get a friendly error message from the messaging service
@@ -905,25 +896,8 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 	})
 	if err != nil {
 		log.Printf("Error paying drink: %v", err)
-		
-		// Get a friendly error message from the messaging service
-		errorMsgOutput, msgErr := b.messagingService.GetPayDrinkErrorMessage(ctx, &messaging.GetPayDrinkErrorMessageInput{
-			PlayerName: i.Member.Nick,
-			ErrorType:  "unknown",
-			Tone:       messaging.ToneNeutral,
-		})
-		
-		if msgErr != nil {
-			// If messaging service fails, use a generic message
-			_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-				Content: fmt.Sprintf("Failed to pay drink: %v", err),
-				Flags:   discordgo.MessageFlagsEphemeral,
-			})
-			return err
-		}
-		
 		_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-			Content: errorMsgOutput.Message,
+			Content: fmt.Sprintf("Failed to pay drink: %v", err),
 			Flags:   discordgo.MessageFlagsEphemeral,
 		})
 		return err

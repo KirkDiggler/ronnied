@@ -748,49 +748,6 @@ func (s *service) GetPayDrinkMessage(ctx context.Context, input *GetPayDrinkMess
 	}, nil
 }
 
-// GetPayDrinkErrorMessage returns an error message when a player fails to pay a drink
-func (s *service) GetPayDrinkErrorMessage(ctx context.Context, input *GetPayDrinkErrorMessageInput) (*GetPayDrinkErrorMessageOutput, error) {
-	if input == nil {
-		return nil, errors.New("input cannot be nil")
-	}
-
-	var title string
-	var message string
-
-	// Different messages based on error type
-	switch input.ErrorType {
-	case "no_drinks_owed":
-		title = "No Drinks to Pay"
-		messages := []string{
-			"You're all caught up! No drinks to pay right now.",
-			"Your tab is clear. Nothing to pay at the moment.",
-			"You don't owe any drinks right now. Check back after more rolls!",
-		}
-		message = messages[s.rand.Intn(len(messages))]
-	case "game_not_found":
-		title = "Game Not Found"
-		messages := []string{
-			"Hmm, I can't find that game. Did it end already?",
-			"That game doesn't exist or has already ended.",
-			"Game not found. Maybe start a new one?",
-		}
-		message = messages[s.rand.Intn(len(messages))]
-	default:
-		title = "Payment Error"
-		messages := []string{
-			fmt.Sprintf("Oops! %s couldn't pay that drink. Let's try again later.", input.PlayerName),
-			fmt.Sprintf("Something went wrong when %s tried to pay a drink. Try again?", input.PlayerName),
-			"The drink payment didn't go through. Technical difficulties!",
-		}
-		message = messages[s.rand.Intn(len(messages))]
-	}
-
-	return &GetPayDrinkErrorMessageOutput{
-		Title:   title,
-		Message: message,
-	}, nil
-}
-
 // GetRollComment returns a comment for a roll in the shared game message
 func (s *service) GetRollComment(ctx context.Context, input *GetRollCommentInput) (*GetRollCommentOutput, error) {
 	if input == nil {
@@ -888,6 +845,7 @@ func (s *service) GetRollComment(ctx context.Context, input *GetRollCommentInput
 			"\n    *\"That roll was like Malory's parenting - present but not impressive.\"*",
 			"\n    *\"That roll was like Archer's emotional growth - minimal but technically exists.\"*",
 			"\n    *\"That roll was like Lana's patience - stretched pretty thin.\"*",
+			"\n    *\"That roll was like Brett's ability to not get shot - not great.\"*",
 		}
 		comment = archerComments[s.rand.Intn(len(archerComments))]
 	}

@@ -365,13 +365,13 @@ func renderGameMessage(s *discordgo.Session, game *models.Game, leaderboard *gam
 		}
 
 	case models.GameStatusRollOff:
-		embed.Description = "🔄 **ROLL-OFF IN PROGRESS!** Players in the roll-off need to roll again to break the tie."
+		embed.Description = "🔄 **ROLL-OFF IN PROGRESS!** Players in the roll-off need to roll again to break the tie.\n*May the odds be ever in your favor!*"
 
 		// Add fields for roll-off status
 		embed.Fields = []*discordgo.MessageEmbedField{
 			{
 				Name:   "Status",
-				Value:  "⚔️ Roll-Off",
+				Value:  "⚔️ Roll-Off Battle",
 				Inline: true,
 			},
 			{
@@ -383,10 +383,20 @@ func renderGameMessage(s *discordgo.Session, game *models.Game, leaderboard *gam
 
 		// If this is a roll-off game, add info about the parent game
 		if game.ParentGameID != "" {
-			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
-				Name:  "Roll-Off Type",
+			// Determine roll-off type based on the parent game's references
+			rollOffTypeField := &discordgo.MessageEmbedField{
+				Name: "🔄 Roll-Off Type",
 				Value: "This is a tie-breaker roll-off",
-			})
+			}
+			
+			// Check if this is a highest roll-off (no one wins)
+			if game.HighestRollOffGameID == game.ID {
+				rollOffTypeField.Value = "🏆 **Highest Roll Tie** - No one wins until the tie is broken!"
+			} else if game.LowestRollOffGameID == game.ID {
+				rollOffTypeField.Value = "💀 **Lowest Roll Tie** - No one loses until the tie is broken!"
+			}
+			
+			embed.Fields = append(embed.Fields, rollOffTypeField)
 		}
 
 		// Add a special field highlighting who needs to roll
@@ -610,19 +620,71 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 
 		// If this is a roll-off game, add info about the parent game
 		if parentGame != nil {
-			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
-				Name:  "🔄 Roll-Off Type",
+			// Determine roll-off type based on the parent game's references
+			rollOffTypeField := &discordgo.MessageEmbedField{
+				Name: "🔄 Roll-Off Type",
 				Value: "This is a tie-breaker roll-off",
-			})
+			}
+			
+			// Check if this is a highest roll-off (no one wins)
+			if parentGame.HighestRollOffGameID == game.ID {
+				rollOffTypeField.Value = "🏆 **Highest Roll Tie** - No one wins until the tie is broken!"
+			} else if parentGame.LowestRollOffGameID == game.ID {
+				rollOffTypeField.Value = "💀 **Lowest Roll Tie** - No one loses until the tie is broken!"
+			}
+			
+			embed.Fields = append(embed.Fields, rollOffTypeField)
 		}
 
 		// Add a special field highlighting who needs to roll
 		var pendingRollers string
+
+		// Build the participant list with roll info and enhanced visuals
 		for _, p := range game.Participants {
-			if p.RollTime == nil {
-				pendingRollers += fmt.Sprintf("• **%s** - 🎯 NEEDS TO ROLL! 🎲\n", p.PlayerName)
+			// Create roll info with emoji based on roll value
+			var rollInfo string
+			var rollEmoji string
+
+			if p.RollValue > 0 {
+				// Select emoji based on roll value
+				switch p.RollValue {
+				case 6:
+					rollEmoji = "🔥" // Critical hit
+				case 1:
+					rollEmoji = "💀" // Critical fail
+				case 5:
+					rollEmoji = "⭐" // High roll
+				case 4:
+					rollEmoji = "✨" // Good roll
+				default:
+					rollEmoji = "🎲" // Normal roll
+				}
+				rollInfo = fmt.Sprintf(" (%s **%d**)", rollEmoji, p.RollValue)
 			} else {
-				pendingRollers += fmt.Sprintf("• %s - ✅ Already rolled\n", p.PlayerName)
+				rollInfo = " (🎲 Not rolled yet)"
+			}
+
+			// Get roll comment from messaging service
+			var rollComment string
+			if p.RollValue > 0 {
+				// Get the comment from the messaging service
+				rollCommentOutput, err := b.messagingService.GetRollComment(context.Background(), &messaging.GetRollCommentInput{
+					PlayerName:     p.PlayerName,
+					RollValue:      p.RollValue,
+					IsCriticalHit:  p.RollValue == 6,
+					IsCriticalFail: p.RollValue == 1,
+				})
+
+				if err == nil && rollCommentOutput != nil {
+					rollComment = rollCommentOutput.Comment
+				}
+			}
+
+			// Add spacing between participants
+			if p.RollTime == nil {
+				pendingRollers += fmt.Sprintf("• **%s**%s%s - 🎯 NEEDS TO ROLL! 🎲\n\n", p.PlayerName, rollInfo, rollComment)
+			} else {
+				pendingRollers += fmt.Sprintf("• %s%s%s - ✅ Already rolled\n\n", p.PlayerName, rollInfo, rollComment)
 			}
 		}
 
