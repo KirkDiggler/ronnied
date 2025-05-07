@@ -965,47 +965,12 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 		})
 
 	case models.GameStatusActive:
-		// Add roll dice button for active games
-		rollButton := discordgo.Button{
-			Label:    "Roll Dice",
-			Style:    discordgo.PrimaryButton,
-			CustomID: ButtonRollDice,
-			Emoji: discordgo.ComponentEmoji{
-				Name: "🎲",
-			},
-		}
-
-		// Add Pay Drink button
-		payDrinkButton := discordgo.Button{
-			Label:    "Pay Drink",
-			Style:    discordgo.SuccessButton,
-			CustomID: ButtonPayDrink,
-			Emoji: discordgo.ComponentEmoji{
-				Name: "💸",
-			},
-		}
-
-		components = append(components, discordgo.ActionsRow{
-			Components: []discordgo.MessageComponent{
-				rollButton,
-				payDrinkButton,
-			},
-		})
+		// We've removed the roll dice and pay drink buttons from the shared game message
+		// These buttons should only appear in ephemeral messages to avoid message redrawing
 
 	case models.GameStatusRollOff:
-		rollButton := discordgo.Button{
-			Label:    "Roll Dice",
-			Style:    discordgo.DangerButton, // Red to make it stand out
-			CustomID: ButtonRollDice,
-			Emoji: discordgo.ComponentEmoji{
-				Name: "🎲",
-			},
-		}
-		components = append(components, discordgo.ActionsRow{
-			Components: []discordgo.MessageComponent{
-				rollButton,
-			},
-		})
+		// We've removed the roll dice button from the shared roll-off game message
+		// This button should only appear in ephemeral messages to avoid message redrawing
 
 	case models.GameStatusCompleted:
 		// Add start new game button
