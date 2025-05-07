@@ -161,35 +161,35 @@ type RollDiceOutput struct {
 	PlayerID   string
 	PlayerName string
 	RollValue  int
-	
+
 	// Game state information
-	Game       *models.Game
-	
+	Game *models.Game
+
 	// Roll outcome flags
 	IsCriticalHit  bool
 	IsCriticalFail bool
-	
+
 	// Roll-off related information
-	IsRollOffRoll bool // Was this roll in a roll-off game?
+	IsRollOffRoll bool   // Was this roll in a roll-off game?
 	ParentGameID  string // If this is a roll-off, what's the parent game ID?
-	
+
 	// Game state indicators
 	AllPlayersRolled bool // Have all players rolled in this game?
-	
+
 	// Roll-off indicators
-	NeedsRollOff  bool // Does this game need a roll-off now?
+	NeedsRollOff  bool        // Does this game need a roll-off now?
 	RollOffType   RollOffType // Type of roll-off needed (if any)
-	RollOffGameID string // ID of the roll-off game (if created)
-	
+	RollOffGameID string      // ID of the roll-off game (if created)
+
 	// Redirect indicators
 	NeedsToRollInRollOff bool // Should player be rolling in a roll-off instead?
-	
+
 	// Game IDs that need UI updates
 	GameIDsToUpdate []string
-	
+
 	// Player options for critical hit (who can receive a drink)
 	EligiblePlayers []PlayerOption
-	
+
 	// User-friendly messages (for handler convenience)
 	Result  string // Primary outcome message
 	Details string // Additional context about the result
@@ -348,7 +348,8 @@ type GetGameByChannelInput struct {
 
 // GetGameByChannelOutput defines the output for retrieving a game by channel ID
 type GetGameByChannelOutput struct {
-	Game *models.Game
+	Game               *models.Game
+	ActiveRollOffGames []*models.Game
 }
 
 // GetLeaderboardInput defines the input for retrieving a game's leaderboard
@@ -406,7 +407,8 @@ type GetGameInput struct {
 // GetGameOutput contains the result of retrieving a game by ID
 type GetGameOutput struct {
 	// Game is the retrieved game
-	Game *models.Game
+	Game               *models.Game
+	ActiveRollOffGames []*models.Game
 }
 
 // GetDrinkRecordsInput contains parameters for retrieving drink records for a game
