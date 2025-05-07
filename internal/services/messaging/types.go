@@ -192,6 +192,27 @@ type GetPayDrinkMessageOutput struct {
 	Message string
 }
 
+// GetPayDrinkErrorMessageInput contains parameters for getting a pay drink error message
+type GetPayDrinkErrorMessageInput struct {
+	// PlayerName is the name of the player who tried to pay a drink
+	PlayerName string
+	
+	// ErrorType is the type of error that occurred
+	ErrorType string
+	
+	// Tone is the preferred tone for the message
+	Tone MessageTone
+}
+
+// GetPayDrinkErrorMessageOutput contains the result of getting a pay drink error message
+type GetPayDrinkErrorMessageOutput struct {
+	// Title is the title of the message
+	Title string
+	
+	// Message is the body of the message
+	Message string
+}
+
 // GetRollCommentInput contains parameters for getting a roll comment for the shared message
 type GetRollCommentInput struct {
 	// PlayerName is the name of the player who rolled

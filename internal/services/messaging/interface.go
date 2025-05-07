@@ -31,6 +31,9 @@ type Service interface {
 	// GetPayDrinkMessage returns a fun message when a player pays a drink
 	GetPayDrinkMessage(ctx context.Context, input *GetPayDrinkMessageInput) (*GetPayDrinkMessageOutput, error)
 	
+	// GetPayDrinkErrorMessage returns an error message when a player fails to pay a drink
+	GetPayDrinkErrorMessage(ctx context.Context, input *GetPayDrinkErrorMessageInput) (*GetPayDrinkErrorMessageOutput, error)
+	
 	// GetRollComment returns a comment for a roll in the shared game message
 	GetRollComment(ctx context.Context, input *GetRollCommentInput) (*GetRollCommentOutput, error)
 	
