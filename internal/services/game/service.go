@@ -1291,6 +1291,47 @@ func (s *service) HandleRollOff(ctx context.Context, input *HandleRollOffInput) 
 		if err != nil {
 			return nil, err
 		}
+
+		// Get and update the parent game
+		parentGame, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
+			GameID: input.ParentGameID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get parent game: %w", err)
+		}
+
+		// Clear the roll-off game reference from the parent game
+		if input.Type == RollOffTypeHighest {
+			parentGame.HighestRollOffGameID = ""
+		} else {
+			parentGame.LowestRollOffGameID = ""
+		}
+
+		// If this was the main roll-off game, also clear the main reference
+		if parentGame.RollOffGameID == input.RollOffGameID {
+			parentGame.RollOffGameID = ""
+		}
+
+		// Check if there are any other active roll-offs
+		hasActiveRollOffs := false
+		if parentGame.HighestRollOffGameID != "" || parentGame.LowestRollOffGameID != "" {
+			hasActiveRollOffs = true
+		}
+
+		// If no more active roll-offs, set the parent game back to active
+		if !hasActiveRollOffs {
+			parentGame.Status = models.GameStatusActive
+		}
+
+		parentGame.UpdatedAt = s.clock.Now()
+
+		// Save the updated parent game
+		err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
+			Game: parentGame,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to update parent game: %w", err)
+		}
 	}
 
 	return &HandleRollOffOutput{
