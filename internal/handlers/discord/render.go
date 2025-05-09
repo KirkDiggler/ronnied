@@ -19,6 +19,8 @@ func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate
 	// Build components based on the roll result
 	if output.IsCriticalHit {
 		// Create player selection dropdown for critical hits
+		// IMPORTANT: DO NOT REMOVE THIS FUNCTIONALITY - It is a core game mechanic
+		// that allows players to assign drinks when they roll a critical hit (6)
 		if len(output.EligiblePlayers) > 0 {
 			var playerOptions []discordgo.SelectMenuOption
 
@@ -39,7 +41,10 @@ func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate
 				Options:     playerOptions,
 			}
 
-			components = append(components, discordgo.SelectMenu(playerSelect))
+			// IMPORTANT: The SelectMenu must be wrapped in an ActionsRow to work properly
+			components = append(components, discordgo.ActionsRow{
+				Components: []discordgo.MessageComponent{playerSelect},
+			})
 		}
 	} else {
 		// Create roll again button for non-critical hits
@@ -163,6 +168,8 @@ func renderRollDiceResponseEdit(s *discordgo.Session, i *discordgo.InteractionCr
 	// Build components based on the roll result
 	if output.IsCriticalHit {
 		// Create player selection dropdown for critical hits
+		// IMPORTANT: DO NOT REMOVE THIS FUNCTIONALITY - It is a core game mechanic
+		// that allows players to assign drinks when they roll a critical hit (6)
 		if len(output.EligiblePlayers) > 0 {
 			var playerOptions []discordgo.SelectMenuOption
 
@@ -183,7 +190,10 @@ func renderRollDiceResponseEdit(s *discordgo.Session, i *discordgo.InteractionCr
 				Options:     playerOptions,
 			}
 
-			components = append(components, playerSelect)
+			// IMPORTANT: The SelectMenu must be wrapped in an ActionsRow to work properly
+			components = append(components, discordgo.ActionsRow{
+				Components: []discordgo.MessageComponent{playerSelect},
+			})
 		}
 	} else {
 		// Create roll again button for non-critical hits

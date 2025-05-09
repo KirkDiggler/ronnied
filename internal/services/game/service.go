@@ -617,6 +617,9 @@ func isValidGameStateForRolling(status models.GameStatus) bool {
 }
 
 // AssignDrink records that one player has assigned a drink to another
+// IMPORTANT: DO NOT REMOVE THIS FUNCTIONALITY - It is a core game mechanic that allows players
+// to assign drinks when they roll a critical hit (6). This is an essential part of the game flow
+// and removing it would break a fundamental aspect of the drinking game.
 func (s *service) AssignDrink(ctx context.Context, input *AssignDrinkInput) (*AssignDrinkOutput, error) {
 	// Validate input
 	if input == nil {

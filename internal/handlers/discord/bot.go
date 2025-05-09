@@ -609,7 +609,11 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 					Options:     playerOptions,
 				}
 
-				messageComponents = append(messageComponents, playerSelect)
+				// IMPORTANT: The SelectMenu must be wrapped in an ActionsRow to work properly
+				// DO NOT REMOVE THIS FUNCTIONALITY - It is essential for drink assignment
+				messageComponents = append(messageComponents, discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{playerSelect},
+				})
 			}
 		} else {
 			// Add both buttons
@@ -643,6 +647,8 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 }
 
 // handleAssignDrinkSelect handles the assign drink dropdown selection
+// IMPORTANT: DO NOT REMOVE THIS FUNCTIONALITY - It is a core game mechanic that allows players
+// to assign drinks when they roll a critical hit (6). This is an essential part of the game flow.
 func (b *Bot) handleAssignDrinkSelect(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID string) error {
 	ctx := context.Background()
 
