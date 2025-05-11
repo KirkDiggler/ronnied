@@ -172,6 +172,7 @@ type RollDiceOutput struct {
 	// Roll-off related information
 	IsRollOffRoll bool   // Was this roll in a roll-off game?
 	ParentGameID  string // If this is a roll-off, what's the parent game ID?
+	ParentGame    *models.Game // The parent game if this is a roll-off
 
 	// Game state indicators
 	AllPlayersRolled bool // Have all players rolled in this game?
@@ -180,6 +181,10 @@ type RollDiceOutput struct {
 	NeedsRollOff  bool        // Does this game need a roll-off now?
 	RollOffType   RollOffType // Type of roll-off needed (if any)
 	RollOffGameID string      // ID of the roll-off game (if created)
+	ActiveRollOffGame *models.Game // The currently active/relevant roll-off game
+
+	// Additional roll-off games that might be relevant
+	RollOffGames []*models.Game // All roll-off games related to this roll
 
 	// Redirect indicators
 	NeedsToRollInRollOff bool // Should player be rolling in a roll-off instead?

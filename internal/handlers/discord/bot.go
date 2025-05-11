@@ -517,10 +517,8 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		return err
 	}
 
-	// Update all game messages that need updating
-	for _, gameID := range rollOutput.GameIDsToUpdate {
-		b.updateGameMessage(s, channelID, gameID)
-	}
+	// Update all game messages using the data from the roll output
+	b.updateGameMessagesFromRollOutput(s, channelID, rollOutput)
 
 	// Get fun roll result message from messaging service
 	rollResultOutput, err := b.messagingService.GetRollResultMessage(ctx, &messaging.GetRollResultMessageInput{
@@ -1068,7 +1066,106 @@ func (b *Bot) handlePayDrinkButton(s *discordgo.Session, i *discordgo.Interactio
 	return err
 }
 
-// updateGameMessage updates the main game message in the channel
+// updateGameMessagesFromRollOutput updates all game messages using data from the roll output
+func (b *Bot) updateGameMessagesFromRollOutput(s *discordgo.Session, channelID string, rollOutput *game.RollDiceOutput) {
+	ctx := context.Background()
+
+	// Process the main game first
+	if rollOutput.Game != nil && rollOutput.Game.MessageID != "" {
+		// Get drink records for the main game
+		var drinkRecords []*models.DrinkLedger
+		drinkRecordsOutput, err := b.gameService.GetDrinkRecords(ctx, &game.GetDrinkRecordsInput{
+			GameID: rollOutput.Game.ID,
+		})
+		if err == nil && drinkRecordsOutput != nil {
+			drinkRecords = drinkRecordsOutput.Records
+		}
+
+		// Get leaderboard data if the game is completed
+		var leaderboardEntries, sessionLeaderboardEntries []game.LeaderboardEntry
+		if rollOutput.Game.Status.IsCompleted() {
+			leaderboardOutput, err := b.gameService.GetLeaderboard(ctx, &game.GetLeaderboardInput{
+				GameID: rollOutput.Game.ID,
+			})
+			if err == nil && leaderboardOutput != nil {
+				leaderboardEntries = leaderboardOutput.Entries
+			}
+
+			// Get session leaderboard for completed games
+			sessionOutput, err := b.gameService.GetSessionLeaderboard(ctx, &game.GetSessionLeaderboardInput{
+				ChannelID: channelID,
+			})
+			if err == nil && sessionOutput != nil {
+				sessionLeaderboardEntries = sessionOutput.Entries
+			}
+		}
+
+		// Determine the roll-off game and parent game for rendering
+		var rollOffGame, parentGame *models.Game
+
+		// If this is a main game, use the roll-off game from the output
+		if !rollOutput.IsRollOffRoll {
+			rollOffGame = rollOutput.ActiveRollOffGame
+		} else {
+			// If this is a roll-off game, use the parent game from the output
+			parentGame = rollOutput.ParentGame
+		}
+
+		// Render and update the main game message
+		messageEdit, err := b.renderGameMessage(rollOutput.Game, drinkRecords, leaderboardEntries, sessionLeaderboardEntries, rollOffGame, parentGame)
+		if err != nil {
+			log.Printf("Error rendering game message: %v", err)
+		} else {
+			// Send the message edit
+			_, err = s.ChannelMessageEditComplex(messageEdit)
+			if err != nil {
+				log.Printf("Error updating game message: %v", err)
+			}
+		}
+	}
+
+	// Process all roll-off games
+	for _, rollOffGame := range rollOutput.RollOffGames {
+		if rollOffGame == nil || rollOffGame.MessageID == "" || rollOffGame.ID == rollOutput.Game.ID {
+			// Skip if this is the main game we already processed or if it has no message ID
+			continue
+		}
+
+		// Get drink records for this roll-off game
+		var drinkRecords []*models.DrinkLedger
+		drinkRecordsOutput, err := b.gameService.GetDrinkRecords(ctx, &game.GetDrinkRecordsInput{
+			GameID: rollOffGame.ID,
+		})
+		if err == nil && drinkRecordsOutput != nil {
+			drinkRecords = drinkRecordsOutput.Records
+		}
+
+		// Determine the parent game for this roll-off
+		var parentGame *models.Game
+		if rollOffGame.ParentGameID != "" {
+			// Check if the parent is the main game
+			if rollOutput.Game.ID == rollOffGame.ParentGameID {
+				parentGame = rollOutput.Game
+			} else if rollOutput.ParentGame != nil && rollOutput.ParentGame.ID == rollOffGame.ParentGameID {
+				parentGame = rollOutput.ParentGame
+			}
+		}
+
+		// Render and update the roll-off game message
+		messageEdit, err := b.renderGameMessage(rollOffGame, drinkRecords, nil, nil, nil, parentGame)
+		if err != nil {
+			log.Printf("Error rendering roll-off game message: %v", err)
+		} else {
+			// Send the message edit
+			_, err = s.ChannelMessageEditComplex(messageEdit)
+			if err != nil {
+				log.Printf("Error updating roll-off game message: %v", err)
+			}
+		}
+	}
+}
+
+// updateGameMessage updates a single game message in the channel
 func (b *Bot) updateGameMessage(s *discordgo.Session, channelID string, gameID string) {
 	ctx := context.Background()
 
