@@ -316,13 +316,10 @@ type StartGameOutput struct {
 	CreatorName  string // The name of the original creator
 }
 
-// HandleRollOffInput contains parameters for handling a roll-off
-type HandleRollOffInput struct {
-	// ParentGameID is the ID of the original game
-	ParentGameID string
-
-	// RollOffGameID is the ID of the roll-off game
-	RollOffGameID string
+// StartRollOffInput contains parameters for starting a roll-off within a game
+type StartRollOffInput struct {
+	// GameID is the ID of the game where the roll-off will occur
+	GameID string
 
 	// PlayerIDs are the IDs of players participating in the roll-off
 	PlayerIDs []string
@@ -331,19 +328,37 @@ type HandleRollOffInput struct {
 	Type RollOffType
 }
 
-// HandleRollOffOutput contains the result of handling a roll-off
-type HandleRollOffOutput struct {
-	// Success indicates if the roll-off was successfully handled
+// StartRollOffOutput contains the result of starting a roll-off
+type StartRollOffOutput struct {
+	// Success indicates if the roll-off was successfully started
 	Success bool
 
-	// WinnerPlayerIDs contains the IDs of players who won the roll-off
+	// Game is the updated game with roll-off state
+	Game *models.Game
+}
+
+// CompleteRollOffInput contains parameters for completing a roll-off
+type CompleteRollOffInput struct {
+	// GameID is the ID of the game with an active roll-off
+	GameID string
+}
+
+// CompleteRollOffOutput contains the result of completing a roll-off
+type CompleteRollOffOutput struct {
+	// Success indicates if the roll-off was successfully completed
+	Success bool
+
+	// Game is the updated game after roll-off completion
+	Game *models.Game
+
+	// WinnerPlayerIDs contains the IDs of players who won/lost the roll-off
 	WinnerPlayerIDs []string
 
 	// NeedsAnotherRollOff indicates if another roll-off is needed
 	NeedsAnotherRollOff bool
 
-	// NextRollOffGameID is the ID of the next roll-off game (if needed)
-	NextRollOffGameID string
+	// DrinkAssignments contains information about drinks assigned as a result of the roll-off
+	DrinkAssignments []*models.DrinkLedger
 }
 
 // GetGameByChannelInput defines the input for retrieving a game by channel ID

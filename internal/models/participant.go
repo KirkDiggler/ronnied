@@ -16,6 +16,12 @@ const (
 	
 	// ParticipantStatusWaitingToRoll indicates a player still needs to roll
 	ParticipantStatusWaitingToRoll ParticipantStatus = "waiting_to_roll"
+	
+	// ParticipantStatusInRollOff indicates a player is participating in a roll-off
+	ParticipantStatusInRollOff ParticipantStatus = "in_roll_off"
+	
+	// ParticipantStatusRolledInRollOff indicates a player has rolled in a roll-off
+	ParticipantStatusRolledInRollOff ParticipantStatus = "rolled_in_roll_off"
 )
 
 // Participant represents a player's participation in a specific game

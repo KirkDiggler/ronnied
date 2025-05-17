@@ -16,6 +16,7 @@ const (
 	ErrGameAlreadyExists   GameError = "game already exists for this channel"
 	ErrInvalidGameState    GameError = "invalid game state"
 	ErrPlayerNotInGame     GameError = "player not in game"
+	ErrPlayerNotInRollOff  GameError = "player not in roll-off"
 	ErrGameFull            GameError = "game is at maximum capacity"
 	ErrRollOffGameNotFound GameError = "no active roll-off game found"
 	ErrNilConfig           GameError = "config cannot be nil"

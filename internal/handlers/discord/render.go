@@ -611,14 +611,29 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 			},
 		}
 
-	case models.GameStatusRollOff:
-		embed.Description = "⚔️ **ROLL-OFF IN PROGRESS!** Players in the roll-off need to roll again to break the tie.\n*May the odds be ever in your favor!*"
+	case models.GameStatusRollOff, models.GameStatusRollOffHighest, models.GameStatusRollOffLowest:
+		// Determine roll-off type description
+		rollOffTypeDesc := "Roll-Off"
+		rollOffEmoji := "⚔️"
+		rollOffMessage := "Players in the roll-off need to roll again to break the tie."
+
+		if game.Status == models.GameStatusRollOffHighest {
+			rollOffTypeDesc = "Highest Roll-Off"
+			rollOffEmoji = "🏆"
+			rollOffMessage = "Players tied for the highest roll need to roll again to determine the winner!"
+		} else if game.Status == models.GameStatusRollOffLowest {
+			rollOffTypeDesc = "Lowest Roll-Off"
+			rollOffEmoji = "💀"
+			rollOffMessage = "Players tied for the lowest roll need to roll again to determine the loser!"
+		}
+
+		embed.Description = fmt.Sprintf("%s **ROLL-OFF IN PROGRESS!** %s\n*May the odds be ever in your favor!*", rollOffEmoji, rollOffMessage)
 
 		// Add fields for roll-off status
 		embed.Fields = []*discordgo.MessageEmbedField{
 			{
 				Name:   "📊 Status",
-				Value:  "⚔️ Roll-Off Battle",
+				Value:  fmt.Sprintf("%s %s", rollOffEmoji, rollOffTypeDesc),
 				Inline: true,
 			},
 			{
@@ -628,9 +643,50 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 			},
 		}
 
-		// If this is a roll-off game, add info about the parent game
-		if parentGame != nil {
-			// Determine roll-off type based on the parent game's references
+		// For integrated roll-offs, add a field showing which players are in the roll-off
+		if game.Status == models.GameStatusRollOffHighest || game.Status == models.GameStatusRollOffLowest {
+			// Build a list of players in the roll-off
+			rollOffPlayers := ""  
+			for _, playerID := range game.RollOffPlayerIDs {
+				for _, p := range game.Participants {
+					if p.PlayerID == playerID {
+						rollOffPlayers += fmt.Sprintf("• **%s**\n", p.PlayerName)
+						break
+					}
+				}
+			}
+
+			if rollOffPlayers != "" {
+				embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+					Name:   "🎯 Roll-Off Participants",
+					Value:  rollOffPlayers,
+					Inline: false,
+				})
+			}
+
+			// Add roll-off round information
+			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+				Name:   "🔄 Roll-Off Round",
+				Value:  fmt.Sprintf("Round %d", game.RollOffRound),
+				Inline: true,
+			})
+
+			// Add roll-off type information
+			rollOffTypeField := &discordgo.MessageEmbedField{
+				Name: "🎲 Roll-Off Type",
+				Value: "Tie-breaker",
+				Inline: true,
+			}
+
+			if game.RollOffType == models.RollOffTypeHighest {
+				rollOffTypeField.Value = "🏆 Highest Roll Wins"
+			} else if game.RollOffType == models.RollOffTypeLowest {
+				rollOffTypeField.Value = "💀 Lowest Roll Loses"
+			}
+
+			embed.Fields = append(embed.Fields, rollOffTypeField)
+		} else if parentGame != nil {
+			// For legacy roll-off games, add info about the parent game
 			rollOffTypeField := &discordgo.MessageEmbedField{
 				Name: "🔄 Roll-Off Type",
 				Value: "This is a tie-breaker roll-off",
@@ -690,11 +746,42 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 				}
 			}
 
-			// Add spacing between participants
-			if p.RollTime == nil {
-				pendingRollers += fmt.Sprintf("• **%s**%s%s - 🎯 NEEDS TO ROLL! 🎲\n\n", p.PlayerName, rollInfo, rollComment)
+			// For integrated roll-offs, check if this player is part of the roll-off
+			isInRollOff := false
+			if game.Status == models.GameStatusRollOffHighest || game.Status == models.GameStatusRollOffLowest {
+				for _, playerID := range game.RollOffPlayerIDs {
+					if playerID == p.PlayerID {
+						isInRollOff = true
+						break
+					}
+				}
+			}
+
+			// Determine player status display based on roll-off state and participant status
+			if game.Status.IsRollOff() {
+				if isInRollOff {
+					// This player is part of the roll-off
+					if p.Status == models.ParticipantStatusInRollOff {
+						// Player needs to roll in the roll-off
+						pendingRollers += fmt.Sprintf("• **%s**%s%s - 🎥 NEEDS TO ROLL IN ROLL-OFF! 🎲\n\n", p.PlayerName, rollInfo, rollComment)
+					} else if p.Status == models.ParticipantStatusRolledInRollOff {
+						// Player has already rolled in the roll-off
+						pendingRollers += fmt.Sprintf("• %s%s%s - ✅ Rolled in roll-off\n\n", p.PlayerName, rollInfo, rollComment)
+					} else {
+						// Default case for roll-off participants
+						pendingRollers += fmt.Sprintf("• **%s**%s%s - 🎥 In roll-off\n\n", p.PlayerName, rollInfo, rollComment)
+					}
+				} else {
+					// This player is not part of the roll-off
+					pendingRollers += fmt.Sprintf("• %s%s%s - ⏳ Waiting for roll-off to complete\n\n", p.PlayerName, rollInfo, rollComment)
+				}
 			} else {
-				pendingRollers += fmt.Sprintf("• %s%s%s - ✅ Already rolled\n\n", p.PlayerName, rollInfo, rollComment)
+				// Normal game state
+				if p.RollTime == nil {
+					pendingRollers += fmt.Sprintf("• **%s**%s%s - 🎥 NEEDS TO ROLL! 🎲\n\n", p.PlayerName, rollInfo, rollComment)
+				} else {
+					pendingRollers += fmt.Sprintf("• %s%s%s - ✅ Already rolled\n\n", p.PlayerName, rollInfo, rollComment)
+				}
 			}
 		}
 
@@ -978,7 +1065,7 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 		// We've removed the roll dice and pay drink buttons from the shared game message
 		// These buttons should only appear in ephemeral messages to avoid message redrawing
 
-	case models.GameStatusRollOff:
+	case models.GameStatusRollOff, models.GameStatusRollOffHighest, models.GameStatusRollOffLowest:
 		// We've removed the roll dice button from the shared roll-off game message
 		// This button should only appear in ephemeral messages to avoid message redrawing
 
@@ -1156,6 +1243,10 @@ func getGameTitle(game *models.Game) string {
 		return "🎲 Ronnied Drinking Game - Roll the Dice!"
 	case models.GameStatusRollOff:
 		return "⚔️ Ronnied Drinking Game - Roll-Off in Progress"
+	case models.GameStatusRollOffHighest:
+		return "🏆 Ronnied Drinking Game - Highest Roll-Off Battle"
+	case models.GameStatusRollOffLowest:
+		return "💀 Ronnied Drinking Game - Lowest Roll-Off Battle"
 	case models.GameStatusCompleted:
 		return "🏆 Ronnied Drinking Game - Game Complete"
 	default:
@@ -1172,6 +1263,10 @@ func getGameStatusColor(status models.GameStatus) int {
 		return 0x2ecc71 // Green color
 	case models.GameStatusRollOff:
 		return 0xff9900 // Orange color
+	case models.GameStatusRollOffHighest:
+		return 0xf1c40f // Gold color for highest roll-off
+	case models.GameStatusRollOffLowest:
+		return 0xe74c3c // Red color for lowest roll-off
 	case models.GameStatusCompleted:
 		return 0x9b59b6 // Purple color
 	default:

@@ -2,7 +2,6 @@ package game
 
 import (
 	"context"
-	"github.com/KirkDiggler/ronnied/internal/models"
 )
 
 // Service defines the interface for game operations
@@ -25,11 +24,11 @@ type Service interface {
 	// EndGame concludes a game session
 	EndGame(ctx context.Context, input *EndGameInput) (*EndGameOutput, error)
 
-	// HandleRollOff manages roll-offs for tied players
-	HandleRollOff(ctx context.Context, input *HandleRollOffInput) (*HandleRollOffOutput, error)
+	// StartRollOff initiates a roll-off within a game
+	StartRollOff(ctx context.Context, input *StartRollOffInput) (*StartRollOffOutput, error)
 
-	// FindActiveRollOffGame finds an active roll-off game for a player in a main game's chain
-	FindActiveRollOffGame(ctx context.Context, playerID string, mainGameID string) (*models.Game, error)
+	// CompleteRollOff finalizes a roll-off and processes the results
+	CompleteRollOff(ctx context.Context, input *CompleteRollOffInput) (*CompleteRollOffOutput, error)
 
 	// GetGameByChannel retrieves a game by its Discord channel ID
 	GetGameByChannel(ctx context.Context, input *GetGameByChannelInput) (*GetGameByChannelOutput, error)

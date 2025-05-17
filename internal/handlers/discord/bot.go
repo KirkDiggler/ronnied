@@ -467,6 +467,13 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 				Flags:   discordgo.MessageFlagsEphemeral,
 			})
 			return err
+		case game.ErrPlayerNotInRollOff:
+			// The player is not part of the current roll-off
+			_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+				Content: "You are not part of the current roll-off. Please wait for your turn.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			})
+			return err
 		case game.ErrPlayerInRollOff:
 			// The player needs to roll in a roll-off game
 			_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
