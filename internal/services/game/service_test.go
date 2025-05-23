@@ -1021,7 +1021,6 @@ func (s *GameServiceTestSuite) TestRollDice_CriticalHit() {
 	s.Equal(s.testCreatorID, output.PlayerID)
 	s.Equal(s.testCreatorName, output.PlayerName)
 	s.True(output.IsCriticalHit)
-	s.False(output.IsLowestRoll)
 	s.False(output.NeedsRollOff)
 	s.False(output.AllPlayersRolled) // Not all players have rolled
 
