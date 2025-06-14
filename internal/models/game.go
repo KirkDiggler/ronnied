@@ -18,10 +18,10 @@ const (
 	GameStatusRollOff GameStatus = "roll_off"
 
 	// GameStatusRollOffHighest indicates a game is in a roll-off state for highest rollers
-	GameStatusRollOffHighest GameStatus = "roll_off_highest"
+	GameStatusRollOffHighest GameStatus = "roll_off_highest" //deprecated
 
 	// GameStatusRollOffLowest indicates a game is in a roll-off state for lowest rollers
-	GameStatusRollOffLowest GameStatus = "roll_off_lowest"
+	GameStatusRollOffLowest GameStatus = "roll_off_lowest" //deprecated
 
 	// GameStatusCompleted indicates a game has been completed
 	GameStatusCompleted GameStatus = "completed"

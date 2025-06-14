@@ -79,7 +79,7 @@ type Config struct {
 	// Service dependencies
 	DiceRoller    dice.Roller
 	Clock         clock.Clock
-	UUIDGenerator uuid.UUID
+	UUIDGenerator uuid.Generator
 }
 
 // CreateGameInput contains parameters for creating a new game
@@ -170,17 +170,17 @@ type RollDiceOutput struct {
 	IsCriticalFail bool
 
 	// Roll-off related information
-	IsRollOffRoll bool   // Was this roll in a roll-off game?
-	ParentGameID  string // If this is a roll-off, what's the parent game ID?
+	IsRollOffRoll bool         // Was this roll in a roll-off game?
+	ParentGameID  string       // If this is a roll-off, what's the parent game ID?
 	ParentGame    *models.Game // The parent game if this is a roll-off
 
 	// Game state indicators
 	AllPlayersRolled bool // Have all players rolled in this game?
 
 	// Roll-off indicators
-	NeedsRollOff  bool        // Does this game need a roll-off now?
-	RollOffType   RollOffType // Type of roll-off needed (if any)
-	RollOffGameID string      // ID of the roll-off game (if created)
+	NeedsRollOff      bool         // Does this game need a roll-off now?
+	RollOffType       RollOffType  // Type of roll-off needed (if any)
+	RollOffGameID     string       // ID of the roll-off game (if created)
 	ActiveRollOffGame *models.Game // The currently active/relevant roll-off game
 
 	// Additional roll-off games that might be relevant
@@ -638,4 +638,69 @@ type StartNewSessionOutput struct {
 	Success   bool
 	Session   *models.Session
 	SessionID string
+}
+
+// CanPlayerRollInput contains parameters for checking if a player can roll
+type CanPlayerRollInput struct {
+	GameID   string
+	PlayerID string
+}
+
+// CanPlayerRollOutput contains the result of checking if a player can roll
+type CanPlayerRollOutput struct {
+	CanRoll      bool
+	Reason       string // Human-readable reason if cannot roll
+	IsInRollOff  bool
+	RollOffGameID string // If player is in a roll-off, this is the roll-off game ID
+}
+
+// CanPlayerJoinGameInput contains parameters for checking if a player can join
+type CanPlayerJoinGameInput struct {
+	GameID   string
+	PlayerID string
+}
+
+// CanPlayerJoinGameOutput contains the result of checking if a player can join
+type CanPlayerJoinGameOutput struct {
+	CanJoin       bool
+	Reason        string // Human-readable reason if cannot join
+	AlreadyInGame bool
+	ErrorType     string // Error type for messaging service
+}
+
+// CanPlayerStartGameInput contains parameters for checking if a player can start game
+type CanPlayerStartGameInput struct {
+	GameID   string
+	PlayerID string
+}
+
+// CanPlayerStartGameOutput contains the result of checking if a player can start
+type CanPlayerStartGameOutput struct {
+	CanStart   bool
+	Reason     string // Human-readable reason if cannot start
+	IsCreator  bool
+	ForceStart bool   // Whether force start is available
+}
+
+// GetPlayerNamesForGameInput contains parameters for getting player names
+type GetPlayerNamesForGameInput struct {
+	GameID string
+}
+
+// GetPlayerNamesForGameOutput contains player ID to name mapping
+type GetPlayerNamesForGameOutput struct {
+	PlayerNames map[string]string // Map of player ID to display name
+}
+
+// GetActiveRollOffForPlayerInput contains parameters for finding active roll-offs
+type GetActiveRollOffForPlayerInput struct {
+	GameID   string
+	PlayerID string
+}
+
+// GetActiveRollOffForPlayerOutput contains active roll-off information
+type GetActiveRollOffForPlayerOutput struct {
+	HasActiveRollOff bool
+	RollOffGameID    string
+	RollOffType      models.RollOffType
 }

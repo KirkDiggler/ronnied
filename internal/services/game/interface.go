@@ -65,4 +65,19 @@ type Service interface {
 
 	// StartNewSession creates a new drinking session for a channel (alias for CreateSession with a clearer name)
 	StartNewSession(ctx context.Context, input *StartNewSessionInput) (*StartNewSessionOutput, error)
+
+	// CanPlayerRoll checks if a player is eligible to roll dice in the current game state
+	CanPlayerRoll(ctx context.Context, input *CanPlayerRollInput) (*CanPlayerRollOutput, error)
+
+	// CanPlayerJoinGame checks if a player can join a specific game
+	CanPlayerJoinGame(ctx context.Context, input *CanPlayerJoinGameInput) (*CanPlayerJoinGameOutput, error)
+
+	// CanPlayerStartGame checks if a player can start a specific game
+	CanPlayerStartGame(ctx context.Context, input *CanPlayerStartGameInput) (*CanPlayerStartGameOutput, error)
+
+	// GetPlayerNamesForGame gets a map of player IDs to names for a game
+	GetPlayerNamesForGame(ctx context.Context, input *GetPlayerNamesForGameInput) (*GetPlayerNamesForGameOutput, error)
+
+	// GetActiveRollOffForPlayer finds the active roll-off game ID for a player if any
+	GetActiveRollOffForPlayer(ctx context.Context, input *GetActiveRollOffForPlayerInput) (*GetActiveRollOffForPlayerOutput, error)
 }

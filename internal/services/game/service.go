@@ -17,6 +17,11 @@ import (
 	playerRepo "github.com/KirkDiggler/ronnied/internal/repositories/player"
 )
 
+const (
+	// ForceStartThreshold is the time after which non-creators can force start a game
+	ForceStartThreshold = 2 * time.Minute
+)
+
 // service implements the Service interface
 type service struct {
 	// Configuration parameters
@@ -69,7 +74,7 @@ func New(cfg *Config) (*service, error) {
 	}
 
 	// Set default values for configuration parameters if not provided
-	maxPlayers := cfg.MaxConcurrentGames
+	maxPlayers := cfg.MaxPlayers
 	if maxPlayers <= 0 {
 		maxPlayers = 10
 	}
@@ -2308,5 +2313,323 @@ func (s *service) PayDrink(ctx context.Context, input *PayDrinkInput) (*PayDrink
 		Success:     true,
 		Game:        game,
 		DrinkRecord: drinkRecord,
+	}, nil
+}
+
+// CanPlayerRoll checks if a player is eligible to roll dice in the current game state
+func (s *service) CanPlayerRoll(ctx context.Context, input *CanPlayerRollInput) (*CanPlayerRollOutput, error) {
+	if input == nil || input.GameID == "" || input.PlayerID == "" {
+		return nil, errors.New("game ID and player ID are required")
+	}
+
+	// Get the game
+	game, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
+		GameID: input.GameID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get game: %w", err)
+	}
+
+	// Check if player is in the game
+	participant := game.GetParticipant(input.PlayerID)
+	if participant == nil {
+		return &CanPlayerRollOutput{
+			CanRoll: false,
+			Reason:  "You are not in this game",
+		}, nil
+	}
+
+	// Check game state
+	if game.Status == models.GameStatusWaiting {
+		return &CanPlayerRollOutput{
+			CanRoll: false,
+			Reason:  "Game hasn't started yet",
+		}, nil
+	}
+
+	if game.Status == models.GameStatusCompleted {
+		return &CanPlayerRollOutput{
+			CanRoll: false,
+			Reason:  "Game has already ended",
+		}, nil
+	}
+
+	// Check if in roll-off
+	if game.Status.IsRollOff() {
+		isInRollOff := false
+		for _, playerID := range game.RollOffPlayerIDs {
+			if playerID == input.PlayerID {
+				isInRollOff = true
+				break
+			}
+		}
+
+		if !isInRollOff {
+			return &CanPlayerRollOutput{
+				CanRoll:     false,
+				Reason:      "You are not part of this roll-off",
+				IsInRollOff: false,
+			}, nil
+		}
+
+		// Check if already rolled in roll-off
+		if participant.Status == models.ParticipantStatusRolledInRollOff {
+			return &CanPlayerRollOutput{
+				CanRoll:       false,
+				Reason:        "You have already rolled in this roll-off round",
+				IsInRollOff:   true,
+				RollOffGameID: game.ID,
+			}, nil
+		}
+
+		return &CanPlayerRollOutput{
+			CanRoll:       true,
+			IsInRollOff:   true,
+			RollOffGameID: game.ID,
+		}, nil
+	}
+
+	// Regular game - check if already rolled
+	if participant.RollTime != nil {
+		return &CanPlayerRollOutput{
+			CanRoll: false,
+			Reason:  "You have already rolled in this game",
+		}, nil
+	}
+
+	// Check if needs to assign drink first
+	if participant.Status == models.ParticipantStatusNeedsToAssign {
+		return &CanPlayerRollOutput{
+			CanRoll: false,
+			Reason:  "You need to assign your drink first",
+		}, nil
+	}
+
+	return &CanPlayerRollOutput{
+		CanRoll: true,
+	}, nil
+}
+
+// CanPlayerJoinGame checks if a player can join a specific game
+func (s *service) CanPlayerJoinGame(ctx context.Context, input *CanPlayerJoinGameInput) (*CanPlayerJoinGameOutput, error) {
+	if input == nil || input.GameID == "" || input.PlayerID == "" {
+		return nil, errors.New("game ID and player ID are required")
+	}
+
+	// Get the game
+	game, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
+		GameID: input.GameID,
+	})
+	if err != nil {
+		if errors.Is(err, gameRepo.ErrGameNotFound) {
+			return &CanPlayerJoinGameOutput{
+				CanJoin:   false,
+				Reason:    "Game not found",
+				ErrorType: "game_not_found",
+			}, nil
+		}
+		return nil, fmt.Errorf("failed to get game: %w", err)
+	}
+
+	// Check if already in game
+	for _, participant := range game.Participants {
+		if participant.PlayerID == input.PlayerID {
+			return &CanPlayerJoinGameOutput{
+				CanJoin:       true,
+				AlreadyInGame: true,
+				Reason:        "You are already in this game",
+			}, nil
+		}
+	}
+
+	// Check game state
+	switch game.Status {
+	case models.GameStatusActive:
+		return &CanPlayerJoinGameOutput{
+			CanJoin:   false,
+			Reason:    "Game has already started",
+			ErrorType: "game_active",
+		}, nil
+	case models.GameStatusRollOff, models.GameStatusRollOffHighest, models.GameStatusRollOffLowest:
+		return &CanPlayerJoinGameOutput{
+			CanJoin:   false,
+			Reason:    "Game is in roll-off state",
+			ErrorType: "game_roll_off",
+		}, nil
+	case models.GameStatusCompleted:
+		return &CanPlayerJoinGameOutput{
+			CanJoin:   false,
+			Reason:    "Game has already ended",
+			ErrorType: "game_completed",
+		}, nil
+	case models.GameStatusWaiting:
+		// Check if game is full
+		if len(game.Participants) >= s.maxPlayers {
+			return &CanPlayerJoinGameOutput{
+				CanJoin:   false,
+				Reason:    fmt.Sprintf("Game is full (%d/%d players)", len(game.Participants), s.maxPlayers),
+				ErrorType: "game_full",
+			}, nil
+		}
+		return &CanPlayerJoinGameOutput{
+			CanJoin: true,
+		}, nil
+	default:
+		return &CanPlayerJoinGameOutput{
+			CanJoin:   false,
+			Reason:    "Invalid game state",
+			ErrorType: "invalid_game_state",
+		}, nil
+	}
+}
+
+// CanPlayerStartGame checks if a player can start a specific game
+func (s *service) CanPlayerStartGame(ctx context.Context, input *CanPlayerStartGameInput) (*CanPlayerStartGameOutput, error) {
+	if input == nil || input.GameID == "" || input.PlayerID == "" {
+		return nil, errors.New("game ID and player ID are required")
+	}
+
+	// Get the game
+	game, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
+		GameID: input.GameID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get game: %w", err)
+	}
+
+	// Check if player is the creator
+	isCreator := game.CreatorID == input.PlayerID
+
+	// Check game state
+	if game.Status != models.GameStatusWaiting {
+		return &CanPlayerStartGameOutput{
+			CanStart:  false,
+			Reason:    "Game is not in waiting state",
+			IsCreator: isCreator,
+		}, nil
+	}
+
+	// Check if enough players
+	if len(game.Participants) < 2 {
+		return &CanPlayerStartGameOutput{
+			CanStart:  false,
+			Reason:    "Need at least 2 players to start",
+			IsCreator: isCreator,
+		}, nil
+	}
+
+	// Check if player is in the game
+	isInGame := false
+	for _, participant := range game.Participants {
+		if participant.PlayerID == input.PlayerID {
+			isInGame = true
+			break
+		}
+	}
+
+	if !isInGame {
+		return &CanPlayerStartGameOutput{
+			CanStart:  false,
+			Reason:    "You are not in this game",
+			IsCreator: isCreator,
+		}, nil
+	}
+
+	// Calculate if force start is available
+	gameAge := s.clock.Now().Sub(game.CreatedAt)
+	forceStartAvailable := gameAge > ForceStartThreshold && !isCreator
+
+	if isCreator {
+		return &CanPlayerStartGameOutput{
+			CanStart:   true,
+			IsCreator:  true,
+			ForceStart: false,
+		}, nil
+	}
+
+	if forceStartAvailable {
+		return &CanPlayerStartGameOutput{
+			CanStart:   true,
+			IsCreator:  false,
+			ForceStart: true,
+		}, nil
+	}
+
+	return &CanPlayerStartGameOutput{
+		CanStart:  false,
+		Reason:    "Only the game creator can start the game",
+		IsCreator: false,
+	}, nil
+}
+
+// GetPlayerNamesForGame gets a map of player IDs to names for a game
+func (s *service) GetPlayerNamesForGame(ctx context.Context, input *GetPlayerNamesForGameInput) (*GetPlayerNamesForGameOutput, error) {
+	if input == nil || input.GameID == "" {
+		return nil, errors.New("game ID is required")
+	}
+
+	// Get the game
+	game, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
+		GameID: input.GameID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get game: %w", err)
+	}
+
+	// Build the map
+	playerNames := make(map[string]string)
+	for _, participant := range game.Participants {
+		playerNames[participant.PlayerID] = participant.PlayerName
+	}
+
+	return &GetPlayerNamesForGameOutput{
+		PlayerNames: playerNames,
+	}, nil
+}
+
+// GetActiveRollOffForPlayer finds the active roll-off game ID for a player if any
+func (s *service) GetActiveRollOffForPlayer(ctx context.Context, input *GetActiveRollOffForPlayerInput) (*GetActiveRollOffForPlayerOutput, error) {
+	if input == nil || input.GameID == "" || input.PlayerID == "" {
+		return nil, errors.New("game ID and player ID are required")
+	}
+
+	// Get the game
+	game, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
+		GameID: input.GameID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get game: %w", err)
+	}
+
+	// Check if this game itself is a roll-off
+	if game.Status.IsRollOff() {
+		// Check if player is in this roll-off
+		for _, playerID := range game.RollOffPlayerIDs {
+			if playerID == input.PlayerID {
+				return &GetActiveRollOffForPlayerOutput{
+					HasActiveRollOff: true,
+					RollOffGameID:    game.ID,
+					RollOffType:      game.RollOffType,
+				}, nil
+			}
+		}
+	}
+
+	// If not, check for child roll-off games
+	rollOffGame, err := s.FindActiveRollOffGame(ctx, input.PlayerID, input.GameID)
+	if err != nil && !errors.Is(err, ErrRollOffGameNotFound) {
+		return nil, fmt.Errorf("failed to find active roll-off: %w", err)
+	}
+
+	if rollOffGame != nil {
+		return &GetActiveRollOffForPlayerOutput{
+			HasActiveRollOff: true,
+			RollOffGameID:    rollOffGame.ID,
+			RollOffType:      rollOffGame.RollOffType,
+		}, nil
+	}
+
+	return &GetActiveRollOffForPlayerOutput{
+		HasActiveRollOff: false,
 	}, nil
 }

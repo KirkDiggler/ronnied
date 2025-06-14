@@ -2,9 +2,9 @@ package uuid
 
 import "github.com/google/uuid"
 
-//go:generate mockgen -package=mocks -destination=mocks/mock_uuid.go github.com/KirkDiggler/ronnied/internal/common/uuid UUID
+//go:generate mockgen -package=mocks -destination=mocks/mock_uuid.go github.com/KirkDiggler/ronnied/internal/common/uuid Generator
 
-type UUID interface {
+type Generator interface {
 	NewUUID() string
 }
 

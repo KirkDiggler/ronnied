@@ -238,6 +238,31 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Error: %v", err))
 	}
 
+	// Check if player can join the game
+	canJoinOutput, err := b.gameService.CanPlayerJoinGame(ctx, &game.CanPlayerJoinGameInput{
+		GameID:   existingGame.Game.ID,
+		PlayerID: userID,
+	})
+	if err != nil {
+		log.Printf("Error checking if player can join: %v", err)
+		return RespondWithEphemeralMessage(s, i, "Failed to check game status")
+	}
+
+	// If player cannot join, show appropriate error message
+	if !canJoinOutput.CanJoin && !canJoinOutput.AlreadyInGame {
+		// Get a friendly error message from the messaging service
+		if canJoinOutput.ErrorType != "" {
+			errorMsgOutput, msgErr := b.messagingService.GetErrorMessage(ctx, &messaging.GetErrorMessageInput{
+				ErrorType: canJoinOutput.ErrorType,
+			})
+			if msgErr == nil {
+				return RespondWithEphemeralMessage(s, i, errorMsgOutput.Message)
+			}
+		}
+		// Fallback to the reason from the service
+		return RespondWithEphemeralMessage(s, i, canJoinOutput.Reason)
+	}
+
 	// Join the game
 	joinOutput, err := b.gameService.JoinGame(ctx, &game.JoinGameInput{
 		GameID:     existingGame.Game.ID,
@@ -246,34 +271,7 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 	})
 	if err != nil {
 		log.Printf("Error joining game: %v", err)
-
-		// Map the error to an error type for the messaging service
-		var errorType string
-		switch err {
-		case game.ErrGameActive:
-			errorType = "game_active"
-		case game.ErrGameRollOff:
-			errorType = "game_roll_off"
-		case game.ErrGameCompleted:
-			errorType = "game_completed"
-		case game.ErrGameFull:
-			errorType = "game_full"
-		case game.ErrInvalidGameState:
-			errorType = "invalid_game_state"
-		default:
-			// For any other error, just return the error message
-			return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to join game: %v", err))
-		}
-
-		// Get a friendly error message from the messaging service
-		errorMsgOutput, msgErr := b.messagingService.GetErrorMessage(ctx, &messaging.GetErrorMessageInput{
-			ErrorType: errorType,
-		})
-		if msgErr != nil {
-			// If messaging service fails, use a generic message
-			return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to join game: %v", err))
-		}
-		return RespondWithEphemeralMessage(s, i, errorMsgOutput.Message)
+		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Failed to join game: %v", err))
 	}
 
 	// Update the game message
@@ -336,11 +334,25 @@ func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.Interacti
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Error: %v", err))
 	}
 
+	// Check if player can start the game
+	canStartOutput, err := b.gameService.CanPlayerStartGame(ctx, &game.CanPlayerStartGameInput{
+		GameID:   existingGame.Game.ID,
+		PlayerID: userID,
+	})
+	if err != nil {
+		log.Printf("Error checking if player can start: %v", err)
+		return RespondWithEphemeralMessage(s, i, "Failed to check game status")
+	}
+
+	if !canStartOutput.CanStart {
+		return RespondWithEphemeralMessage(s, i, canStartOutput.Reason)
+	}
+
 	// Start the game
 	startOutput, err := b.gameService.StartGame(ctx, &game.StartGameInput{
 		GameID:     existingGame.Game.ID,
 		PlayerID:   userID,
-		ForceStart: true, // Always try to force start, service layer will decide if it's allowed
+		ForceStart: canStartOutput.ForceStart,
 	})
 	if err != nil {
 		log.Printf("Error starting game: %v", err)
@@ -348,7 +360,7 @@ func (b *Bot) handleBeginGameButton(s *discordgo.Session, i *discordgo.Interacti
 	}
 
 	if !startOutput.Success {
-		return RespondWithEphemeralMessage(s, i, "Failed to start the game. Make sure you are the creator of the game.")
+		return RespondWithEphemeralMessage(s, i, "Failed to start the game.")
 	}
 
 	// If the game was force-started, add a metadata field to the game
@@ -442,6 +454,34 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 		return err
 	}
 
+	// Check if player can roll
+	canRollOutput, err := b.gameService.CanPlayerRoll(ctx, &game.CanPlayerRollInput{
+		GameID:   existingGame.Game.ID,
+		PlayerID: userID,
+	})
+	if err != nil {
+		log.Printf("Error checking if player can roll: %v", err)
+		_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+			Content: "Failed to check game status",
+			Flags:   discordgo.MessageFlagsEphemeral,
+		})
+		return err
+	}
+
+	// If player cannot roll, show appropriate message
+	if !canRollOutput.CanRoll {
+		_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+			Content: canRollOutput.Reason,
+			Flags:   discordgo.MessageFlagsEphemeral,
+		})
+		
+		// If player is in a roll-off, update the game message to make it more visible
+		if canRollOutput.IsInRollOff && canRollOutput.RollOffGameID != "" {
+			b.updateGameMessage(s, channelID, canRollOutput.RollOffGameID)
+		}
+		return err
+	}
+
 	// Roll the dice - the service will handle all the logic
 	rollOutput, err := b.gameService.RollDice(ctx, &game.RollDiceInput{
 		GameID:   existingGame.Game.ID,
@@ -450,63 +490,9 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 
 	// Handle errors
 	if err != nil {
-		// Map the error to an error type for the messaging service
-		var errorType string
-		switch err {
-		case game.ErrGameActive:
-			errorType = "game_active"
-		case game.ErrGameRollOff:
-			errorType = "game_roll_off"
-		case game.ErrGameCompleted:
-			errorType = "game_completed"
-		case game.ErrInvalidGameState:
-			errorType = "invalid_game_state"
-		case game.ErrPlayerNotInGame:
-			_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-				Content: "You are not part of this game.",
-				Flags:   discordgo.MessageFlagsEphemeral,
-			})
-			return err
-		case game.ErrPlayerNotInRollOff:
-			// The player is not part of the current roll-off
-			_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-				Content: "You are not part of the current roll-off. Please wait for your turn.",
-				Flags:   discordgo.MessageFlagsEphemeral,
-			})
-			return err
-		case game.ErrPlayerInRollOff:
-			// The player needs to roll in a roll-off game
-			_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-				Content: "You need to roll in a roll-off game! Use the Roll button on the game message to continue.",
-				Flags:   discordgo.MessageFlagsEphemeral,
-			})
-
-			// Update the game message to make the roll-off more visible
-			b.updateGameMessage(s, channelID, existingGame.Game.ID)
-			return err
-		default:
-			// For any other error, just return the error message
-			_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-				Content: fmt.Sprintf("Failed to roll dice: %v", err),
-				Flags:   discordgo.MessageFlagsEphemeral,
-			})
-			return err
-		}
-
-		// Get a friendly error message from the messaging service
-		errorMsgOutput, msgErr := b.messagingService.GetErrorMessage(ctx, &messaging.GetErrorMessageInput{
-			ErrorType: errorType,
-		})
-		if msgErr != nil {
-			// If messaging service fails, use a generic message
-			_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-				Content: fmt.Sprintf("Failed to roll dice: %v", err),
-				Flags:   discordgo.MessageFlagsEphemeral,
-			})
-			return err
-		}
+		log.Printf("Error rolling dice: %v", err)
 		_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-			Content: errorMsgOutput.Message,
+			Content: "Failed to roll dice. Please try again.",
 			Flags:   discordgo.MessageFlagsEphemeral,
 		})
 		return err
@@ -681,13 +667,21 @@ func (b *Bot) handleAssignDrinkSelect(s *discordgo.Session, i *discordgo.Interac
 		return RespondWithEphemeralMessage(s, i, fmt.Sprintf("Error getting game: %v", err))
 	}
 
-	// Get target player name before assigning the drink
+	// Get player names from the game service
+	playerNamesOutput, err := b.gameService.GetPlayerNamesForGame(ctx, &game.GetPlayerNamesForGameInput{
+		GameID: existingGame.Game.ID,
+	})
+	if err != nil {
+		log.Printf("Error getting player names: %v", err)
+		// Continue anyway, we'll use a fallback
+	}
+	
 	targetPlayerName := ""
-	for _, participant := range existingGame.Game.Participants {
-		if participant.PlayerID == targetPlayerID {
-			targetPlayerName = participant.PlayerName
-			break
-		}
+	if playerNamesOutput != nil && playerNamesOutput.PlayerNames != nil {
+		targetPlayerName = playerNamesOutput.PlayerNames[targetPlayerID]
+	}
+	if targetPlayerName == "" {
+		targetPlayerName = "another player"
 	}
 
 	// Assign the drink
