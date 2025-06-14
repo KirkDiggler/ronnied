@@ -218,6 +218,34 @@ func (s *service) StartGame(ctx context.Context, input *StartGameInput) (*StartG
 	game.Status = models.GameStatusActive
 	game.UpdatedAt = s.clock.Now()
 
+	// Process any pre-rolled dice from the waiting phase
+	for _, participant := range game.Participants {
+		if participant.RollTime != nil && participant.RollValue > 0 {
+			// Check if the roll was a critical hit or fail
+			if participant.RollValue == s.criticalHitValue {
+				// Update status to needs to assign
+				participant.Status = models.ParticipantStatusNeedsToAssign
+			} else if participant.RollValue == s.criticalFailValue {
+				// Create a drink record for critical fail
+				_, err = s.drinkLedgerRepo.CreateDrinkRecord(ctx, &ledgerRepo.CreateDrinkRecordInput{
+					GameID:       game.ID,
+					FromPlayerID: participant.PlayerID,
+					ToPlayerID:   participant.PlayerID,
+					Reason:       models.DrinkReasonCriticalFail,
+					Timestamp:    s.clock.Now(),
+					SessionID:    s.getSessionIDForChannel(ctx, game.ChannelID),
+				})
+				if err != nil {
+					log.Printf("Error creating critical fail drink record for pre-rolled dice: %v", err)
+				}
+				participant.Status = models.ParticipantStatusActive
+			} else {
+				// Normal roll, just set to active
+				participant.Status = models.ParticipantStatusActive
+			}
+		}
+	}
+
 	// Save the updated game
 	err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
 		Game: game,
@@ -389,8 +417,8 @@ func (s *service) RollDice(ctx context.Context, input *RollDiceInput) (*RollDice
 	if game.Status.IsRollOff() {
 		// This is a roll-off
 		return s.processRollOffInGame(ctx, input, game)
-	} else if game.Status == models.GameStatusActive {
-		// This is a normal active game
+	} else if game.Status == models.GameStatusActive || game.Status == models.GameStatusWaiting {
+		// This is a normal active game or waiting game
 		return s.processMainGameRoll(ctx, input, game)
 	} else {
 		// Invalid game state for rolling
@@ -538,7 +566,7 @@ func (s *service) processRollOffInGame(ctx context.Context, input *RollDiceInput
 // processMainGameRoll handles dice rolling in a main game
 func (s *service) processMainGameRoll(ctx context.Context, input *RollDiceInput, game *models.Game) (*RollDiceOutput, error) {
 	// Check if game is in a valid state for rolling
-	if !isValidGameStateForRolling(game.Status) {
+	if game.Status != models.GameStatusActive && game.Status != models.GameStatusWaiting {
 		return nil, fmt.Errorf("%w: game status is %s", ErrInvalidGameState, game.Status)
 	}
 
@@ -566,24 +594,30 @@ func (s *service) processMainGameRoll(ctx context.Context, input *RollDiceInput,
 	isCriticalFail := rollValue == s.criticalFailValue
 
 	// Update participant status based on roll
-	if isCriticalHit {
-		participant.Status = models.ParticipantStatusNeedsToAssign
+	if game.Status == models.GameStatusWaiting {
+		// During waiting phase, just record the roll but don't process critical hits/fails
+		participant.Status = models.ParticipantStatusWaitingToRoll
 	} else {
-		participant.Status = models.ParticipantStatusActive
+		// During active game, process critical hits/fails normally
+		if isCriticalHit {
+			participant.Status = models.ParticipantStatusNeedsToAssign
+		} else {
+			participant.Status = models.ParticipantStatusActive
 
-		// If it's a critical fail, automatically assign a drink to self
-		if isCriticalFail {
-			// Create a new drink record using the repository
-			_, err := s.drinkLedgerRepo.CreateDrinkRecord(ctx, &ledgerRepo.CreateDrinkRecordInput{
-				GameID:       input.GameID,
-				FromPlayerID: input.PlayerID,
-				ToPlayerID:   input.PlayerID,
-				Reason:       models.DrinkReasonCriticalFail,
-				Timestamp:    now,
-				SessionID:    s.getSessionIDForChannel(ctx, game.ChannelID),
-			})
-			if err != nil {
-				return nil, fmt.Errorf("failed to create critical fail drink record: %w", err)
+			// If it's a critical fail, automatically assign a drink to self
+			if isCriticalFail {
+				// Create a new drink record using the repository
+				_, err := s.drinkLedgerRepo.CreateDrinkRecord(ctx, &ledgerRepo.CreateDrinkRecordInput{
+					GameID:       input.GameID,
+					FromPlayerID: input.PlayerID,
+					ToPlayerID:   input.PlayerID,
+					Reason:       models.DrinkReasonCriticalFail,
+					Timestamp:    now,
+					SessionID:    s.getSessionIDForChannel(ctx, game.ChannelID),
+				})
+				if err != nil {
+					return nil, fmt.Errorf("failed to create critical fail drink record: %w", err)
+				}
 			}
 		}
 	}
@@ -614,7 +648,8 @@ func (s *service) processMainGameRoll(ctx context.Context, input *RollDiceInput,
 	var rollOffGame *models.Game
 	var rollOffGames []*models.Game
 
-	if allPlayersRolled {
+	// Only try to end the game if it's in active state
+	if allPlayersRolled && game.Status == models.GameStatusActive {
 		// Check if any players need to assign drinks
 		allDrinksAssigned := true
 		for _, p := range game.Participants {
@@ -698,13 +733,24 @@ func (s *service) processMainGameRoll(ctx context.Context, input *RollDiceInput,
 	}
 
 	// Prepare result information
-	result, details, eligiblePlayers := s.prepareRollResult(
-		isCriticalHit,
-		isCriticalFail,
-		rollValue,
-		input.PlayerID,
-		game,
-	)
+	var result, details string
+	var eligiblePlayers []PlayerOption
+	
+	if game.Status == models.GameStatusWaiting {
+		// During waiting phase, don't reveal critical hits/fails
+		result = "Your roll has been recorded!"
+		details = "Your roll value will be revealed when the game starts."
+		eligiblePlayers = nil // No drink assignments during waiting phase
+	} else {
+		// During active game, show normal results
+		result, details, eligiblePlayers = s.prepareRollResult(
+			isCriticalHit,
+			isCriticalFail,
+			rollValue,
+			input.PlayerID,
+			game,
+		)
+	}
 
 	// Build the list of game IDs that need to be updated
 	gameIDsToUpdate := []string{input.GameID}
@@ -2286,13 +2332,6 @@ func (s *service) CanPlayerRoll(ctx context.Context, input *CanPlayerRollInput) 
 	}
 
 	// Check game state
-	if game.Status == models.GameStatusWaiting {
-		return &CanPlayerRollOutput{
-			CanRoll: false,
-			Reason:  "Game hasn't started yet",
-		}, nil
-	}
-
 	if game.Status == models.GameStatusCompleted {
 		return &CanPlayerRollOutput{
 			CanRoll: false,
@@ -2455,11 +2494,11 @@ func (s *service) CanPlayerStartGame(ctx context.Context, input *CanPlayerStartG
 		}, nil
 	}
 
-	// Check if enough players
-	if len(game.Participants) < 2 {
+	// Check if enough players (allow single player games)
+	if len(game.Participants) < 1 {
 		return &CanPlayerStartGameOutput{
 			CanStart:  false,
-			Reason:    "Need at least 2 players to start",
+			Reason:    "Need at least 1 player to start",
 			IsCreator: isCreator,
 		}, nil
 	}

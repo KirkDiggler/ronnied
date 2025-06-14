@@ -476,10 +476,20 @@ func renderGameMessage(s *discordgo.Session, game *models.Game, leaderboard *gam
 	var participantList string
 	for _, p := range game.Participants {
 		var rollInfo string
-		if p.RollValue > 0 {
-			rollInfo = fmt.Sprintf(" (Rolled: %d)", p.RollValue)
+		if game.Status == models.GameStatusWaiting {
+			// During waiting phase, don't reveal roll values
+			if p.RollTime != nil {
+				rollInfo = " (Ready ✅)"
+			} else {
+				rollInfo = " (Waiting to roll)"
+			}
 		} else {
-			rollInfo = " (Not rolled yet)"
+			// During active/completed game, show roll values
+			if p.RollValue > 0 {
+				rollInfo = fmt.Sprintf(" (Rolled: %d)", p.RollValue)
+			} else {
+				rollInfo = " (Not rolled yet)"
+			}
 		}
 		participantList += fmt.Sprintf("• %s%s\n", p.PlayerName, rollInfo)
 	}
@@ -816,39 +826,47 @@ func (b *Bot) renderGameMessage(game *models.Game, drinkRecords []*models.DrinkL
 		// Create roll info with emoji based on roll value
 		var rollInfo string
 		var rollEmoji string
-
-		if p.RollValue > 0 {
-			// Select emoji based on roll value
-			switch p.RollValue {
-			case 6:
-				rollEmoji = "🔥" // Critical hit
-			case 1:
-				rollEmoji = "💀" // Critical fail
-			case 5:
-				rollEmoji = "⭐" // High roll
-			case 4:
-				rollEmoji = "✨" // Good roll
-			default:
-				rollEmoji = "🎲" // Normal roll
-			}
-			rollInfo = fmt.Sprintf(" (%s **%d**)", rollEmoji, p.RollValue)
-		} else {
-			rollInfo = " (🎲 Not rolled yet)"
-		}
-
-		// Get roll comment from messaging service
 		var rollComment string
-		if p.RollValue > 0 {
-			// Get the comment from the messaging service
-			rollCommentOutput, err := b.messagingService.GetRollComment(context.Background(), &messaging.GetRollCommentInput{
-				PlayerName:     p.PlayerName,
-				RollValue:      p.RollValue,
-				IsCriticalHit:  p.RollValue == 6,
-				IsCriticalFail: p.RollValue == 1,
-			})
 
-			if err == nil && rollCommentOutput != nil {
-				rollComment = rollCommentOutput.Comment
+		if game.Status == models.GameStatusWaiting {
+			// During waiting phase, don't reveal roll values
+			if p.RollTime != nil {
+				rollInfo = " (✅ **Ready**)"
+			} else {
+				rollInfo = " (⏳ Waiting to roll)"
+			}
+			// No roll comments during waiting phase
+		} else {
+			// During active/completed game, show roll values
+			if p.RollValue > 0 {
+				// Select emoji based on roll value
+				switch p.RollValue {
+				case 6:
+					rollEmoji = "🔥" // Critical hit
+				case 1:
+					rollEmoji = "💀" // Critical fail
+				case 5:
+					rollEmoji = "⭐" // High roll
+				case 4:
+					rollEmoji = "✨" // Good roll
+				default:
+					rollEmoji = "🎲" // Normal roll
+				}
+				rollInfo = fmt.Sprintf(" (%s **%d**)", rollEmoji, p.RollValue)
+				
+				// Get roll comment from messaging service
+				rollCommentOutput, err := b.messagingService.GetRollComment(context.Background(), &messaging.GetRollCommentInput{
+					PlayerName:     p.PlayerName,
+					RollValue:      p.RollValue,
+					IsCriticalHit:  p.RollValue == 6,
+					IsCriticalFail: p.RollValue == 1,
+				})
+
+				if err == nil && rollCommentOutput != nil {
+					rollComment = rollCommentOutput.Comment
+				}
+			} else {
+				rollInfo = " (🎲 Not rolled yet)"
 			}
 		}
 
