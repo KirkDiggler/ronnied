@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math/rand"
 	"time"
 
 	"github.com/KirkDiggler/ronnied/internal/common/clock"
@@ -1135,30 +1134,14 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 	// Get the game
 	game := input.Game
 
-	// Check if this is a roll-off game
-	var parentGame *models.Game
-	var isRollOffGame bool
-	if game.ParentGameID != "" {
-		isRollOffGame = true
-		// Get the parent game
-		var err error
-		parentGame, err = s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
-			GameID: game.ParentGameID,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to get parent game: %w", err)
-		}
-	}
+	// Note: We no longer use the parent game concept for roll-offs
+	// Roll-offs are now integrated as a state within the main game
 
 	// Check if game is active
 	if game.Status != models.GameStatusActive && game.Status != models.GameStatusRollOff {
 		return nil, ErrInvalidGameState
 	}
 
-	// For roll-off games, we always mark them as completed when EndGame is called
-	if isRollOffGame {
-		game.Status = models.GameStatusCompleted
-	}
 
 	// Check if all participants have completed their actions
 	for _, participant := range game.Participants {
@@ -1252,13 +1235,12 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 	var lowestRollOffGameID string
 	var lowestRollOffPlayerIDs []string
 
-	// ROLL-OFF FUNCTIONALITY TEMPORARILY DISABLED
 	// Check for ties with the highest roll (critical hits)
-	if len(highestRollPlayerIDs) > 1 {
-		// Instead of creating a roll-off, we'll just log that there was a tie
-		log.Printf("Highest roll tie detected between %d players. Roll-offs disabled.", len(highestRollPlayerIDs))
-		
-		// We're not setting needsHighestRollOff = true, so the game will complete normally
+	if len(highestRollPlayerIDs) > 1 && highestRoll == s.criticalHitValue {
+		// Multiple players rolled critical hits - need a roll-off
+		needsHighestRollOff = true
+		highestRollOffPlayerIDs = highestRollPlayerIDs
+		log.Printf("Highest roll tie detected between %d players with roll value %d", len(highestRollPlayerIDs), highestRoll)
 	}
 
 	// Check for lowest roll ties or single lowest roller
@@ -1267,16 +1249,9 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 		// we can complete the game and assign a drink
 		lowestPlayerID := lowestRollPlayerIDs[0]
 
-		// Determine which game ID to use for the drink record
-		targetGameID := game.ID
-		if isRollOffGame {
-			// If this is a roll-off game, assign the drink to the parent game
-			targetGameID = game.ParentGameID
-		}
-
 		// Create a drink record for the player with the lowest roll using the repository
 		_, err = s.drinkLedgerRepo.CreateDrinkRecord(ctx, &ledgerRepo.CreateDrinkRecordInput{
-			GameID:     targetGameID,
+			GameID:     game.ID,
 			ToPlayerID: lowestPlayerID,
 			Reason:     models.DrinkReasonLowestRoll,
 			Timestamp:  s.clock.Now(),
@@ -1287,40 +1262,11 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 			log.Printf("Error saving lowest roll drink record: %v", err)
 			// Don't return the error, continue with ending the game
 		}
-	} else if len(lowestRollPlayerIDs) > 1 {
-		// ROLL-OFF FUNCTIONALITY TEMPORARILY DISABLED
-		// Instead of creating a roll-off for lowest rollers, we'll just log that there was a tie
-		log.Printf("Lowest roll tie detected between %d players. Roll-offs disabled.", len(lowestRollPlayerIDs))
-		
-		// We're not setting needsLowestRollOff = true, so the game will complete normally
-		
-		// Since we have multiple lowest rollers, we'll randomly select one to assign a drink to
-		if len(lowestRollPlayerIDs) > 0 {
-			// Pick a random player from the tied lowest rollers
-			randomIndex := rand.Intn(len(lowestRollPlayerIDs))
-			lowestPlayerID := lowestRollPlayerIDs[randomIndex]
-			
-			// Determine which game ID to use for the drink record
-			targetGameID := game.ID
-			if isRollOffGame {
-				// If this is a roll-off game, assign the drink to the parent game
-				targetGameID = game.ParentGameID
-			}
-			
-			// Create a drink record for the randomly selected lowest roller
-			_, err = s.drinkLedgerRepo.CreateDrinkRecord(ctx, &ledgerRepo.CreateDrinkRecordInput{
-				GameID:     targetGameID,
-				ToPlayerID: lowestPlayerID,
-				Reason:     models.DrinkReasonLowestRoll,
-				Timestamp:  s.clock.Now(),
-				SessionID:  s.getSessionIDForChannel(ctx, game.ChannelID),
-			})
-			
-			if err != nil {
-				log.Printf("Error saving lowest roll drink record: %v", err)
-				// Don't return the error, continue with ending the game
-			}
-		}
+	} else if len(lowestRollPlayerIDs) > 1 && !needsHighestRollOff {
+		// Multiple players have the lowest roll - need a roll-off
+		needsLowestRollOff = true
+		lowestRollOffPlayerIDs = lowestRollPlayerIDs
+		log.Printf("Lowest roll tie detected between %d players with roll value %d", len(lowestRollPlayerIDs), lowestRoll)
 	}
 
 	// Convert map to slice for output
@@ -1329,8 +1275,9 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 		playerStats = append(playerStats, stats)
 	}
 
-	// Update game status to completed if no roll-offs are needed
+	// Update game status based on roll-off needs
 	if !needsHighestRollOff && !needsLowestRollOff {
+		// No roll-offs needed, complete the game
 		game.Status = models.GameStatusCompleted
 		game.UpdatedAt = s.clock.Now()
 
@@ -1341,60 +1288,44 @@ func (s *service) EndGame(ctx context.Context, input *EndGameInput) (*EndGameOut
 		if err != nil {
 			return nil, err
 		}
-
-		// If this is a roll-off game, update the parent game as well
-		if isRollOffGame && parentGame != nil {
-			// Check if the parent game has any other active roll-offs
-			hasOtherActiveRollOffs := false
-
-			// If the parent game has a highest roll-off that's not this game
-			if parentGame.HighestRollOffGameID != "" && parentGame.HighestRollOffGameID != game.ID {
-				// Check if that roll-off is still active
-				highestRollOffGame, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
-					GameID: parentGame.HighestRollOffGameID,
-				})
-				if err == nil && highestRollOffGame.Status != models.GameStatusCompleted {
-					hasOtherActiveRollOffs = true
-				}
+	} else {
+		// Roll-offs are needed
+		// Prioritize highest roll-off over lowest
+		if needsHighestRollOff {
+			// Start a highest roll-off
+			_, err = s.StartRollOff(ctx, &StartRollOffInput{
+				GameID:      game.ID,
+				PlayerIDs:   highestRollOffPlayerIDs,
+				Type:        RollOffTypeHighest,
+			})
+			if err != nil {
+				log.Printf("Error starting highest roll-off: %v", err)
+				// Continue without roll-off
+				game.Status = models.GameStatusCompleted
 			}
-
-			// If the parent game has a lowest roll-off that's not this game
-			if parentGame.LowestRollOffGameID != "" && parentGame.LowestRollOffGameID != game.ID {
-				// Check if that roll-off is still active
-				lowestRollOffGame, err := s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
-					GameID: parentGame.LowestRollOffGameID,
-				})
-				if err == nil && lowestRollOffGame.Status != models.GameStatusCompleted {
-					hasOtherActiveRollOffs = true
-				}
-			}
-
-			// If there are no other active roll-offs, mark the parent game as completed
-			if !hasOtherActiveRollOffs {
-				parentGame.Status = models.GameStatusCompleted
-				parentGame.UpdatedAt = s.clock.Now()
-
-				// Save the updated parent game
-				err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
-					Game: parentGame,
-				})
-				if err != nil {
-					log.Printf("Error updating parent game status: %v", err)
-					// Don't return the error, continue with ending the game
-				}
+		} else if needsLowestRollOff {
+			// Start a lowest roll-off
+			_, err = s.StartRollOff(ctx, &StartRollOffInput{
+				GameID:      game.ID,
+				PlayerIDs:   lowestRollOffPlayerIDs,
+				Type:        RollOffTypeLowest,
+			})
+			if err != nil {
+				log.Printf("Error starting lowest roll-off: %v", err)
+				// Continue without roll-off
+				game.Status = models.GameStatusCompleted
 			}
 		}
-	} else {
-		// If there are roll-offs, mark the game as roll-off
-		game.Status = models.GameStatusRollOff
-		game.UpdatedAt = s.clock.Now()
 
-		// Save the updated game
-		err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
-			Game: game,
-		})
-		if err != nil {
-			return nil, err
+		// Save the updated game if not already saved by StartRollOff
+		if game.Status == models.GameStatusCompleted {
+			game.UpdatedAt = s.clock.Now()
+			err = s.gameRepo.SaveGame(ctx, &gameRepo.SaveGameInput{
+				Game: game,
+			})
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -1660,6 +1591,8 @@ func (s *service) CompleteRollOff(ctx context.Context, input *CompleteRollOffInp
 					GameID:     game.ID,
 					ToPlayerID: loserID,
 					Reason:     models.DrinkReasonLowestRoll,
+					Timestamp:  s.clock.Now(),
+					SessionID:  s.getSessionIDForChannel(ctx, game.ChannelID),
 				})
 
 				if drinkErr != nil {
@@ -1671,8 +1604,7 @@ func (s *service) CompleteRollOff(ctx context.Context, input *CompleteRollOffInp
 			}
 		}
 
-		// Reset the game to active state
-		game.Status = models.GameStatusActive
+		// Clear roll-off state
 		game.RollOffType = "" // Empty string for no roll-off type
 		game.RollOffPlayerIDs = nil
 
@@ -1682,6 +1614,20 @@ func (s *service) CompleteRollOff(ctx context.Context, input *CompleteRollOffInp
 				participant.Status == models.ParticipantStatusRolledInRollOff {
 				participant.Status = models.ParticipantStatusActive
 			}
+		}
+
+		// After roll-off completion, try to end the game again
+		// This will check if there are any more roll-offs needed
+		endGameOutput, err := s.EndGame(ctx, &EndGameInput{
+			Game: game,
+		})
+		if err != nil {
+			log.Printf("Error ending game after roll-off completion: %v", err)
+			// Set game back to active state
+			game.Status = models.GameStatusActive
+		} else if endGameOutput != nil && !endGameOutput.NeedsRollOff {
+			// Game successfully ended
+			log.Printf("Game %s completed after roll-off", game.ID)
 		}
 	}
 

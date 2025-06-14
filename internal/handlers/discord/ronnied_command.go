@@ -196,30 +196,21 @@ func (c *RonniedCommand) handleStart(s *discordgo.Session, i *discordgo.Interact
 		return err
 	}
 
-	// Get the message ID from the interaction response
-	// We need to wait a moment for Discord to process the interaction response
-	time.Sleep(500 * time.Millisecond)
-
-	// Get the channel messages to find our message
-	messages, err := s.ChannelMessages(channelID, 5, "", "", "")
+	// Get the interaction response to retrieve the message ID
+	// This is more reliable than querying channel messages
+	response, err := s.InteractionResponse(i.Interaction)
 	if err != nil {
-		log.Printf("Error getting channel messages: %v", err)
+		log.Printf("Error getting interaction response: %v", err)
 		// This is not critical, so we'll continue
-	} else {
-		// Find our message (should be the most recent one)
-		for _, msg := range messages {
-			if msg.Author.ID == s.State.User.ID {
-				// Update the game with the message ID
-				_, err = c.gameService.UpdateGameMessage(ctx, &game.UpdateGameMessageInput{
-					GameID:    createOutput.GameID,
-					MessageID: msg.ID,
-				})
-				if err != nil {
-					log.Printf("Error updating game message ID: %v", err)
-					// Not critical, continue
-				}
-				break
-			}
+	} else if response != nil {
+		// Update the game with the message ID
+		_, err = c.gameService.UpdateGameMessage(ctx, &game.UpdateGameMessageInput{
+			GameID:    createOutput.GameID,
+			MessageID: response.ID,
+		})
+		if err != nil {
+			log.Printf("Error updating game message ID: %v", err)
+			// Not critical, continue
 		}
 	}
 
@@ -248,47 +239,67 @@ func (c *RonniedCommand) handleSessionboard(s *discordgo.Session, i *discordgo.I
 		now := time.Now()
 		sessionCreatedAt := sessionboard.Session.CreatedAt
 		
+		// Ensure times are in the same timezone (UTC)
+		now = now.UTC()
+		sessionCreatedAt = sessionCreatedAt.UTC()
+		
 		// Log for debugging
-		log.Printf("Session ID: %s, CreatedAt: %v, Now: %v", 
+		log.Printf("Session ID: %s, CreatedAt: %v (UTC), Now: %v (UTC)", 
 			sessionboard.Session.ID, 
 			sessionCreatedAt, 
 			now)
 		
-		// Always show session creation time for reference
-			description.WriteString(fmt.Sprintf("🍻 **Session Started:** %s\n", 
-				sessionCreatedAt.Format("Jan 2 at 3:04 PM")))
+		// Always show session creation time for reference (in local time)
+		description.WriteString(fmt.Sprintf("🍻 **Session Started:** %s\n", 
+			sessionCreatedAt.Local().Format("Jan 2 at 3:04 PM")))
+		
+		// Calculate and format the age
+		sessionAge := now.Sub(sessionCreatedAt)
+		
+		// Only show age if it's a reasonable value (positive and less than a year)
+		if sessionAge > 0 && sessionAge < 365*24*time.Hour {
+			// Format the duration in a human-readable way
+			var formattedAge string
+			days := int(sessionAge.Hours() / 24)
+			hours := int(sessionAge.Hours()) % 24
+			minutes := int(sessionAge.Minutes()) % 60
 			
-			// Calculate and format the age
-			sessionAge := now.Sub(sessionCreatedAt)
-			
-			// Only show age if it's a reasonable value (positive and less than a week)
-			if sessionAge > 0 && sessionAge < 7*24*time.Hour {
-				// Format the duration in a human-readable way
-				var formattedAge string
-				hours := int(sessionAge.Hours())
-				minutes := int(sessionAge.Minutes()) % 60
-				
-				if hours > 0 {
-					if hours == 1 {
-						formattedAge = "1 hour"
-					} else {
-						formattedAge = fmt.Sprintf("%d hours", hours)
-					}
-					
-					if minutes > 0 {
-						formattedAge += fmt.Sprintf(" %d min", minutes)
-					}
-				} else if minutes > 0 {
-					formattedAge = fmt.Sprintf("%d minutes", minutes)
+			if days > 0 {
+				if days == 1 {
+					formattedAge = "1 day"
 				} else {
-					formattedAge = "just started"
+					formattedAge = fmt.Sprintf("%d days", days)
 				}
-				
-				description.WriteString(fmt.Sprintf(" (%s ago)\n\n", formattedAge))
+				if hours > 0 {
+					formattedAge += fmt.Sprintf(" %d hr", hours)
+				}
+			} else if hours > 0 {
+				if hours == 1 {
+					formattedAge = "1 hour"
+				} else {
+					formattedAge = fmt.Sprintf("%d hours", hours)
+				}
+				if minutes > 0 && days == 0 {
+					formattedAge += fmt.Sprintf(" %d min", minutes)
+				}
+			} else if minutes > 0 {
+				if minutes == 1 {
+					formattedAge = "1 minute"
+				} else {
+					formattedAge = fmt.Sprintf("%d minutes", minutes)
+				}
 			} else {
-				description.WriteString("\n\n")
+				formattedAge = "just started"
 			}
+			
+			description.WriteString(fmt.Sprintf(" (%s ago)\n\n", formattedAge))
+		} else if sessionAge < 0 {
+			// Handle future dates (clock skew or timezone issues)
+			description.WriteString(" (time sync issue)\n\n")
+		} else {
+			description.WriteString("\n\n")
 		}
+	}
 	
 	if len(sessionboard.Entries) == 0 {
 		description.WriteString("🏜️ **The Sahara is less dry than this session!** No drinks have been assigned yet.")
