@@ -277,14 +277,129 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 	// Update the game message
 	b.updateGameMessage(s, channelID, existingGame.Game.ID)
 
-	// Create roll button for when the game starts
-	rollButton := discordgo.Button{
-		Label:    "Roll Dice",
-		Style:    discordgo.PrimaryButton,
-		CustomID: ButtonRollDice,
-		Emoji: discordgo.ComponentEmoji{
-			Name: "🎲",
-		},
+	// Get the updated game state to check player status
+	updatedGame, err := b.gameService.GetGameByChannel(ctx, &game.GetGameByChannelInput{
+		ChannelID: channelID,
+	})
+	if err != nil {
+		log.Printf("Error getting updated game: %v", err)
+	}
+
+	// Determine what actions the player can take
+	var components []discordgo.MessageComponent
+	var actionMessage string
+
+	if updatedGame != nil && updatedGame.Game != nil {
+		// Find the player's current status
+		var playerParticipant *models.Participant
+		for _, p := range updatedGame.Game.Participants {
+			if p.PlayerID == userID {
+				playerParticipant = p
+				break
+			}
+		}
+
+		if playerParticipant != nil {
+			// Check if player needs to assign a drink
+			if playerParticipant.Status == models.ParticipantStatusNeedsToAssign {
+				actionMessage = "🎯 You have a critical hit to assign!"
+				
+				// Get eligible players for drink assignment
+				var eligiblePlayers []game.PlayerOption
+				for _, p := range updatedGame.Game.Participants {
+					if p.PlayerID != userID {
+						eligiblePlayers = append(eligiblePlayers, game.PlayerOption{
+							PlayerID:   p.PlayerID,
+							PlayerName: p.PlayerName,
+						})
+					}
+				}
+
+				// In single-player games, this shouldn't happen as we auto-assign
+				// But just in case, add self as the only option
+				if len(eligiblePlayers) == 0 {
+					eligiblePlayers = append(eligiblePlayers, game.PlayerOption{
+						PlayerID:   playerParticipant.PlayerID,
+						PlayerName: playerParticipant.PlayerName + " (You)",
+					})
+				}
+
+				// Create the dropdown
+				var playerOptions []discordgo.SelectMenuOption
+				for _, player := range eligiblePlayers {
+					playerOptions = append(playerOptions, discordgo.SelectMenuOption{
+						Label:       player.PlayerName,
+						Value:       player.PlayerID,
+						Description: "Assign a drink to this player",
+						Emoji: discordgo.ComponentEmoji{
+							Name: "🍺",
+						},
+					})
+				}
+
+				playerSelect := discordgo.SelectMenu{
+					CustomID:    SelectAssignDrink,
+					Placeholder: "Select a player to drink",
+					Options:     playerOptions,
+				}
+
+				components = append(components, discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{playerSelect},
+				})
+			} else if playerParticipant.RollTime == nil {
+				// Player hasn't rolled yet
+				actionMessage = "Ready to roll? Click the button below!"
+				
+				rollButton := discordgo.Button{
+					Label:    "Roll Dice",
+					Style:    discordgo.PrimaryButton,
+					CustomID: ButtonRollDice,
+					Emoji: discordgo.ComponentEmoji{
+						Name: "🎲",
+					},
+				}
+
+				components = append(components, discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{rollButton},
+				})
+			} else {
+				// Player has rolled, get a witty message about their roll
+				rollCommentOutput, err := b.messagingService.GetRollComment(ctx, &messaging.GetRollCommentInput{
+					PlayerName:     playerParticipant.PlayerName,
+					RollValue:      playerParticipant.RollValue,
+					IsCriticalHit:  playerParticipant.RollValue == 6,
+					IsCriticalFail: playerParticipant.RollValue == 1,
+				})
+				if err != nil || rollCommentOutput == nil {
+					// Fallback message
+					actionMessage = fmt.Sprintf("You rolled a %d!", playerParticipant.RollValue)
+				} else {
+					actionMessage = fmt.Sprintf("You rolled a %d! %s", playerParticipant.RollValue, rollCommentOutput.Comment)
+				}
+				
+				rollButton := discordgo.Button{
+					Label:    "Roll Again",
+					Style:    discordgo.PrimaryButton,
+					CustomID: ButtonRollDice,
+					Emoji: discordgo.ComponentEmoji{
+						Name: "🎲",
+					},
+				}
+
+				payDrinkButton := discordgo.Button{
+					Label:    "Pay Drink",
+					Style:    discordgo.SuccessButton,
+					CustomID: ButtonPayDrink,
+					Emoji: discordgo.ComponentEmoji{
+						Name: "💸",
+					},
+				}
+
+				components = append(components, discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{rollButton, payDrinkButton},
+				})
+			}
+		}
 	}
 
 	// Get a join game message from the messaging service
@@ -302,20 +417,22 @@ func (b *Bot) handleJoinGameButton(s *discordgo.Session, i *discordgo.Interactio
 		}
 	}
 
+	// Combine messages
+	fullMessage := joinMsgOutput.Message
+	if actionMessage != "" {
+		fullMessage = fmt.Sprintf("%s\n\n%s", joinMsgOutput.Message, actionMessage)
+	}
+
 	log.Printf("Player %s joined game %s with status %s (already joined: %v)",
 		username, existingGame.Game.ID, existingGame.Game.Status, joinOutput.AlreadyJoined)
 
-	// Respond with success message
+	// Respond with success message and appropriate components
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: joinMsgOutput.Message,
-			Flags:   discordgo.MessageFlagsEphemeral,
-			Components: []discordgo.MessageComponent{
-				discordgo.ActionsRow{
-					Components: []discordgo.MessageComponent{rollButton},
-				},
-			},
+			Content:    fullMessage,
+			Flags:      discordgo.MessageFlagsEphemeral,
+			Components: components,
 		},
 	})
 }
