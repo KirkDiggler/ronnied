@@ -223,8 +223,26 @@ func (s *service) StartGame(ctx context.Context, input *StartGameInput) (*StartG
 		if participant.RollTime != nil && participant.RollValue > 0 {
 			// Check if the roll was a critical hit or fail
 			if participant.RollValue == s.criticalHitValue {
-				// Update status to needs to assign
-				participant.Status = models.ParticipantStatusNeedsToAssign
+				// In single-player games, auto-assign the drink to themselves
+				if len(game.Participants) == 1 {
+					// Create a drink record for critical hit (self-assigned)
+					_, err = s.drinkLedgerRepo.CreateDrinkRecord(ctx, &ledgerRepo.CreateDrinkRecordInput{
+						GameID:       game.ID,
+						FromPlayerID: participant.PlayerID,
+						ToPlayerID:   participant.PlayerID,
+						Reason:       models.DrinkReasonCriticalHit,
+						Timestamp:    s.clock.Now(),
+						SessionID:    s.getSessionIDForChannel(ctx, game.ChannelID),
+					})
+					if err != nil {
+						log.Printf("Error creating critical hit drink record for single-player game: %v", err)
+					}
+					participant.Status = models.ParticipantStatusActive
+					log.Printf("Auto-assigned critical hit drink to %s in single-player game", participant.PlayerName)
+				} else {
+					// Multi-player game, need to assign
+					participant.Status = models.ParticipantStatusNeedsToAssign
+				}
 			} else if participant.RollValue == s.criticalFailValue {
 				// Create a drink record for critical fail
 				_, err = s.drinkLedgerRepo.CreateDrinkRecord(ctx, &ledgerRepo.CreateDrinkRecordInput{
@@ -254,6 +272,14 @@ func (s *service) StartGame(ctx context.Context, input *StartGameInput) (*StartG
 		return nil, err
 	}
 
+	// Reload the game to ensure we have the latest state
+	game, err = s.gameRepo.GetGame(ctx, &gameRepo.GetGameInput{
+		GameID: game.ID,
+	})
+	if err != nil {
+		log.Printf("Error reloading game after processing pre-rolled dice: %v", err)
+	}
+
 	// Check if the game is ready to complete (all players have rolled and assigned drinks)
 	if game.IsReadyToComplete() {
 		log.Printf("Game %s is ready to complete immediately after starting", game.ID)
@@ -266,9 +292,13 @@ func (s *service) StartGame(ctx context.Context, input *StartGameInput) (*StartG
 		if err != nil {
 			// Log the error but don't fail the start game operation
 			log.Printf("Error ending game after start: %v", err)
-		} else if endGameOutput.NeedsRollOff {
-			// A roll-off is needed, log this information
-			log.Printf("Game %s needs a roll-off after immediate completion", game.ID)
+		} else if endGameOutput != nil {
+			if endGameOutput.NeedsRollOff {
+				// A roll-off is needed, log this information
+				log.Printf("Game %s needs a roll-off after immediate completion", game.ID)
+			} else {
+				log.Printf("Game %s completed successfully after starting", game.ID)
+			}
 		}
 	}
 
@@ -600,7 +630,26 @@ func (s *service) processMainGameRoll(ctx context.Context, input *RollDiceInput,
 	} else {
 		// During active game, process critical hits/fails normally
 		if isCriticalHit {
-			participant.Status = models.ParticipantStatusNeedsToAssign
+			// In single-player games, auto-assign the drink to themselves
+			if len(game.Participants) == 1 {
+				// Create a drink record for critical hit (self-assigned)
+				_, err := s.drinkLedgerRepo.CreateDrinkRecord(ctx, &ledgerRepo.CreateDrinkRecordInput{
+					GameID:       input.GameID,
+					FromPlayerID: input.PlayerID,
+					ToPlayerID:   input.PlayerID,
+					Reason:       models.DrinkReasonCriticalHit,
+					Timestamp:    now,
+					SessionID:    s.getSessionIDForChannel(ctx, game.ChannelID),
+				})
+				if err != nil {
+					return nil, fmt.Errorf("failed to create critical hit drink record for single-player game: %w", err)
+				}
+				participant.Status = models.ParticipantStatusActive
+				log.Printf("Auto-assigned critical hit drink to %s in single-player game", participant.PlayerName)
+			} else {
+				// Multi-player game, need to assign
+				participant.Status = models.ParticipantStatusNeedsToAssign
+			}
 		} else {
 			participant.Status = models.ParticipantStatusActive
 
@@ -1014,36 +1063,45 @@ func (s *service) prepareRollResult(isCriticalHit, isCriticalFail bool, rollValu
 	// Set result and details based on roll result
 	if isCriticalHit {
 		result = fmt.Sprintf("You Rolled a %d! Critical Hit!", rollValue)
-		details = "Select a player to assign a drink:"
+		
+		// Check if this is a single-player game
+		if len(game.Participants) == 1 {
+			// Single-player game - drink was auto-assigned
+			details = "🍺 Ronnie assigned the drink to you! Drink up, champ!"
+			eligiblePlayers = nil // No selection needed
+		} else {
+			// Multi-player game - show selection
+			details = "Select a player to assign a drink:"
 
-		// Get eligible players for drink assignment
-		for _, p := range game.Participants {
-			isCurrentPlayer := p.PlayerID == playerID
-
-			// For critical hits, include all players except the current player initially
-			if !isCurrentPlayer {
-				eligiblePlayers = append(eligiblePlayers, PlayerOption{
-					PlayerID:        p.PlayerID,
-					PlayerName:      p.PlayerName,
-					IsCurrentPlayer: false,
-				})
-			}
-		}
-
-		// If there are no other players, include the current player
-		if len(eligiblePlayers) == 0 {
-			// Find the current player
+			// Get eligible players for drink assignment
 			for _, p := range game.Participants {
-				if p.PlayerID == playerID {
+				isCurrentPlayer := p.PlayerID == playerID
+
+				// For critical hits, include all players except the current player initially
+				if !isCurrentPlayer {
 					eligiblePlayers = append(eligiblePlayers, PlayerOption{
 						PlayerID:        p.PlayerID,
-						PlayerName:      p.PlayerName + " (You)",
-						IsCurrentPlayer: true,
+						PlayerName:      p.PlayerName,
+						IsCurrentPlayer: false,
 					})
-					break
 				}
 			}
-			details += "\n\nYou're the only player, so you'll have to drink yourself!"
+
+			// If there are no other players (shouldn't happen with the check above), include the current player
+			if len(eligiblePlayers) == 0 {
+				// Find the current player
+				for _, p := range game.Participants {
+					if p.PlayerID == playerID {
+						eligiblePlayers = append(eligiblePlayers, PlayerOption{
+							PlayerID:        p.PlayerID,
+							PlayerName:      p.PlayerName + " (You)",
+							IsCurrentPlayer: true,
+						})
+						break
+					}
+				}
+				details += "\n\nYou're the only player, so you'll have to drink yourself!"
+			}
 		}
 	} else if isCriticalFail {
 		result = "You Rolled a 1! Critical Fail!"
