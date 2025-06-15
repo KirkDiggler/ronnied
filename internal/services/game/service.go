@@ -518,8 +518,8 @@ func (s *service) processRollOffInGame(ctx context.Context, input *RollDiceInput
 			participant.Status = models.ParticipantStatusRolledInRollOff
 			log.Printf("Auto-assigned critical hit drink to %s in single-player rolloff", participant.PlayerName)
 		} else {
-			// Multi-player game, need to assign - but still mark as rolled in rolloff
-			participant.Status = models.ParticipantStatusRolledInRollOff
+			// Multi-player game, need to assign - use standard assignment status
+			participant.Status = models.ParticipantStatusNeedsToAssign
 		}
 	} else {
 		participant.Status = models.ParticipantStatusRolledInRollOff
@@ -556,7 +556,7 @@ func (s *service) processRollOffInGame(ctx context.Context, input *RollDiceInput
 	allPlayersRolled := true
 	for _, playerID := range game.RollOffPlayerIDs {
 		participant := game.GetParticipant(playerID)
-		if participant == nil || participant.Status != models.ParticipantStatusRolledInRollOff {
+		if participant == nil || (participant.Status != models.ParticipantStatusRolledInRollOff && participant.Status != models.ParticipantStatusNeedsToAssign) {
 			allPlayersRolled = false
 			break
 		}
@@ -1209,8 +1209,12 @@ func (s *service) AssignDrink(ctx context.Context, input *AssignDrinkInput) (*As
 		return nil, ErrGameNotFound
 	}
 
-	// Check if game is active or waiting
-	if game.Status != models.GameStatusActive && game.Status != models.GameStatusRollOff && game.Status != models.GameStatusWaiting {
+	// Check if game is in a valid state for drink assignment
+	if game.Status != models.GameStatusActive && 
+	   game.Status != models.GameStatusRollOff && 
+	   game.Status != models.GameStatusRollOffHighest && 
+	   game.Status != models.GameStatusRollOffLowest && 
+	   game.Status != models.GameStatusWaiting {
 		return nil, ErrInvalidGameState
 	}
 
@@ -1244,8 +1248,14 @@ func (s *service) AssignDrink(ctx context.Context, input *AssignDrinkInput) (*As
 		return nil, err
 	}
 
-	// Update the assigning participant's status
-	assigningParticipant.Status = models.ParticipantStatusActive
+	// Update the assigning participant's status based on game state
+	if game.Status.IsRollOff() {
+		// In rolloffs, mark as rolled after assignment
+		assigningParticipant.Status = models.ParticipantStatusRolledInRollOff
+	} else {
+		// In normal games, mark as active after assignment
+		assigningParticipant.Status = models.ParticipantStatusActive
+	}
 
 	// Update the game
 	game.UpdatedAt = s.clock.Now()
@@ -1254,6 +1264,28 @@ func (s *service) AssignDrink(ctx context.Context, input *AssignDrinkInput) (*As
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// If this is a rolloff and all players have now completed their actions, complete the rolloff
+	if game.Status.IsRollOff() {
+		allPlayersRolled := true
+		for _, playerID := range game.RollOffPlayerIDs {
+			participant := game.GetParticipant(playerID)
+			if participant == nil || participant.Status != models.ParticipantStatusRolledInRollOff {
+				allPlayersRolled = false
+				break
+			}
+		}
+
+		if allPlayersRolled {
+			_, err = s.CompleteRollOff(ctx, &CompleteRollOffInput{
+				GameID: game.ID,
+			})
+			if err != nil {
+				// Log error but don't fail the assignment
+				log.Printf("Warning: Failed to complete rolloff after drink assignment: %v", err)
+			}
+		}
 	}
 
 	// Check if all players have completed their actions and the game can be ended
