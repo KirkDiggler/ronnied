@@ -18,7 +18,7 @@ func renderRollDiceResponse(s *discordgo.Session, i *discordgo.InteractionCreate
 
 	// Build components based on the roll result
 	if output.IsCriticalHit {
-		// Create player selection dropdown for critical hits
+		// Create player selection dropdown for critical hits - only when game has started
 		// IMPORTANT: DO NOT REMOVE THIS FUNCTIONALITY - It is a core game mechanic
 		// that allows players to assign drinks when they roll a critical hit (6)
 		if len(output.EligiblePlayers) > 0 {
@@ -167,7 +167,7 @@ func renderRollDiceResponseEdit(s *discordgo.Session, i *discordgo.InteractionCr
 
 	// Build components based on the roll result
 	if output.IsCriticalHit {
-		// Create player selection dropdown for critical hits
+		// Create player selection dropdown for critical hits - only when game has started
 		// IMPORTANT: DO NOT REMOVE THIS FUNCTIONALITY - It is a core game mechanic
 		// that allows players to assign drinks when they roll a critical hit (6)
 		if len(output.EligiblePlayers) > 0 {

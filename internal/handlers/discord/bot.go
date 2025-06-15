@@ -696,7 +696,7 @@ func (b *Bot) handleRollDiceButton(s *discordgo.Session, i *discordgo.Interactio
 	var messageComponents []discordgo.MessageComponent
 	if len(embeds) > 0 || rollOutput.IsCriticalHit {
 		if rollOutput.IsCriticalHit {
-			// Create player selection dropdown for critical hits
+			// Create player selection dropdown for critical hits - only when game has started
 			if len(rollOutput.EligiblePlayers) > 0 {
 				var playerOptions []discordgo.SelectMenuOption
 

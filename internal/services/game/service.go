@@ -687,13 +687,13 @@ func (s *service) processMainGameRoll(ctx context.Context, input *RollDiceInput,
 	isCriticalHit := rollValue == s.criticalHitValue
 	isCriticalFail := rollValue == s.criticalFailValue
 
-	// Update participant status based on roll
-	if game.Status == models.GameStatusWaiting {
-		// During waiting phase, just record the roll but don't process critical hits/fails
-		participant.Status = models.ParticipantStatusWaitingToRoll
-	} else {
-		// During active game, process critical hits/fails normally
-		if isCriticalHit {
+	// Update participant status based on roll and process critical hits/fails
+	if isCriticalHit {
+		if game.Status == models.GameStatusWaiting {
+			// During waiting phase, just record the crit but don't assign drinks yet
+			participant.Status = models.ParticipantStatusWaitingToRoll
+		} else {
+			// During active game, process critical hits normally
 			// In single-player games, auto-assign the drink to themselves
 			if len(game.Participants) == 1 {
 				// Create a drink record for critical hit (self-assigned)
@@ -714,23 +714,28 @@ func (s *service) processMainGameRoll(ctx context.Context, input *RollDiceInput,
 				// Multi-player game, need to assign
 				participant.Status = models.ParticipantStatusNeedsToAssign
 			}
+		}
+	} else {
+		// Set status based on game state
+		if game.Status == models.GameStatusWaiting {
+			participant.Status = models.ParticipantStatusWaitingToRoll
 		} else {
 			participant.Status = models.ParticipantStatusActive
+		}
 
-			// If it's a critical fail, automatically assign a drink to self
-			if isCriticalFail {
-				// Create a new drink record using the repository
-				_, err := s.drinkLedgerRepo.CreateDrinkRecord(ctx, &ledgerRepo.CreateDrinkRecordInput{
-					GameID:       input.GameID,
-					FromPlayerID: input.PlayerID,
-					ToPlayerID:   input.PlayerID,
-					Reason:       models.DrinkReasonCriticalFail,
-					Timestamp:    now,
-					SessionID:    s.getSessionIDForChannel(ctx, game.ChannelID),
-				})
-				if err != nil {
-					return nil, fmt.Errorf("failed to create critical fail drink record: %w", err)
-				}
+		// If it's a critical fail, only assign drink if game has started
+		if isCriticalFail && game.Status != models.GameStatusWaiting {
+			// Create a new drink record using the repository
+			_, err := s.drinkLedgerRepo.CreateDrinkRecord(ctx, &ledgerRepo.CreateDrinkRecordInput{
+				GameID:       input.GameID,
+				FromPlayerID: input.PlayerID,
+				ToPlayerID:   input.PlayerID,
+				Reason:       models.DrinkReasonCriticalFail,
+				Timestamp:    now,
+				SessionID:    s.getSessionIDForChannel(ctx, game.ChannelID),
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to create critical fail drink record: %w", err)
 			}
 		}
 	}
@@ -845,25 +850,14 @@ func (s *service) processMainGameRoll(ctx context.Context, input *RollDiceInput,
 		}
 	}
 
-	// Prepare result information
-	var result, details string
-	var eligiblePlayers []PlayerOption
-	
-	if game.Status == models.GameStatusWaiting {
-		// During waiting phase, don't reveal critical hits/fails
-		result = "Your roll has been recorded!"
-		details = "Your roll value will be revealed when the game starts."
-		eligiblePlayers = nil // No drink assignments during waiting phase
-	} else {
-		// During active game, show normal results
-		result, details, eligiblePlayers = s.prepareRollResult(
-			isCriticalHit,
-			isCriticalFail,
-			rollValue,
-			input.PlayerID,
-			game,
-		)
-	}
+	// Prepare result information - always allow drink assignment for crits
+	result, details, eligiblePlayers := s.prepareRollResult(
+		isCriticalHit,
+		isCriticalFail,
+		rollValue,
+		input.PlayerID,
+		game,
+	)
 
 	// Build the list of game IDs that need to be updated
 	gameIDsToUpdate := []string{input.GameID}
