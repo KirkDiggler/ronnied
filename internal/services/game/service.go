@@ -491,10 +491,55 @@ func (s *service) processRollOffInGame(ctx context.Context, input *RollDiceInput
 	rollValue := s.diceRoller.Roll(s.diceSides)
 	now := s.clock.Now()
 
+	// Check if the roll is a critical hit or fail
+	isCriticalHit := rollValue == s.criticalHitValue
+	isCriticalFail := rollValue == s.criticalFailValue
+
 	// Update the participant's roll
 	participant.RollValue = rollValue
 	participant.RollTime = &now
-	participant.Status = models.ParticipantStatusRolledInRollOff
+	
+	// Handle critical hits in rolloffs - they should still allow drink assignment
+	if isCriticalHit {
+		// In single-player games, auto-assign the drink to themselves
+		if len(game.Participants) == 1 {
+			// Create a drink record for critical hit (self-assigned)
+			_, err := s.drinkLedgerRepo.CreateDrinkRecord(ctx, &ledgerRepo.CreateDrinkRecordInput{
+				GameID:       input.GameID,
+				FromPlayerID: input.PlayerID,
+				ToPlayerID:   input.PlayerID,
+				Reason:       models.DrinkReasonCriticalHit,
+				Timestamp:    now,
+				SessionID:    s.getSessionIDForChannel(ctx, game.ChannelID),
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to create critical hit drink record for single-player rolloff: %w", err)
+			}
+			participant.Status = models.ParticipantStatusRolledInRollOff
+			log.Printf("Auto-assigned critical hit drink to %s in single-player rolloff", participant.PlayerName)
+		} else {
+			// Multi-player game, need to assign - but still mark as rolled in rolloff
+			participant.Status = models.ParticipantStatusRolledInRollOff
+		}
+	} else {
+		participant.Status = models.ParticipantStatusRolledInRollOff
+		
+		// If it's a critical fail, automatically assign a drink to self
+		if isCriticalFail {
+			// Create a new drink record using the repository
+			_, err := s.drinkLedgerRepo.CreateDrinkRecord(ctx, &ledgerRepo.CreateDrinkRecordInput{
+				GameID:       input.GameID,
+				FromPlayerID: input.PlayerID,
+				ToPlayerID:   input.PlayerID,
+				Reason:       models.DrinkReasonCriticalFail,
+				Timestamp:    now,
+				SessionID:    s.getSessionIDForChannel(ctx, game.ChannelID),
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to create critical fail drink record in rolloff: %w", err)
+			}
+		}
+	}
 
 	// Update the game
 	game.UpdatedAt = now
@@ -537,8 +582,25 @@ func (s *service) processRollOffInGame(ctx context.Context, input *RollDiceInput
 	}
 
 	// Prepare result information for roll-off
-	result := fmt.Sprintf("You Rolled a %d in the Roll-Off!", rollValue)
-	details := "Your roll has been recorded."
+	var result, details string
+	var eligiblePlayers []PlayerOption
+
+	// For critical hits in rolloffs, use the standard prepareRollResult function
+	if isCriticalHit || isCriticalFail {
+		result, details, eligiblePlayers = s.prepareRollResult(isCriticalHit, isCriticalFail, rollValue, input.PlayerID, game)
+		
+		// Modify the result to indicate this is a rolloff roll
+		if isCriticalHit {
+			result = fmt.Sprintf("You Rolled a %d! Critical Hit in the Roll-Off!", rollValue)
+		} else if isCriticalFail {
+			result = fmt.Sprintf("You Rolled a %d! Critical Fail in the Roll-Off!", rollValue)
+		}
+	} else {
+		// Normal rolloff roll - use the existing logic
+		result = fmt.Sprintf("You Rolled a %d in the Roll-Off!", rollValue)
+		details = "Your roll has been recorded."
+		eligiblePlayers = nil
+	}
 
 	// Add more detailed information about the roll-off type
 	if game.Status == models.GameStatusRollOffHighest {
@@ -586,10 +648,12 @@ func (s *service) processRollOffInGame(ctx context.Context, input *RollDiceInput
 		RollValue:        rollValue,
 		Result:           result,
 		Details:          details,
-		EligiblePlayers:  nil, // No player options in roll-offs
+		EligiblePlayers:  eligiblePlayers, // Now includes players for crits
 		Game:             game,
 		IsRollOffRoll:    true,
 		AllPlayersRolled: allPlayersRolled,
+		IsCriticalHit:    isCriticalHit,
+		IsCriticalFail:   isCriticalFail,
 	}, nil
 }
 
